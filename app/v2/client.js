@@ -8,8 +8,9 @@ const V2=(()=>{
   }
   async function status(){const result=await request('status');if(result.version!==2)throw new Error('ไม่พบตัวเปิดระบบรุ่น 2');state=result;csrf=state.csrfToken||'';return state;}
   function localSession(session){if(session)sessionStorage.setItem(key,JSON.stringify({id:session.id,username:session.username,role:session.role,expiresAt:Date.now()+30*60000}));else sessionStorage.removeItem(key);}
-  async function login(username,password){const result=await request('login',{username,password});await status();localSession(state.session);return result.session||state.session;}
-  async function logout(){await request('logout',{});discardCloud();cloudInbox=null;localSession(null);await status();}
+  function notifyAccountChange(){try{localStorage.setItem('agri-auth-epoch',Date.now()+'-'+Math.random());}catch{}}
+  async function login(username,password){const result=await request('login',{username,password});notifyAccountChange();await status();localSession(state.session);return result.session||state.session;}
+  async function logout(){await request('logout',{});notifyAccountChange();discardCloud();cloudInbox=null;localSession(null);await status();}
   async function init(){
     try{await status();}catch(error){
       if(typeof AccessContext!=='undefined'){document.getElementById('province-data-status').textContent='ต้องเปิดผ่านบริการที่ติดตั้งด้วย Start.cmd ไม่สามารถตรวจสิทธิ์จากไฟล์ Static เพียงอย่างเดียว';return false;}

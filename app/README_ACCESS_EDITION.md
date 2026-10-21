@@ -1,7 +1,7 @@
 # รุ่น 2 — บัญชีและขอบเขตพื้นที่ (21 ตุลาคม 2569)
 
 ## เปิดใช้งาน
-ชุดนี้แยกจากโครงการเดิมใน `agri-risk-map-burning-v2-access` สำรองโฟลเดอร์สถานะเดิมก่อนอัปเดต แล้วใช้ Start.cmd ตามวิธีเดิม หรือรัน `node v2/server.cjs` ระบบต้องเปิดผ่านบริการ Node ไม่ใช่ดับเบิลคลิก index.html
+ชุดนี้แยกจากโครงการเดิมใน `agri-risk-map-burning-v2-access` สำรองโฟลเดอร์สถานะเดิมก่อนอัปเดต แตก ZIP แล้วเปิด Install.cmd เพื่อติดตั้ง/อัปเดตก่อนใช้ Start.cmd หรือรัน `node v2/server.cjs` จากโฟลเดอร์โค้ดโดยตรง ระบบต้องเปิดผ่านบริการ Node ไม่ใช่ดับเบิลคลิก index.html
 
 หน้าทดสอบในเครื่องนี้: http://127.0.0.1:8770/ ใช้สถานะทดสอบแยกไว้ที่ `v2-access-preview-state` การทดสอบไม่ได้อนุมัติหรือรีเซ็ตบัญชีผู้ใช้จริง
 
@@ -37,6 +37,9 @@
 ## Google และ GitHub
 Apps Script เป็นตัวอ่าน **ชีตข้อมูลสาธารณะที่ตรวจแล้วเท่านั้น** ไม่ใช่ระบบบัญชีแทน Node ตั้ง Script Properties: SPREADSHEET_ID, PUBLIC_SHEET_NAME (ค่าเริ่มต้น PublicHS), PUBLIC_PROVINCE_CODES เช่น 62,50 ต้องมีคอลัมน์ provinceCode,districtCode,date,Latitude,Longitude,published โดยเผยแพร่เฉพาะแถว published=TRUE ตัวอย่างเรียก `?action=hotspots&provinceCode=62` ค่าเริ่มต้นปิดข้อมูลทั้งหมด
 โค้ดทดสอบสถานะได้ด้วย `?action=health` ยังไม่มี Spreadsheet ID จริงที่เจ้าของระบุ จึงยังไม่ยืนยันการเชื่อมฐานข้อมูลจริง
+Apps Script เผยแพร่เวอร์ชัน 1 และเจ้าของอนุญาต Google แล้ว การเรียก doGet จาก Editor ทำงานเสร็จบน Google จริง ตั้งผู้เข้าถึงเป็นเจ้าของเท่านั้น ขณะตรวจ URL เว็บแอปในเบราว์เซอร์พบหน้า Google เปิดไฟล์ไม่ได้ จึงยังไม่รับรองการเรียกผ่าน HTTP ให้ใช้ผลทดสอบ Editor และตรวจ URL ด้วยบัญชีเจ้าของก่อนเชื่อมบริการอื่น
+โครงการ: https://script.google.com/u/2/home/projects/1JKeXy3EWniAFiIl2-dRFDjD2IX97r7yyDiqo_HcmZdjrLO6wsNrSHm2J/edit
+เว็บแอปที่ Google สร้าง: https://script.google.com/macros/s/AKfycbytcvZ398o4-BauqMgkTIpupljNlfypuxjsYIAytBHyRGt4hA4Fgp6KAFMjHWySYhTS/exec
 
 GitHub Pages เปิดได้เฉพาะหน้าเว็บสาธารณะ บริการบัญชี/อนุมัติ/นำเข้าต้องใช้ Node บนเครื่องหรือแม่ข่าย HTTPS ที่มีพื้นที่เก็บสถานะถาวร GitHub Pages รัน Node Backend ไม่ได้ หน้าสาธารณะต้องไม่แสร้งให้ Login ผ่านการตรวจฝั่งเบราว์เซอร์
 
