@@ -1,0 +1,90 @@
+{
+  "description": "Default operational model; not a national standard",
+  "yearWeights": {
+    "2566": 0.15,
+    "2567": 0.25,
+    "2568": 0.35,
+    "2569": 0.4
+  },
+  "weights": {
+    "hotspot": 0.4,
+    "trend": 0.2,
+    "crop": 0.2,
+    "area": 0.2
+  },
+  "levels": [
+    {
+      "label": "ต่ำ",
+      "class": "risk-low",
+      "color": "#2ecc71",
+      "min": 0,
+      "max": 25
+    },
+    {
+      "label": "ปานกลาง",
+      "class": "risk-medium",
+      "color": "#f1c40f",
+      "min": 25,
+      "max": 50
+    },
+    {
+      "label": "สูง",
+      "class": "risk-high",
+      "color": "#e67e22",
+      "min": 50,
+      "max": 75
+    },
+    {
+      "label": "สูงมาก",
+      "class": "risk-very-high",
+      "color": "#e74c3c",
+      "min": 75,
+      "max": 101
+    }
+  ],
+  "cropScores": {
+    "นาข้าว": 70,
+    "อ้อย": 80,
+    "ข้าวโพดและไร่หมุนเวียน": 90,
+    "เกษตรอื่น ๆ": 55,
+    "พื้นที่ป่า": 95,
+    "อื่น ๆ": 45
+  },
+  "annualEvidenceGate": {
+    "lowMaxCount": 2,
+    "mediumMaxCount": 5,
+    "highMaxCount": 10,
+    "lowBase": 5,
+    "lowStep": 10,
+    "mediumBase": 25,
+    "mediumSpan": 15,
+    "highBase": 50,
+    "highSpan": 15,
+    "veryHighBase": 75,
+    "veryHighLogScale": 7,
+    "veryHighSpan": 20,
+    "exposureWeight": 0.09,
+    "veryHighExposureWeight": 0.05,
+    "caps": [
+      24.99,
+      49.99,
+      74.99,
+      100
+    ],
+    "floors": [
+      0,
+      25,
+      50,
+      75
+    ]
+  },
+  "highCoverageRule": {
+    "enabled": false,
+    "reason": "No such rule exists in the audited operational engine"
+  },
+  "aggregationRule": {
+    "district": "recompute-from-hotspots",
+    "province": "distribution-of-district-risk"
+  },
+  "emptyCropType": "อื่น ๆ"
+}

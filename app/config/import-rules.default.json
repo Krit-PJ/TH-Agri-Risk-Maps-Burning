@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "preferredDetailSheet": "AllData",
+  "requiredFields": [
+    "Province",
+    "LandType",
+    "PlantType"
+  ],
+  "dateFields": [
+    "YYYY-MM-DD",
+    "Date",
+    "acq_date"
+  ],
+  "coordinateFields": [
+    [
+      "Longitude",
+      "Latitude"
+    ],
+    [
+      "longitude",
+      "latitude"
+    ],
+    [
+      "Maps"
+    ],
+    [
+      "X",
+      "Y"
+    ]
+  ],
+  "deduplicate": "hsID-or-date-time-coordinate",
+  "plantAliases": {
+    "ข้าว": "นาข้าว",
+    "เกษตรอื่นๆ": "เกษตรอื่น ๆ",
+    "อื่นๆ": "อื่น ๆ",
+    "อื่น": "อื่น ๆ"
+  },
+  "landAliases": {
+    "พื้นที่เกษตรกรรม": "พื้นที่เกษตร"
+  },
+  "referenceSheet": "hsPlant2026",
+  "plantContains": [
+    {
+      "contains": "ข้าวโพด",
+      "value": "ข้าวโพดและไร่หมุนเวียน"
+    },
+    {
+      "contains": "อ้อย",
+      "value": "อ้อย"
+    },
+    {
+      "contains": "ป่า",
+      "value": "พื้นที่ป่า"
+    }
+  ]
+}

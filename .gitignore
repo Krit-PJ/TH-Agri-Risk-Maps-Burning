@@ -1,0 +1,8 @@
+**/state/
+**/*-state/
+**/access-state.json
+**/accounts.json
+**/provider-secrets.json
+**/google-tokens.json
+**/.env*
+*.zip
