@@ -1,0 +1,50 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+
+const root = path.resolve(__dirname, '..');
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+test('public landing exposes an active-province dropdown backed by the generated catalog', () => {
+  const html = read('index.html');
+  assert.match(html, /id="province-select"/);
+  assert.match(html, /app\/data\/catalog\.json/);
+  const catalog = JSON.parse(read('app/data/catalog.json'));
+  assert.equal(catalog.provinceCodes.length, 77);
+  assert.deepEqual(catalog.activeProvinceCodes, ['62']);
+});
+
+test('static map does not load the local Node access bridge', () => {
+  const html = read('app/index.html');
+  assert.doesNotMatch(html, /v2\/context\.js|v2\/client\.js|access-loading/);
+  assert.match(html, /js\/public-shell\.js/);
+});
+
+test('Kamphaeng Phet uses the canonical national data paths', () => {
+  const provinces = JSON.parse(read('app/config/provinces.json'));
+  const kpp = provinces.find(value => value.provinceCode === '62');
+  assert.equal(kpp.boundaryPath.district, 'data/boundary/62/districts.geojson');
+  assert.equal(kpp.hotspotPath['2569'], 'data/hotspot/62/hotspot_2569.geojson');
+});
+
+test('deployment workflow publishes the repository with Pages artifact actions', () => {
+  const workflow = read('.github/workflows/deploy.yml');
+  assert.match(workflow, /actions\/upload-pages-artifact/);
+  assert.match(workflow, /actions\/deploy-pages/);
+});
+
+test('tracked source contains no supplied phone or super-admin password', () => {
+  const tracked = require('node:child_process').execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).trim().split(/\r?\n/);
+  for (const file of tracked.filter(Boolean)) {
+    const absolute = path.join(root, file);
+    if (!fs.statSync(absolute).isFile()) continue;
+    const buffer = fs.readFileSync(absolute);
+    if (buffer.includes(0)) continue;
+    const text = buffer.toString('utf8');
+    assert.equal(text.includes('0841157666'), false, `${file} exposes admin phone`);
+    assert.equal(text.includes('062046411'), false, `${file} exposes owner password`);
+  }
+});

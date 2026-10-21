@@ -20,7 +20,7 @@ const App=(()=>{
     if(typeof V2!=='undefined')await V2.restore();
     bindFilters();bindPrint();initAdminAccess();bindExcelImport();bindGeoJSONImport();initProvincePickers();initVisitorCounter();initDesktopSidebarToggle();initMobilePanels();initTimeline();syncYearSelector();populateDayOptions();syncTimelineUI();applyCurrent();
     if(typeof V2!=='undefined')V2.bind();
-    if(typeof AccessContext==='undefined'&&!BoundaryStore.codes.length){const d=document.getElementById('province-setup');document.getElementById('first-run-view').onclick=()=>d.close();d.showModal();}
+    if(typeof AccessContext==='undefined'&&!BoundaryStore.codes.length&&document.getElementById('province-setup')){const d=document.getElementById('province-setup');document.getElementById('first-run-view').onclick=()=>d.close();d.showModal();}
   }
   function showRuntimeWarning(message){let el=document.getElementById('runtime-warning');if(!el){el=document.createElement('div');el.id='runtime-warning';el.style.cssText='position:fixed;left:50%;top:86px;transform:translateX(-50%);z-index:9999;background:#7f1d1d;color:white;padding:8px 14px;border-radius:6px;font-size:14px;box-shadow:0 4px 15px rgba(0,0,0,.35)';document.body.appendChild(el);}el.textContent=message;}
   function populateDistricts(){const sel=document.getElementById('filter-district'),current=sel.value;const districts=[...new Set(subdistrictFeatures.map(f=>MapModule.helpers.districtOf(f.properties)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));sel.innerHTML='<option value="">-- ทั้งหมด --</option>'+districts.map(x=>`<option value="${x}">${x}</option>`).join('');sel.value=current;}

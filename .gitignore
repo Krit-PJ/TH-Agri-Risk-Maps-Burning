@@ -6,3 +6,4 @@
 **/google-tokens.json
 **/.env*
 *.zip
+.superpowers/

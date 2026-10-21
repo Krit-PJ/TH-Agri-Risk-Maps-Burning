@@ -1,1 +1,51 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TH Agri-Risk Maps Burning</title><style>body{margin:0;background:#f0f8f2;color:#173f2b;font:18px/1.7 system-ui,sans-serif}main{max-width:900px;margin:6vh auto;padding:32px}img{width:72px}h1{line-height:1.25;font-size:clamp(28px,5vw,46px)}nav{display:flex;gap:12px;flex-wrap:wrap}a{color:#155a3b}nav a{display:inline-block;padding:12px 18px;background:#155a3b;color:white;border-radius:8px;text-decoration:none}article{background:white;border:1px solid #b8d7c1;padding:24px;margin:28px 0;border-radius:12px}a:focus-visible{outline:3px solid #e3a321;outline-offset:4px}</style></head><body><main><img src="app/assets/logo-doae.png" alt="กรมส่งเสริมการเกษตร"><p>กรมส่งเสริมการเกษตร</p><h1>TH Agri-Risk Maps Burning</h1><p>ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่การเกษตรของประเทศไทย</p><nav aria-label="ระบบที่เกี่ยวข้อง"><a href="https://krit-pj.github.io/agri-hs-verification/" target="_blank" rel="noopener noreferrer">ตรวจสอบจุดความร้อน ↗</a><a href="https://krit-pj.github.io/Green_Gain_Hub-KPP/" target="_blank" rel="noopener noreferrer">Green Gain Hub ↗</a></nav><article><h2>ใช้งานระบบแผนที่และจัดการข้อมูล</h2><p>แอปฉบับเต็มเปิดผ่าน Start.cmd บนเครื่องที่ติดตั้ง หน้าเว็บนี้เป็นทางเข้าสาธารณะ ส่วนบัญชี การอนุมัติ และข้อมูลตามสิทธิ์ยังไม่เปิดบริการออนไลน์</p><p><a href="app/README_ACCESS_EDITION.md">คู่มือการติดตั้งและสถานะการเชื่อมต่อ</a> · <a href="https://github.com/Krit-PJ/TH-Agri-Risk-Maps-Burning">โค้ดโครงการ</a></p></article><p>พัฒนาโดย ดร. กิตติ โพธิ์จวง สำนักงานเกษตรจังหวัดกำแพงเพชร</p></main></body></html>
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Thailand Agri-Risk Maps Burning</title>
+  <style>
+    :root{color-scheme:light;--ink:#173f2b;--green:#155a3b;--cream:#f5f1e8;--line:#b8d7c1;--gold:#e3a321}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#e6f2e8 0,#f5f1e8 52%,#eef6ef 100%);color:var(--ink);font:17px/1.65 system-ui,"Noto Sans Thai",sans-serif;min-height:100vh}
+    main{width:min(960px,calc(100% - 32px));margin:5vh auto;padding:clamp(24px,5vw,56px);background:#fff;border:1px solid var(--line);border-radius:24px;box-shadow:0 24px 70px rgba(23,63,43,.12)}
+    .brand{display:flex;align-items:center;gap:16px}.brand img{width:68px;height:68px;object-fit:contain}.brand p{margin:0;font-weight:700}
+    h1{max-width:760px;margin:.7em 0 .3em;line-height:1.15;font-size:clamp(32px,6vw,58px);letter-spacing:-.02em}h2{font-size:clamp(22px,3vw,30px)}
+    .lead{max-width:720px;font-size:clamp(18px,2.5vw,22px);color:#365d49}.panel{background:var(--cream);border:1px solid #d8d1c2;padding:clamp(20px,4vw,34px);margin:32px 0;border-radius:18px}
+    label{display:block;font-weight:700;margin-bottom:8px}select{width:100%;min-height:50px;padding:10px 14px;border:1px solid #76927f;border-radius:10px;background:#fff;color:var(--ink);font:inherit}
+    .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:11px 18px;border-radius:10px;background:var(--green);color:#fff;text-decoration:none;font-weight:700;border:2px solid var(--green)}.button.secondary{background:#fff;color:var(--green)}
+    .button[aria-disabled="true"]{opacity:.55;pointer-events:none}a{color:var(--green)}a:focus-visible,select:focus-visible{outline:3px solid var(--gold);outline-offset:4px}.status{margin:10px 0 0;color:#52705f}.meta{font-size:14px;color:#587063;border-top:1px solid var(--line);padding-top:20px;margin-top:34px}
+    @media(max-width:540px){main{width:100%;margin:0;border-radius:0;border-inline:0;min-height:100vh}.actions>*{width:100%}}
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand"><img src="app/assets/logo-doae.png" alt="กรมส่งเสริมการเกษตร"><p>กรมส่งเสริมการเกษตร</p></div>
+  <h1>Thailand Agri-Risk Maps Burning</h1>
+  <p class="lead">ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่การเกษตร ครอบคลุมขอบเขตจังหวัด อำเภอ และตำบลทั่วประเทศไทย</p>
+  <section class="panel" aria-labelledby="map-title">
+    <h2 id="map-title">เปิดแผนที่จังหวัดที่มีข้อมูลจุดความร้อน</h2>
+    <label for="province-select">จังหวัด</label>
+    <select id="province-select" disabled><option>กำลังตรวจสอบชุดข้อมูล…</option></select>
+    <p id="province-status" class="status" role="status" aria-live="polite">รายการจะแสดงเฉพาะจังหวัดที่มีข้อมูล HS ในระบบ</p>
+    <div class="actions">
+      <a id="open-map" class="button" href="app/" aria-disabled="true">เปิดแผนที่</a>
+      <a id="admin-app" class="button secondary" href="#">ลงทะเบียน / เข้าสู่ระบบผู้ดูแล</a>
+    </div>
+  </section>
+  <p><a href="https://krit-pj.github.io/agri-hs-verification/" target="_blank" rel="noopener noreferrer">ระบบตรวจสอบจุดความร้อน ↗</a> · <a href="https://github.com/Krit-PJ/TH-Agri-Risk-Maps-Burning">โค้ดโครงการ</a></p>
+  <p class="meta">พัฒนาโดย ดร. กิตติ โพธิ์จวง · สำนักงานเกษตรจังหวัดกำแพงเพชร</p>
+</main>
+<script>
+  const catalogPath='app/data/catalog.json';
+  Promise.all([fetch(catalogPath).then(r=>{if(!r.ok)throw new Error('catalog');return r.json()}),fetch('app/config/provinces.json').then(r=>r.json()),fetch('app/config/public-runtime.json').then(r=>r.json()).catch(()=>({}))])
+    .then(([catalog,provinces,runtime])=>{
+      const select=document.getElementById('province-select');select.replaceChildren();
+      catalog.activeProvinceCodes.forEach(code=>{const p=provinces.find(x=>x.provinceCode===code);if(p)select.add(new Option(p.provinceNameTH,code));});
+      select.disabled=!select.options.length;
+      const open=document.getElementById('open-map');const sync=()=>{open.href='app/?province='+encodeURIComponent(select.value);open.setAttribute('aria-disabled',String(!select.value));};select.addEventListener('change',sync);sync();
+      document.getElementById('province-status').textContent=select.options.length?`พร้อมใช้งาน ${select.options.length} จังหวัด · จังหวัดอื่นจะเปิดเมื่อมีข้อมูล HS`:'ยังไม่มีจังหวัดที่มีข้อมูล HS';
+      const admin=document.getElementById('admin-app');if(runtime.appsScriptWebAppUrl){admin.href=runtime.appsScriptWebAppUrl;admin.target='_blank';admin.rel='noopener noreferrer';}else{admin.setAttribute('aria-disabled','true');admin.textContent='ระบบผู้ดูแลกำลังติดตั้ง';}
+    }).catch(()=>{document.getElementById('province-status').textContent='ไม่สามารถโหลดรายการจังหวัดได้ กรุณาลองใหม่';});
+</script>
+</body>
+</html>
