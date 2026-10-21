@@ -48,12 +48,13 @@ const AccessContext=(()=>{
   for(const id of ['excel-import-section']){const node=el(id);if(node)node.classList.toggle('hidden',!writer);}
   for(const selector of ['#admin-map-group','#guide-visibility-section','#map-import-section']){const node=document.querySelector(selector);if(node)node.hidden=!manager;}
   const mapImport=el('map-import-section');if(mapImport)mapImport.hidden=true; // Installed boundaries are authoritative; local IDB import cannot override server scope.
+  const oldMapGroup=el('admin-map-group');if(oldMapGroup)oldMapGroup.hidden=true; // Province selection has one authoritative control above.
   const quick=el('quick-province-select');if(quick){quick.disabled=true;quick.title='ใช้ตัวเลือกจังหวัดหลักด้านบน';}
   const oldFirstRun=el('province-setup');if(oldFirstRun)oldFirstRun.remove();
   const importTargets=el('hotspot-import-provinces');if(importTargets&&role!=='superadmin'){importTargets.multiple=false;importTargets.value=current.provinceCode;importTargets.disabled=true;}
   const filter=document.createElement('label');filter.textContent='จังหวัด ';const locked=document.createElement('input');locked.id='filter-province';locked.readOnly=true;locked.value=current.provinceNameTH;filter.append(locked);el('filter-district')?.parentElement.before(filter);
   const google=el('v2-controls');if(google)google.classList.toggle('hidden',role!=='superadmin');
-  if(!current.provinceCode){document.body.classList.add('access-no-timeline');document.getElementById('right-panel')?.setAttribute('hidden','');el('hotspot-timeline')?.setAttribute('hidden','');el('province-data-status').textContent='ประเทศไทย · แสดงเฉพาะขอบเขตจังหวัด เลือกจังหวัดหลักเพื่อโหลดข้อมูลรายละเอียดและสรุปผล';}
+  if(!current.provinceCode){document.body.classList.add('access-no-timeline');document.getElementById('right-panel')?.setAttribute('hidden','');el('hotspot-timeline')?.setAttribute('hidden','');el('btn-print').disabled=true;el('lyr-risk').checked=false;el('lyr-risk').disabled=true;el('province-data-status').textContent='ประเทศไทย · แสดงเฉพาะขอบเขตจังหวัด เลือกจังหวัดหลักเพื่อโหลดข้อมูลรายละเอียดและสรุปผล';}
   if(current.public&&(!current.published||!current.publishedYears.length)){document.body.classList.add('access-no-timeline');document.getElementById('right-panel')?.setAttribute('hidden','');el('hotspot-timeline')?.setAttribute('hidden','');el('province-data-status').textContent=current.provinceNameTH+' · ยังไม่มีชุด HS ที่อนุญาตให้เผยแพร่ ไม่ใช่ผลตรวจว่าพบ 0 จุด';el('lyr-risk').disabled=true;el('btn-print').disabled=true;}
   requestAnimationFrame(()=>MapModule.map()?.invalidateSize());
  }
