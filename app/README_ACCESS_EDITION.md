@@ -6,7 +6,7 @@
 หน้าทดสอบในเครื่องนี้: http://127.0.0.1:8770/ ใช้สถานะทดสอบแยกไว้ที่ `v2-access-preview-state` การทดสอบไม่ได้อนุมัติหรือรีเซ็ตบัญชีผู้ใช้จริง
 
 ## สิ่งที่มีและสิ่งที่ปรับ
-โครงสร้างเดิมเป็น Dashboard แบบ Static + Node local service + JSON state + ตัวเชื่อม Google OAuth การเข้าสู่ระบบเดิมยังไม่มีทะเบียนคำขอและขอบเขตอำเภอ จึงเพิ่มการตรวจสิทธิ์ที่บริการเดิม พร้อมปิดช่องอ่านไฟล์ข้อมูลโดยตรง คงสูตรความเสี่ยงและ Dashboard เดิม
+โครงสร้างเดิมเป็น Dashboard แบบ Static + Node local service + JSON state + ตัวเชื่อม Google OAuth การเข้าสู่ระบบเดิมยังไม่มีทะเบียนคำขอและขอบเขตอำเภอ จึงเพิ่มการตรวจสิทธิ์ที่บริการเดิม พร้อมปิดช่องอ่านไฟล์ข้อมูลโดยตรง คงสูตรความเสี่ยงและ Dashboard เดิม และนำรหัสผ่านตัวอย่างออกจากคู่มือที่เปิดผ่านเว็บได้
 
 - ผู้ใช้ทั่วไปเลือกจังหวัดก่อนแสดงข้อมูล เห็น HS เฉพาะจังหวัด/ปีที่ Super Admin อนุญาตเผยแพร่ ค่าเริ่มต้นยังไม่เผยแพร่ข้อมูล
 - ลงทะเบียนผู้บันทึกหรือผู้สมัคร Admin แบบ pending พร้อมรุ่นประกาศ PDPA เวลารับทราบและเลขคำขอ กล่องรับทราบไม่ถูกเลือกไว้ล่วงหน้า
@@ -30,7 +30,7 @@
 ปรับ `v2/server.cjs`, `v2/client.js`, `v2/setup.js`, `js/app.js`, `js/boundary-store.js`, `js/data-loader.js`, `index.html` รายการเต็มพร้อม hash อยู่ใน tests/access-release-validation.json
 
 ## ตรวจสอบ
-รัน `node --test v2/test-access.cjs v2/test-access-api.cjs v2/test-scope-security.cjs v2/test-public-feed.cjs v2/test-client.cjs`
+รัน `node --test v2/test-access.cjs v2/test-access-api.cjs v2/test-scope-security.cjs v2/test-public-feed.cjs v2/test-map-access.cjs v2/test-bootstrap-owner.cjs v2/test-client.cjs`
 ครอบคลุม pending/อนุมัติ/ปฏิเสธ การล็อกจังหวัดและอำเภอ API ข้ามพื้นที่ Reset/เปลี่ยนรหัส ถอนสิทธิ์ กดสมัครซ้ำพร้อมกัน Logout ระหว่างโหลด และ Windows encoded-path traversal รวมข้อมูลจังหวัดหลายรหัสและจำนวนส่งออกทั้งประเทศ
 ใช้ `node --check` ตรวจไฟล์ JavaScript/CJS และเทียบไฟล์ risk.js/dashboard.js กับต้นฉบับเพื่อยืนยันไม่ได้เปลี่ยนสูตร
 

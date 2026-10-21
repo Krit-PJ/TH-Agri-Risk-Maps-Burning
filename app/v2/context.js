@@ -22,7 +22,8 @@ const AccessContext=(()=>{
   select.add(new Option(state.session?.role==='superadmin'?'ประเทศไทย — เลือกจังหวัดเพื่อดูรายละเอียด':'-- เลือกจังหวัดก่อนแสดงข้อมูล --',''));
   for(const p of provinces)select.add(new Option(p.provinceNameTH,p.provinceCode));select.value=selected;select.disabled=!!state.session&&state.session.role!=='superadmin';label.append(select);bar.append(label);
   const sessionLabel=document.createElement('span');sessionLabel.textContent=state.session?(state.session.fullName||state.session.username)+' · '+roleLabel(state.session.role):'ผู้ใช้ทั่วไป';bar.append(sessionLabel);
-  for(const [text,url] of [['ลงทะเบียน','/access.html#register'],[state.session?'บัญชี / จัดการผู้ใช้งาน':'เข้าใช้งานระบบ','/access.html#login']]){const link=document.createElement('a');link.textContent=text;link.href=state.session&&text==='บัญชี / จัดการผู้ใช้งาน'?'/access.html':url;bar.append(link);}
+  const accountLinks=state.session?[['บัญชี / จัดการผู้ใช้งาน','/access.html']]:[['ลงทะเบียน','/access.html#register']];
+  for(const [text,url] of accountLinks){const link=document.createElement('a');link.textContent=text;link.href=url;bar.append(link);}
   const related=document.createElement('nav');related.setAttribute('aria-label','ระบบที่เกี่ยวข้อง');related.id='related-systems';for(const link of document.querySelectorAll('.partner-link'))related.append(link);bar.append(related);
   header.after(bar);const measure=()=>{document.documentElement.style.setProperty('--access-bar-h',bar.getBoundingClientRect().height+'px');if(typeof MapModule!=='undefined')MapModule.map()?.invalidateSize();};measure();if(typeof ResizeObserver!=='undefined')new ResizeObserver(measure).observe(bar);
   select.onchange=()=>{const p=provinces.find(p=>p.provinceCode===select.value);navigate(p?'/'+p.slug+'/':'/');};
@@ -54,6 +55,7 @@ const AccessContext=(()=>{
   const google=el('v2-controls');if(google)google.classList.toggle('hidden',role!=='superadmin');
   if(!current.provinceCode){document.body.classList.add('access-no-timeline');document.getElementById('right-panel')?.setAttribute('hidden','');el('hotspot-timeline')?.setAttribute('hidden','');el('province-data-status').textContent='ประเทศไทย · แสดงเฉพาะขอบเขตจังหวัด เลือกจังหวัดหลักเพื่อโหลดข้อมูลรายละเอียดและสรุปผล';}
   if(current.public&&(!current.published||!current.publishedYears.length)){document.body.classList.add('access-no-timeline');document.getElementById('right-panel')?.setAttribute('hidden','');el('hotspot-timeline')?.setAttribute('hidden','');el('province-data-status').textContent=current.provinceNameTH+' · ยังไม่มีชุด HS ที่อนุญาตให้เผยแพร่ ไม่ใช่ผลตรวจว่าพบ 0 จุด';el('lyr-risk').disabled=true;el('btn-print').disabled=true;}
+  requestAnimationFrame(()=>MapModule.map()?.invalidateSize());
  }
  return{init,bind,fetchApi,clear,navigate,roleLabel,get current(){return current;},get province(){return selected;},get generation(){return generation;}};
 })();
