@@ -37,8 +37,16 @@
 </main>
 <script>
   const catalogPath='app/data/catalog.json';
+  const loadDynamicCatalog=runtime=>new Promise(resolve=>{
+    if(!runtime.appsScriptWebAppUrl)return resolve(null);
+    const callback='agriCatalog_'+crypto.randomUUID().replace(/-/g,''),script=document.createElement('script');
+    const finish=value=>{delete window[callback];script.remove();resolve(value?.ok?value:null)};
+    const timer=setTimeout(()=>finish(null),10000);window[callback]=value=>{clearTimeout(timer);finish(value)};script.onerror=()=>{clearTimeout(timer);finish(null)};
+    script.src=runtime.appsScriptWebAppUrl+'?'+new URLSearchParams({action:'catalog',callback});document.head.append(script);
+  });
   Promise.all([fetch(catalogPath).then(r=>{if(!r.ok)throw new Error('catalog');return r.json()}),fetch('app/config/provinces.json').then(r=>r.json()),fetch('app/config/public-runtime.json').then(r=>r.json()).catch(()=>({}))])
-    .then(([catalog,provinces,runtime])=>{
+    .then(async([catalog,provinces,runtime])=>{
+      const dynamic=await loadDynamicCatalog(runtime),active=new Set(catalog.activeProvinceCodes||[]);(dynamic?.activeProvinceCodes||[]).forEach(code=>active.add(String(code)));catalog.activeProvinceCodes=[...active].sort();
       const select=document.getElementById('province-select');select.replaceChildren();
       catalog.activeProvinceCodes.forEach(code=>{const p=provinces.find(x=>x.provinceCode===code);if(p)select.add(new Option(p.provinceNameTH,code));});
       select.disabled=!select.options.length;

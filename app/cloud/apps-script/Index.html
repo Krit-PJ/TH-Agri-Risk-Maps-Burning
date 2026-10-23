@@ -23,8 +23,20 @@
       <label class="ack"><input id="acknowledged" type="checkbox"> <span>ข้าพเจ้าได้อ่านและรับทราบรายละเอียดการใช้ข้อมูลส่วนบุคคลข้างต้น และประสงค์ส่งคำขอลงทะเบียน</span></label><div class="actions"><button type="button" data-cancel>ยกเลิกการลงทะเบียน</button><button type="button" id="confirm-registration" class="primary">ยืนยันการลงทะเบียน</button></div>
     </div>
   </section>
-  <section id="view-login" class="view surface" hidden><h2>เข้าใช้งานระบบเจ้าหน้าที่</h2><p>หลังเปิดใช้งานครั้งแรก ระบบจะจดจำอุปกรณ์นี้ การเข้าใช้ครั้งต่อไปกรอกหมายเลขโทรศัพท์เท่านั้น</p><form id="admin-login"><label>หมายเลขโทรศัพท์<input name="phone" inputmode="tel" autocomplete="tel" required></label><label>รหัสเปิดใช้งานครั้งแรก<input name="activationCode" inputmode="numeric" maxlength="6"></label><button class="primary">เข้าสู่ระบบ</button></form><details><summary>Super Admin</summary><form id="owner-login"><label>User<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">เข้าสู่ระบบ Super Admin</button></form></details></section>
-  <section id="view-admin" class="view surface" hidden><div class="admin-head"><div><h2 id="session-name">จัดการข้อมูล</h2><p id="session-role"></p></div><button id="logout">ออกจากระบบ</button></div><div id="owner-tools" hidden><h3>คำขอลงทะเบียน</h3><div id="requests" class="table-wrap"></div></div><h3>นำเข้าหรือแก้ไข Hotspot</h3><p>วาง JSON array สูงสุด 5,000 แถว โดยใช้รหัสจังหวัด/อำเภอ/ตำบลมาตรฐาน</p><textarea id="hotspot-json" rows="10" spellcheck="false" placeholder='[{"hotspotId":"...","date":"2026-01-15","provinceCode":"62","districtCode":"6201","latitude":16.4,"longitude":99.5}]'></textarea><div class="actions"><button id="save-hotspots" class="primary">บันทึก/แก้ไข</button></div></section>
+  <section id="view-login" class="view surface" hidden><h2>เข้าใช้งานระบบเจ้าหน้าที่</h2><p>หลังเปิดใช้งานครั้งแรก ระบบจะจดจำอุปกรณ์นี้ การเข้าใช้ครั้งต่อไปกรอกหมายเลขโทรศัพท์เท่านั้น</p><form id="admin-login"><label>หมายเลขโทรศัพท์<input name="phone" inputmode="tel" autocomplete="tel" required></label><label>รหัสเปิดใช้งานครั้งแรก<input name="activationCode" autocomplete="one-time-code" minlength="16" maxlength="16"></label><button class="primary">เข้าสู่ระบบ</button></form><details><summary>Super Admin</summary><form id="owner-login"><label>User<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">เข้าสู่ระบบ Super Admin</button></form></details></section>
+  <section id="view-admin" class="view surface" hidden>
+    <div class="admin-head"><div><h2 id="session-name">จัดการข้อมูล</h2><p id="session-role"></p></div><button id="logout">ออกจากระบบ</button></div>
+    <label id="admin-province-field">จังหวัดที่กำลังจัดการ<select id="admin-province"></select></label>
+    <div id="dashboard" class="metric-grid" aria-label="สรุปสถานะข้อมูล"></div>
+    <div id="owner-tools" hidden><h3>คำขอลงทะเบียน</h3><div id="requests" class="table-wrap"></div></div>
+    <h3>นำเข้า Hotspot</h3><p>รองรับ CSV หรือ JSON สูงสุด 5,000 แถว ระบบจะบันทึกเป็นฉบับร่างก่อนเสมอ</p>
+    <input id="hotspot-file" type="file" accept=".csv,.json,text/csv,application/json">
+    <details><summary>วางข้อมูล JSON ด้วยตนเอง</summary><textarea id="hotspot-json" rows="8" spellcheck="false" placeholder='[{"hotspotId":"...","date":"2026-01-15","provinceCode":"62","districtCode":"6201","latitude":16.4,"longitude":99.5}]'></textarea></details>
+    <div id="import-preview" class="preview" hidden></div>
+    <div class="actions"><button id="save-hotspots" class="primary">บันทึกเป็นฉบับร่าง</button><button id="reload-hotspots">โหลดข้อมูลใหม่</button></div>
+    <h3>รายการ Hotspot</h3><div class="toolbar"><button id="submit-hotspots">ส่งตรวจ</button><button id="approve-hotspots" class="owner-only" hidden>อนุมัติ</button><button id="publish-hotspots" class="owner-only" hidden>เผยแพร่</button><button id="unpublish-hotspots" class="owner-only" hidden>ถอนเผยแพร่</button><button id="delete-hotspots">ลบแบบกู้คืนได้</button></div>
+    <div id="hotspot-table" class="table-wrap"></div>
+  </section>
   <p id="status" role="status" aria-live="polite"></p>
 </main>
 <?!= include_('Client'); ?>

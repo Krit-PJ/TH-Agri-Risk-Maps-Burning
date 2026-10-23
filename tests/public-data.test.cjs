@@ -50,3 +50,13 @@ test('province without hotspot rows remains installed but inactive', () => {
   assert.deepEqual(catalog.provinceCodes, ['62', '63']);
   assert.deepEqual(catalog.activeProvinceCodes, ['62']);
 });
+
+test('public hotspot packaging excludes private rows and unknown properties', () => {
+  assert.equal(builder.isPublished({ properties: {} }), true);
+  assert.equal(builder.isPublished({ properties: { published: false } }), false);
+  assert.equal(builder.isPublished({ properties: { published: 'false' } }), false);
+  assert.deepEqual(
+    builder.publicProperties({ hotspotId: 'H1', date: '2026-01-01', phone: 'private', fullName: 'private' }, '62'),
+    { hotspotId: 'H1', date: '2026-01-01', provinceCode: '62', __provinceCode: '62' }
+  );
+});

@@ -25,6 +25,28 @@ function provinceCode(feature, byName) {
   return byName.get(clean(p.Province || p.province || p.__province || p.ProvinceN)) || '';
 }
 
+const PUBLIC_HOTSPOT_PROPERTIES = [
+  'hotspotId', 'date', 'time', 'provinceCode', '__provinceCode',
+  'districtCode', 'subdistrictCode', 'LandType', 'PlantType',
+  'latitude', 'longitude', 'source', 'source_file', 'source_sheet'
+];
+
+function isPublished(feature) {
+  const value = feature?.properties?.published;
+  return value === undefined || value === null || value === '' || value === true;
+}
+
+function publicProperties(properties, code) {
+  const source = properties || {};
+  const result = {};
+  for (const key of PUBLIC_HOTSPOT_PROPERTIES) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) result[key] = source[key];
+  }
+  result.provinceCode = code;
+  result.__provinceCode = code;
+  return result;
+}
+
 function catalogFromCounts(provinces, hotspotCounts, invalidHotspots = 0, years = []) {
   const ordered = provinces.map(p => p.provinceCode);
   return {
@@ -87,10 +109,11 @@ function build({ sourceRoot, outputRoot, provinces }) {
     const source = readCollection(path.join(hotspotRoot, file));
     const grouped = new Map();
     for (const feature of source.features) {
+      if (!isPublished(feature)) continue;
       const code = provinceCode(feature, byName);
       if (!validPoint(feature) || !codes.has(code)) { invalidHotspots++; continue; }
       const copy = structuredClone(feature);
-      copy.properties = { ...(copy.properties || {}), provinceCode: code, __provinceCode: code };
+      copy.properties = publicProperties(copy.properties, code);
       if (!grouped.has(code)) grouped.set(code, []);
       grouped.get(code).push(copy);
       counts.set(code, (counts.get(code) || 0) + 1);
@@ -130,4 +153,4 @@ if (require.main === module) {
   catch (error) { console.error(error.message); process.exitCode = 1; }
 }
 
-module.exports = { build, catalogFromCounts, provinceCode, validPoint };
+module.exports = { build, catalogFromCounts, provinceCode, validPoint, isPublished, publicProperties };

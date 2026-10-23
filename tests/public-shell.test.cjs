@@ -23,6 +23,14 @@ test('static map does not load the local Node access bridge', () => {
   assert.match(html, /js\/public-shell\.js/);
 });
 
+test('public pages merge the approved Apps Script feed with bundled fallback data', () => {
+  assert.match(read('index.html'), /loadDynamicCatalog/);
+  const shell = read('app/js/public-shell.js');
+  assert.match(shell, /AgriPublicApi/);
+  assert.match(shell, /Public API fallback/);
+  assert.match(shell, /bundledHotspots/);
+});
+
 test('Kamphaeng Phet uses the canonical national data paths', () => {
   const provinces = JSON.parse(read('app/config/provinces.json'));
   const kpp = provinces.find(value => value.provinceCode === '62');
@@ -36,15 +44,15 @@ test('deployment workflow publishes the repository with Pages artifact actions',
   assert.match(workflow, /actions\/deploy-pages/);
 });
 
-test('tracked source contains no supplied phone or super-admin password', () => {
+test('tracked source excludes common credential assignments and private handoff files', () => {
   const tracked = require('node:child_process').execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).trim().split(/\r?\n/);
+  assert.equal(tracked.some(file => /(?:^|\/)\.private(?:\/|$)/.test(file)), false);
   for (const file of tracked.filter(Boolean)) {
     const absolute = path.join(root, file);
     if (!fs.statSync(absolute).isFile()) continue;
     const buffer = fs.readFileSync(absolute);
     if (buffer.includes(0)) continue;
     const text = buffer.toString('utf8');
-    assert.equal(text.includes('0841157666'), false, `${file} exposes admin phone`);
-    assert.equal(text.includes('062046411'), false, `${file} exposes owner password`);
+    assert.doesNotMatch(text, /(?:OWNER_PASSWORD|ADMIN_PHONE|activationCode)\s*[:=]\s*['\"][^'\"]+['\"]/i, `${file} may expose a credential assignment`);
   }
 });
