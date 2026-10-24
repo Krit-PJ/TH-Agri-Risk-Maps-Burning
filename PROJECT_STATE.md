@@ -24,14 +24,14 @@ acceptance:
   - {id: A4, criterion: "Login separates phone-only Admin and credentialed Super Admin in one entry point", check: "frontend and backend authorization tests", result: PASS, evidence: "tests/public-shell.test.cjs; tests/apps-script-core.test.cjs"}
   - {id: A5, criterion: "Visitor counter persists at the shared backend", check: "unit test and deployed API call", result: PASS, evidence: "36/36 tests; Apps Script deployment @8 returned visit_ok=true/count=1"}
   - {id: A6, criterion: "All regression tests pass", check: "npm test", result: PASS, evidence: "36/36 local tests"}
-  - {id: A7, criterion: "Production deployment succeeds", check: "Apps Script and GitHub Pages live verification", result: IN_PROGRESS, evidence: "Apps Script @8 verified; GitHub Pages push pending"}
+  - {id: A7, criterion: "Production deployment succeeds", check: "Apps Script and GitHub Pages live verification", result: PASS, evidence: "Apps Script @8 verified; GitHub Actions 40112983028 and 40112983213 succeeded; production assets returned expected release content"}
 scope_in: ["national public shell", "active-HS province selector", "role login UI", "persistent counter", "print layout", "Tailwind build", "Apps Script and GitHub Pages deployment"]
 scope_out: ["Risk V2 parameter activation", "mutating production Sheet data", "rewriting Git history"]
 authorized_actions: ["User explicitly authorized GitHub, Google Sheet, and Apps Script management and requested completion"]
 human_gate: {state: AUTHORIZED, action: "deploy GitHub Pages changes", basis: "current and prior explicit user instructions"}
 anchors:
   workspace_or_source: "TH-Agri-Risk-Maps-Burning-public"
-  revision: "main; final release commit pending"
+  revision: "main; release 691a049 plus state closeout"
   environment: "GitHub Pages production; Apps Script deployment @8"
   entrypoints: ["index.html", "app/js/landing.js", "app/index.html", "app/js/app.js", "app/js/map.js", "app/cloud/apps-script/Code.gs"]
   data_as_of: "HS source files inspected 2026-10-24; bundled catalog generated 2026-10-21"
@@ -42,7 +42,7 @@ assumptions: ["Risk V2 activation remains separately gated by approved baseline 
 changes: ["77-province map-first home", "active-HS-only selector", "single role-tab login entry", "partner links and DOAE-only branding", "Tailwind visual system", "persistent visitor counter", "A4 all-district report", "36-test suite"]
 recovery: "Revert the deployment commit; GitHub Pages retains commit history. No production Sheet mutation in this task."
 blockers: []
-next_action: "Commit/push GitHub Pages release and verify production HTTP."
+next_action: "none"
 budget:
   limits: {active_minutes: 90, tool_calls: 60, context_tokens: 45000, generated_tokens: 18000}
   used: {active_minutes: unknown, tool_calls: unknown, context_tokens: unknown, generated_tokens: unknown}
