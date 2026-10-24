@@ -7,3 +7,5 @@
 **/.env*
 *.zip
 .superpowers/
+.private/
+.clasp.json

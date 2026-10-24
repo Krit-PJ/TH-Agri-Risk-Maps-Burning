@@ -34,5 +34,5 @@
 ## ลิงก์ระบบ
 
 - เว็บไซต์: https://krit-pj.github.io/TH-Agri-Risk-Maps-Burning/
-- ฐานข้อมูลส่วนตัว: https://docs.google.com/spreadsheets/d/1cZcb2zl-wJyNSkBtYazY_6jk5j3l3OMGPXZYQZKBCUw/edit
-- Apps Script: https://script.google.com/d/1JKeXy3EWniAFiIl2-dRFDjD2IX97r7yyDiqo_HcmZdjrLO6wsNrSHm2J/edit
+- ฐานข้อมูล Control Plane และ Apps Script Project เป็นทรัพยากรส่วนตัว จึงไม่เผยแพร่ URL หรือรหัสโครงการใน repository สาธารณะ
+- URL ของ Production Web App ที่ใช้กับหน้าเว็บสาธารณะกำหนดไว้ใน `app/config/public-runtime.json`
