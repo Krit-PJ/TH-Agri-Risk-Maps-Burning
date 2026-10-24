@@ -148,6 +148,7 @@
 <a class="header-action-badge partner-link no-print" href="https://krit-pj.github.io/agri-hs-verification/" target="_blank" rel="noopener noreferrer">ตรวจสอบจุดความร้อน ↗</a>
 <a class="header-action-badge partner-link no-print" href="https://krit-pj.github.io/Green_Gain_Hub-KPP/" target="_blank" rel="noopener noreferrer">Green Gain Hub ↗</a>
 <span id="last-updated" class="header-action-badge update-badge">ข้อมูลล่าสุด: กำลังโหลด…</span>
+<div class="font-size-control no-print" role="group" aria-label="ปรับขนาดตัวอักษร"><button type="button" data-app-font="small" aria-label="ตัวอักษรขนาดเล็ก">ก−</button><button type="button" data-app-font="medium" aria-label="ตัวอักษรขนาดกลาง" aria-pressed="true">ก</button><button type="button" data-app-font="large" aria-label="ตัวอักษรขนาดใหญ่">ก+</button></div>
 <button class="btn-print no-print header-action-badge" id="btn-print" title="พิมพ์รายงาน 1 หน้า A4" type="button"><span aria-hidden="true">🖨️</span><span>พิมพ์รายงาน</span></button>
 <button class="btn-admin no-print" id="btn-admin-login" type="button" aria-haspopup="dialog">🔐 Login</button>
 <button class="btn-admin-logout no-print hidden" id="btn-admin-logout" type="button"><span id="admin-session-name" class="admin-session-name"></span><span>ออกจากระบบ</span></button>
@@ -294,7 +295,7 @@
 <details><summary>นำเข้าพื้นที่เพาะปลูกหรือรอยไหม้</summary><label>ชนิดข้อมูล<select id="import-layer-type"><option value="crop">พื้นที่เพาะปลูก</option><option value="burnscar">รอยไหม้</option></select></label><label>ไฟล์ GeoJSON<input type="file" id="import-geojson-file" accept=".geojson,.json"/></label><button type="button" id="btn-import-geojson" class="btn-secondary">นำเข้าชั้นข้อมูลเสริม</button><p class="field-help">ข้อมูลเสริมใช้เฉพาะการเปิดหน้านี้ ให้ดาวน์โหลด/เก็บต้นทางไว้</p></details></section>
 </details>
 <details class="admin-import-group no-print admin-only hidden" id="admin-hotspot-group"><summary>นำเข้าข้อมูลจุดความร้อน</summary>
-<section class="panel-section no-print admin-only hidden" id="excel-import-section" aria-hidden="true"><h3>นำเข้าข้อมูลจุดความร้อนจาก Excel</h3><p class="field-help">รองรับไฟล์ .xlsx/.xls ที่มี Date/ YYYY-MM-DD, Time, Province, Amphoe, Tambon, LandType, PlantType และ Latitude/Longitude หรือ Maps/X/Y; hsID และตารางตรวจยอดเป็นข้อมูลเสริม</p><label>จังหวัดสำหรับนำเข้า HS<select id="hotspot-import-provinces" multiple size="4" aria-describedby="hotspot-province-help"></select></label><p id="hotspot-province-help" class="field-help">เลือกได้เฉพาะจังหวัดที่มีชุดแผนที่นำเข้าแล้ว; Ctrl เพื่อเลือกหลายจังหวัด ข้อมูลจังหวัดอื่นใน Excel จะถูกกรองออก</p><label>รูปแบบนำเข้า<select id="hotspot-import-mode"><option value="single">ปีเดียว</option><option value="multi">หลายปี — แยกจากวันที่อัตโนมัติ</option></select></label><p id="hotspot-mode-help" class="field-help">ปีเดียว: ใช้ปีชุดข้อมูลที่ระบุตามวิธีเดิม รองรับช่วงวันที่ข้ามปี</p><label id="import-year-field">ปีชุดข้อมูล (พ.ศ.)<input id="import-year" inputmode="numeric" max="2600" min="2566" type="number" value="2569"/></label><label>ไฟล์ Excel<input accept=".xlsx,.xls" id="import-excel" type="file"/></label><label id="import-export-year-field" class="hidden">ปีที่ต้องการดาวน์โหลด<select id="import-export-year"></select></label><div class="data-actions"><button class="btn-primary" id="btn-import-excel" type="button">ตรวจสอบและนำเข้า</button><button class="btn-secondary" disabled="" id="btn-download-import" type="button">ดาวน์โหลด GeoJSON</button></div><div aria-live="polite" class="import-status" id="import-status" role="status">ยังไม่ได้เลือกไฟล์</div><details><summary>ผลตรวจสอบข้อมูล QA</summary><pre id="import-qa">ยังไม่มีผลตรวจสอบ</pre></details><button id="btn-download-qa" class="btn-secondary" disabled type="button">ดาวน์โหลด QA</button></section></details>
+<section class="panel-section no-print admin-only hidden" id="excel-import-section" aria-hidden="true"><h3>นำเข้าข้อมูลจุดความร้อนจาก Excel</h3><p class="field-help">รองรับไฟล์จริง 2 รูปแบบ: ชีต <strong>AllData</strong> (ข้อมูลย้อนหลัง ไม่บังคับ Time) และชีต <strong>hsAll</strong> (ข้อมูลปัจจุบัน) ระบบอ่านพิกัดจาก Maps ก่อนและไม่นำชีต Pivot/Summary มาคำนวณ</p><label>จังหวัดสำหรับนำเข้า HS<select id="hotspot-import-provinces" multiple size="4" aria-describedby="hotspot-province-help"></select></label><p id="hotspot-province-help" class="field-help">Admin เลือกได้เฉพาะจังหวัดตามสิทธิ์; Super Admin เลือกจังหวัดที่มีชุดแผนที่แล้ว ข้อมูลจังหวัดอื่นใน Excel จะถูกกรองออก</p><label>รูปแบบนำเข้า<select id="hotspot-import-mode"><option value="single">ปีเดียว</option><option value="multi">หลายปี — แยกจากวันที่อัตโนมัติ</option></select></label><p id="hotspot-mode-help" class="field-help">ปีเดียว: ใช้ปีชุดข้อมูลที่ระบุ รองรับช่วงวันที่ข้ามปี · หลายปี: ตรวจข้อมูลซ้ำข้ามไฟล์ด้วย hsID อัตโนมัติ</p><label id="import-year-field">ปีชุดข้อมูล (พ.ศ.)<input id="import-year" inputmode="numeric" max="2600" min="2566" type="number" value="2569"/></label><label>ไฟล์ Excel<input accept=".xlsx,.xls" id="import-excel" type="file"/></label><label id="import-export-year-field" class="hidden">ปีที่ต้องการดาวน์โหลด<select id="import-export-year"></select></label><div class="data-actions"><button class="btn-primary" id="btn-import-excel" type="button">ตรวจสอบและนำเข้า</button><button class="btn-secondary" disabled="" id="btn-download-import" type="button">ดาวน์โหลด GeoJSON</button></div><div aria-live="polite" class="import-status" id="import-status" role="status">ยังไม่ได้เลือกไฟล์</div><details><summary>ผลตรวจสอบข้อมูล QA</summary><pre id="import-qa">ยังไม่มีผลตรวจสอบ</pre></details><button id="btn-download-qa" class="btn-secondary" disabled type="button">ดาวน์โหลด QA</button></section></details>
 <section class="panel-section no-print admin-only hidden" id="guide-visibility-section" aria-hidden="true">
 <h3>📘 คู่มือการประเมินความเสี่ยง</h3>
 <label class="toggle-row guide-toggle-row">
@@ -310,18 +311,6 @@
 <div class="risk-level"><span class="risk-swatch" style="background:#2ecc71"></span><span><strong>ต่ำ:</strong> 0-24.9 คะแนน</span></div>
 </div>
 <a class="btn-guide-download hidden" id="risk-guide-drive-link" href="docs/multi-province-guide.html" target="_blank" rel="noopener noreferrer">คู่มือระบบประเมินความเสี่ยง</a>
-<div class="visitor-sidebar-card no-print" title="ตัวนับผู้เข้าชม">
-  <div class="visitor-sidebar-title"><span aria-hidden="true">👁</span><strong>ผู้เข้าชม</strong></div>
-  <div class="visitor-sidebar-count" id="visitor-display">
-    <span class="external-counter-box" id="external-counter-box">
-      <script type="text/javascript" src="https://www.free-counters.org/count/jwoy"></script><br class="counter-break" aria-hidden="true"/>
-      <a href="https://www.acadoo.de/leistungen/ghostwriter-doktorarbeit/" rel="nofollow" aria-hidden="true" tabindex="-1">Dissertation Unterstützung</a>
-      <script type="text/javascript" src="https://www.whomania.com/ctr?id=f86714acfcb722f8ab86c0abf994a86cbc6adf00"></script>
-    </span>
-    <span id="visitor-counter-fallback" class="counter-fallback" aria-live="polite">กำลังนับ…</span>
-  </div>
-</div>
-
 </section>
 <section id="v2-controls" class="panel-section no-print admin-only hidden"><details><summary>รุ่น 2 · ข้อมูล Google และข้อมูลในเครื่อง</summary>
 <p><a href="setup.html">ตั้งค่าพื้นที่และแหล่งข้อมูล Google</a></p>
@@ -432,11 +421,13 @@
 <script src="config/fallback.js"></script>
 <script src="js/config.js"></script>
 <script src="js/config-loader.js?v=20261010-round2"></script>
+<script src="js/import-contract.js?v=20261024"></script>
 <script src="js/hs-normalizer.js?v=20261010-round2"></script>
 <script src="js/data-loader.js"></script>
 <script src="js/boundary-store.js?v=20261010-round2"></script>
 <script src="js/map.js?v=20261010-round2"></script>
 <script src="js/dashboard.js"></script>
+<script src="js/risk-core.js?v=20261024"></script>
 <script src="js/risk.js"></script>
 <script src="js/app.js?v=20261010-round2"></script>
 <script src="js/public-shell.js?v=20261021-v2"></script>

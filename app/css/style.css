@@ -3507,3 +3507,8 @@ body.print-preparing .print-title-block p{font-size:8pt!important;margin:0!impor
 @media(max-width:420px){#app-header .brand-title{--header-detail-size:12.5px;}}
 @media print{#app-header .brand-title{--header-detail-size:8.5pt;}}
 @media print{#province-data-status{font-size:10px;background:white!important;color:#172033!important}#province-setup{display:none!important}}
+
+/* Clean, accessible controls shared by desktop and field use. */
+.font-size-control{display:inline-flex;gap:2px;padding:3px;border:1px solid rgba(255,255,255,.35);border-radius:9px}.font-size-control button{min-width:34px;min-height:34px;padding:3px;border:0;border-radius:6px;background:transparent;color:#fff;cursor:pointer}.font-size-control button[aria-pressed="true"]{background:#fff;color:#14532d;font-weight:900}
+@media(max-width:768px){.font-size-control{display:none}}
+@media print{#risk-box,#top5-box{display:none!important}.print-risk-level-grid{box-shadow:none!important}.chart-box canvas{display:none!important}}

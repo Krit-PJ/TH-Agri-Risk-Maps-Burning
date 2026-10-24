@@ -28,13 +28,15 @@ const HSNormalizer = (() => {
     if(options.provinceCodes&&(!activeScope.length||activeScope.some(c=>!BoundaryStore.codes.includes(c))))throw new Error('จังหวัด HS ต้องอยู่ในชุดแผนที่ที่นำเข้าแล้ว');
     const features=[],seen=new Set(),counts={byProvince:{},byPlantType:{},byDistrict:{},byTambon:{},byMonth:{},byYear:{}};
     const qa={inputRows:rows.length,nonEmptyRows:0,afterProvince:0,afterLandType:0,afterPlantType:0,accepted:0,
-      duplicates:0,noCoordinates:0,wrongProvince:0,wrongLand:0,wrongDate:0,wrongPlantType:0,areaCodeConflict:0,
+      duplicates:0,noCoordinates:0,wrongProvince:0,wrongLand:0,wrongDate:0,wrongPlantType:0,areaCodeConflict:0,provinceNameConflict:0,
+      coordinateSources:{Maps:0,'Longitude/Latitude':0,'X/Y/Q':0},
       unknownLandTypes:{},unknownPlantTypes:{},unknownDistricts:{},unknownTambons:{}};
     const count=(o,k)=>o[k]=(o[k]||0)+1;
-    for(const row of rows){
+    for(const [rowOffset,row] of rows.entries()){
       if(!row||row.every(v=>v===null||v===undefined||v===''))continue;qa.nonEmptyRows++;
       const get=k=>row[idx[k]],province=normalizeProvinceName(get('Province'));
       const found=ConfigLoader.bundle.provinces.find(x=>x.provinceNameTH===province&&activeScope.includes(x.provinceCode));if(!found){qa.wrongProvince++;continue;}const rowProvince=typeof ConfigLoader.mergeProvince==='function'?ConfigLoader.mergeProvince(found):p;
+      const provinceN=normalizeProvinceName(get('ProvinceN'));if(provinceN&&provinceN!==province)qa.provinceNameConflict++;
       qa.afterProvince++;
       const land=normalizeLandType(get('LandType'));
       if(!rowProvince.allowedLandTypes.includes(land)){qa.wrongLand++;count(qa.unknownLandTypes,clean(get('LandType'))||'(ว่าง)');continue;}qa.afterLandType++;
@@ -42,15 +44,15 @@ const HSNormalizer = (() => {
       if(!rowProvince.enabledPlantTypes.includes(plant)){qa.wrongPlantType++;count(qa.unknownPlantTypes,clean(get('PlantType'))||'(ว่าง)');continue;}qa.afterPlantType++;
       const dt=normalizeDate(rules.dateFields.map(get).find(v=>v!==null&&v!==undefined&&v!==''));
       if(!dt){qa.wrongDate++;continue;}
-      let coord=null;
+      let coord=null,coordinateSource='';
       for(const [lonKey,latKey] of rules.coordinateFields.filter(x=>x.length===2&&x[0]!=='X')){
         const lon=get(lonKey),lat=get(latKey);if(lon!==null&&lon!==undefined&&clean(lon)&&lat!==null&&lat!==undefined&&clean(lat))coord=[Number(lon),Number(lat)];
-        if(coord)break;
+        if(coord){coordinateSource='Longitude/Latitude';break;}
       }
-      if(!coord&&legacyCoordinates)coord=legacyCoordinates(get('Maps'),get('X'),get('Y'),get('Q'));
+      if(!coord&&legacyCoordinates){coord=legacyCoordinates(get('Maps'),get('X'),get('Y'),get('Q'));if(coord)coordinateSource=ImportContract.parseMaps(get('Maps'))?'Maps':'X/Y/Q';}
       if(!coord||coord.length!==2||!coord.every(Number.isFinite)||coord[0]<90||coord[0]>110||coord[1]<0||coord[1]>25){qa.noCoordinates++;continue;}
       const hsId=clean(get('hsID')??get('hs_id')),iso=dt.toISOString().slice(0,10),time=clean(get('Time')??get('acq_time'));
-      const identity=hsId?'id:'+rowProvince.provinceCode+':'+(options.deduplicateByCalendarYear?String(dt.getUTCFullYear()+543)+':':'')+hsId:`point:${iso}|${time}|${coord.join(',')}`;
+      const identity=ImportContract.recordIdentity({provinceCode:rowProvince.provinceCode,hsID:hsId,acq_date:iso,Time:time},coord);
       if(rules.deduplicate!=='none'&&seen.has(identity)){qa.duplicates++;continue;}
       const original=Object.fromEntries(headers.map((h,i)=>[h,row[i]]));
       const district=normalizeDistrictName(get('Amphoe')||get('district')),tambon=normalizeTambonName(get('Tambon')||get('subdistrict'));
@@ -61,7 +63,7 @@ const HSNormalizer = (() => {
         district,Amphoe:district,__district:district,subdistrict:tambon,Tambon:tambon,__subdistrict:tambon,
         village:clean(get('BaanN')),BaanN:clean(get('BaanN')),__village:clean(get('BaanN')),
         land_type:land,LandType:land,plant_type:plant,PlantType:plant,crop_type:plant,crop_type_raw:clean(get('PlantType')),__plant_type:plant,__crop:plant,
-        source:'NASA FIRMS VIIRS / Excel import',source_sheet:sourceSheet,
+        source:'NASA FIRMS VIIRS / Excel import',source_sheet:sourceSheet,source_profile:options.sourceProfile||'',source_row:rowOffset+2,coordinate_source:coordinateSource,
         filter_rule:`Province=${province}; LandType=${rowProvince.allowedLandTypes.join(',')}; PlantType=${rowProvince.enabledPlantTypes.join(',')}`}};
       const props=point.properties;
       if((!district||!tambon)&&window.turf){const hit=boundaries?.features.find(f=>{try{return turf.booleanPointInPolygon(point,f);}catch{return false;}});if(hit){props.__district=props.district=props.Amphoe=district||DataLoader.districtName(hit.properties);props.__subdistrict=props.subdistrict=props.Tambon=tambon||DataLoader.tambonName(hit.properties);}}
@@ -74,7 +76,7 @@ const HSNormalizer = (() => {
         if(!candidates.length)count(qa.unknownTambons,`${props.__district}/${props.__subdistrict||'(ว่าง)'}`);
       }
       if(/[<>]/.test(props.__district+props.__subdistrict+props.__village)){qa.areaCodeConflict++;continue;}
-      DataLoader.attachAreaCodes(point,boundaries);seen.add(identity);features.push(point);count(counts.byProvince,province);
+      DataLoader.attachAreaCodes(point,boundaries);seen.add(identity);features.push(point);count(qa.coordinateSources,coordinateSource);count(counts.byProvince,province);
       const prefix=activeScope.length>1?province+' / ':'';count(counts.byPlantType,plant);count(counts.byDistrict,prefix+(props.__district||'(ว่าง)'));count(counts.byTambon,`${prefix}${props.__district}/${props.__subdistrict||'(ว่าง)'}`);
       count(counts.byMonth,`${props.year_be}-${String(dt.getUTCMonth()+1).padStart(2,'0')}`);count(counts.byYear,props.year_be);
     }

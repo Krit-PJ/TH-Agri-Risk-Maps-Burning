@@ -47,7 +47,7 @@ const ConfigLoader = (() => {
       read('config/provinces.json',recovery.provinces,x=>Array.isArray(x)&&x.length>0&&x.every(validProvince)&&new Set(x.map(p=>p.provinceCode)).size===x.length),
       read('config/active-province.json',recovery.active,x=>typeof x?.activeProvinceCode==='string'&&/^(?:\d{2})?$/.test(x.activeProvinceCode)),
       read('config/risk-model.default.json',recovery.risk,validRisk),
-      read('config/import-rules.default.json',recovery.importRules,x=>Array.isArray(x?.requiredFields)&&Array.isArray(x.dateFields)&&x.plantAliases&&x.landAliases)
+      read('config/import-rules.default.json',recovery.importRules,x=>x?.schemaVersion===2&&Array.isArray(x.detailProfiles)&&x.detailProfiles.length===2&&Array.isArray(x.dateFields)&&x.plantAliases&&x.landAliases)
     ]);
     bundle={system,provinces,risk,importRules};
     let stored='';try{stored=localStorage.getItem('activeProvinceCode')||'';}catch{warn('ไม่สามารถอ่าน localStorage; การเลือกจังหวัดจะอยู่เฉพาะการเปิดครั้งนี้');}

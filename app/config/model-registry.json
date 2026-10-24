@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "modelId": "TH-AGRI-BURN-RISK",
+  "modelVersion": "2.0.0",
+  "scope": "shared-model-province-isolated-data",
+  "status": "parameter_pending",
+  "weights": {
+    "risk": {"hotspot": 0.4, "trend": 0.2, "crop": 0.2, "area": 0.2},
+    "hotspot": {"count": 0.6, "density": 0.4},
+    "trend": {"trend": 0.4, "recurrence": 0.4, "persistence": 0.2},
+    "upper": {"weightedMean": 0.6, "highRiskCoverage": 0.25, "maxRisk": 0.15}
+  },
+  "thresholds": {"low": 25, "medium": 50, "high": 75, "veryHighCoverage": 50, "veryHighShare": 30},
+  "provinceParameters": {},
+  "requiredBeforeActivation": [
+    "countBaseline ต่อจังหวัด",
+    "densityBaseline ต่อจังหวัด",
+    "areaBaseline ต่อจังหวัด",
+    "สูตร TrendScore ที่อนุมัติ",
+    "สูตร RecurrenceScore ที่อนุมัติ",
+    "สูตร PersistenceScore ที่อนุมัติ",
+    "CropRisk mapping ที่อนุมัติ",
+    "baselineVersion ต่อจังหวัด",
+    "หลักฐานอนุมัติ modelVersion"
+  ]
+}

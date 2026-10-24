@@ -3,57 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Thailand Agri-Risk Maps Burning</title>
-  <style>
-    :root{color-scheme:light;--ink:#173f2b;--green:#155a3b;--cream:#f5f1e8;--line:#b8d7c1;--gold:#e3a321}
-    *{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#e6f2e8 0,#f5f1e8 52%,#eef6ef 100%);color:var(--ink);font:17px/1.65 system-ui,"Noto Sans Thai",sans-serif;min-height:100vh}
-    main{width:min(960px,calc(100% - 32px));margin:5vh auto;padding:clamp(24px,5vw,56px);background:#fff;border:1px solid var(--line);border-radius:24px;box-shadow:0 24px 70px rgba(23,63,43,.12)}
-    .brand{display:flex;align-items:center;gap:16px}.brand img{width:68px;height:68px;object-fit:contain}.brand p{margin:0;font-weight:700}
-    h1{max-width:760px;margin:.7em 0 .3em;line-height:1.15;font-size:clamp(32px,6vw,58px);letter-spacing:-.02em}h2{font-size:clamp(22px,3vw,30px)}
-    .lead{max-width:720px;font-size:clamp(18px,2.5vw,22px);color:#365d49}.panel{background:var(--cream);border:1px solid #d8d1c2;padding:clamp(20px,4vw,34px);margin:32px 0;border-radius:18px}
-    label{display:block;font-weight:700;margin-bottom:8px}select{width:100%;min-height:50px;padding:10px 14px;border:1px solid #76927f;border-radius:10px;background:#fff;color:var(--ink);font:inherit}
-    .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}.button{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:11px 18px;border-radius:10px;background:var(--green);color:#fff;text-decoration:none;font-weight:700;border:2px solid var(--green)}.button.secondary{background:#fff;color:var(--green)}
-    .button[aria-disabled="true"]{opacity:.55;pointer-events:none}a{color:var(--green)}a:focus-visible,select:focus-visible{outline:3px solid var(--gold);outline-offset:4px}.status{margin:10px 0 0;color:#52705f}.meta{font-size:14px;color:#587063;border-top:1px solid var(--line);padding-top:20px;margin-top:34px}
-    @media(max-width:540px){main{width:100%;margin:0;border-radius:0;border-inline:0;min-height:100vh}.actions>*{width:100%}}
-  </style>
+  <title>Thailand Agri-Risk Maps Burning | แผนที่ความเสี่ยงการเผา</title>
+  <meta name="theme-color" content="#f6faf7">
+  <meta name="description" content="แผนที่ประเมินความเสี่ยงการเผาในพื้นที่การเกษตรของประเทศไทย">
+  <link rel="stylesheet" href="app/css/landing.css">
 </head>
 <body>
-<main>
-  <div class="brand"><img src="app/assets/logo-doae.png" alt="กรมส่งเสริมการเกษตร"><p>กรมส่งเสริมการเกษตร</p></div>
-  <h1>Thailand Agri-Risk Maps Burning</h1>
-  <p class="lead">ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่การเกษตร ครอบคลุมขอบเขตจังหวัด อำเภอ และตำบลทั่วประเทศไทย</p>
-  <section class="panel" aria-labelledby="map-title">
-    <h2 id="map-title">เปิดแผนที่จังหวัดที่มีข้อมูลจุดความร้อน</h2>
-    <label for="province-select">จังหวัด</label>
-    <select id="province-select" disabled><option>กำลังตรวจสอบชุดข้อมูล…</option></select>
-    <p id="province-status" class="status" role="status" aria-live="polite">รายการจะแสดงเฉพาะจังหวัดที่มีข้อมูล HS ในระบบ</p>
-    <div class="actions">
-      <a id="open-map" class="button" href="app/" aria-disabled="true">เปิดแผนที่</a>
-      <a id="admin-app" class="button secondary" href="#">ลงทะเบียน / เข้าสู่ระบบผู้ดูแล</a>
+  <a class="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="หน้าแรก Thailand Agri-Risk Maps Burning"><img src="app/assets/logo-doae.png" alt="" width="52" height="52"><span><strong>Thailand Agri-Risk Maps Burning</strong><small>ระบบชี้เป้าพื้นที่เสี่ยงการเผาในพื้นที่เกษตร</small></span></a>
+    <div class="header-actions">
+      <div class="font-controls" role="group" aria-label="ปรับขนาดตัวอักษร"><button type="button" data-font-size="small" aria-label="ตัวอักษรขนาดเล็ก">ก−</button><button type="button" data-font-size="medium" aria-label="ตัวอักษรขนาดกลาง" aria-pressed="true">ก</button><button type="button" data-font-size="large" aria-label="ตัวอักษรขนาดใหญ่">ก+</button></div>
+      <a id="staff-app" class="staff-link" href="#" aria-disabled="true">สำหรับเจ้าหน้าที่</a>
     </div>
-  </section>
-  <p><a href="https://krit-pj.github.io/agri-hs-verification/" target="_blank" rel="noopener noreferrer">ระบบตรวจสอบจุดความร้อน ↗</a> · <a href="https://github.com/Krit-PJ/TH-Agri-Risk-Maps-Burning">โค้ดโครงการ</a></p>
-  <p class="meta">พัฒนาโดย ดร. กิตติ โพธิ์จวง · สำนักงานเกษตรจังหวัดกำแพงเพชร</p>
-</main>
-<script>
-  const catalogPath='app/data/catalog.json';
-  const loadDynamicCatalog=runtime=>new Promise(resolve=>{
-    if(!runtime.appsScriptWebAppUrl)return resolve(null);
-    const callback='agriCatalog_'+crypto.randomUUID().replace(/-/g,''),script=document.createElement('script');
-    const finish=value=>{delete window[callback];script.remove();resolve(value?.ok?value:null)};
-    const timer=setTimeout(()=>finish(null),10000);window[callback]=value=>{clearTimeout(timer);finish(value)};script.onerror=()=>{clearTimeout(timer);finish(null)};
-    script.src=runtime.appsScriptWebAppUrl+'?'+new URLSearchParams({action:'catalog',callback});document.head.append(script);
-  });
-  Promise.all([fetch(catalogPath).then(r=>{if(!r.ok)throw new Error('catalog');return r.json()}),fetch('app/config/provinces.json').then(r=>r.json()),fetch('app/config/public-runtime.json').then(r=>r.json()).catch(()=>({}))])
-    .then(async([catalog,provinces,runtime])=>{
-      const dynamic=await loadDynamicCatalog(runtime),active=new Set(catalog.activeProvinceCodes||[]);(dynamic?.activeProvinceCodes||[]).forEach(code=>active.add(String(code)));catalog.activeProvinceCodes=[...active].sort();
-      const select=document.getElementById('province-select');select.replaceChildren();
-      catalog.activeProvinceCodes.forEach(code=>{const p=provinces.find(x=>x.provinceCode===code);if(p)select.add(new Option(p.provinceNameTH,code));});
-      select.disabled=!select.options.length;
-      const open=document.getElementById('open-map');const sync=()=>{open.href='app/?province='+encodeURIComponent(select.value);open.setAttribute('aria-disabled',String(!select.value));};select.addEventListener('change',sync);sync();
-      document.getElementById('province-status').textContent=select.options.length?`พร้อมใช้งาน ${select.options.length} จังหวัด · จังหวัดอื่นจะเปิดเมื่อมีข้อมูล HS`:'ยังไม่มีจังหวัดที่มีข้อมูล HS';
-      const admin=document.getElementById('admin-app');if(runtime.appsScriptWebAppUrl){admin.href=runtime.appsScriptWebAppUrl;admin.target='_blank';admin.rel='noopener noreferrer';}else{admin.setAttribute('aria-disabled','true');admin.textContent='ระบบผู้ดูแลกำลังติดตั้ง';}
-    }).catch(()=>{document.getElementById('province-status').textContent='ไม่สามารถโหลดรายการจังหวัดได้ กรุณาลองใหม่';});
-</script>
+  </header>
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div><p class="eyebrow">ข้อมูลเพื่อการตัดสินใจเชิงพื้นที่</p><h1 id="hero-title">เห็นพื้นที่เสี่ยงก่อน<br>จัดลำดับการทำงานได้ตรงจุด</h1><p class="lead">แสดงขอบเขตครบ 77 จังหวัด และเปิดดูผลประเมินเฉพาะจังหวัดที่มีข้อมูลจุดความร้อน (Hotspot) พร้อมใช้งานแล้ว</p></div>
+      <dl class="summary" aria-label="สถานะระบบ"><div><dt>77</dt><dd>จังหวัดในแผนที่</dd></div><div><dt id="active-count">—</dt><dd>จังหวัดที่มีข้อมูล HS</dd></div><div><dt id="hs-count">—</dt><dd>จุดความร้อนในระบบ</dd></div></dl>
+    </section>
+    <section class="map-workspace" aria-labelledby="map-title">
+      <div class="map-copy"><p class="section-kicker">แผนที่ประเทศไทย</p><h2 id="map-title">เลือกจังหวัดที่มีข้อมูลพร้อมใช้งาน</h2><p>พื้นที่สีเขียวคือจังหวัดที่เปิดดูข้อมูลได้แล้ว ส่วนพื้นที่สีเทาแสดงขอบเขตจังหวัดที่ยังไม่มีชุดข้อมูล HS</p><label for="province-select">จังหวัดที่มีข้อมูล</label><select id="province-select" disabled><option value="">กำลังตรวจสอบชุดข้อมูล…</option></select><p id="province-status" class="status" role="status" aria-live="polite">ระบบจะแสดงเฉพาะจังหวัดที่มีข้อมูลผ่านการเผยแพร่</p><a id="open-map" class="primary-action" href="app/" aria-disabled="true">เปิดแผนที่และผลประเมิน <span aria-hidden="true">→</span></a><p class="map-hint">แตะจังหวัดสีเขียวบนแผนที่เพื่อเลือกได้เช่นกัน</p></div>
+      <div class="map-frame"><div id="national-map" role="application" aria-label="แผนที่ขอบเขต 77 จังหวัดของประเทศไทย"></div><div class="legend" aria-hidden="true"><span class="active-dot"></span>มีข้อมูล HS <span class="inactive-dot"></span>ยังไม่มีข้อมูล</div></div>
+    </section>
+    <section class="purpose" aria-labelledby="purpose-title"><div><p class="section-kicker">เป้าหมายของระบบ</p><h2 id="purpose-title">ใช้ข้อมูลเพื่อเลือกพื้นที่ที่ควรให้ความสำคัญก่อน</h2></div><div class="purpose-grid"><article><span>01</span><h3>มองภาพรวม</h3><p>ติดตามการกระจายตัวของจุดความร้อนตามจังหวัด อำเภอ และตำบล</p></article><article><span>02</span><h3>ประเมินความเสี่ยง</h3><p>ประมวลผลจากข้อมูลของแต่ละจังหวัดภายใต้ Risk Model กลางที่ตรวจสอบได้</p></article><article><span>03</span><h3>ชี้เป้าการทำงาน</h3><p>ช่วยหน่วยงานจัดลำดับพื้นที่เสี่ยงสูงเพื่อวางแผนติดตามและจัดการก่อน</p></article></div></section>
+  </main>
+  <footer><span>กรมส่งเสริมการเกษตร</span><span>พัฒนาโดย ดร. กิตติ โพธิ์จวง · สำนักงานเกษตรจังหวัดกำแพงเพชร</span></footer>
+  <noscript><p class="no-script">กรุณาเปิด JavaScript เพื่อใช้งานแผนที่และเลือกรายการจังหวัด</p></noscript>
+  <script src="app/js/landing.js" defer></script>
 </body>
 </html>

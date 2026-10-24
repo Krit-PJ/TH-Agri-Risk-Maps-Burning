@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),test=require('node:test');
+const risk=require('../app/js/risk-core.js'),root=path.resolve(__dirname,'..');
+const close=(actual,expected)=>assert.ok(Math.abs(actual-expected)<1e-9,`${actual} != ${expected}`);
+test('tambon formula matches approved known values',()=>{assert.equal(risk.tambonRisk({H:0,T:0,C:0,A:0}),0);assert.equal(risk.tambonRisk({H:100,T:100,C:100,A:100}),100);assert.equal(risk.tambonRisk({H:80,T:70,C:75,A:65}),74)});
+test('component weights are exact and missing is not converted to zero',()=>{assert.equal(risk.hotspotComponent(80,50),68);assert.equal(risk.trendComponent(80,60,50),66);assert.equal(risk.tambonRisk({H:null,T:0,C:0,A:0}),null)});
+test('upper formula matches approved district and province examples',()=>{close(risk.upperScore(68,72,88),72);close(risk.upperScore(70,65,92),72.05)});
+test('risk thresholds and upper very-high gate are enforced',()=>{assert.equal(risk.level(24.9).label,'ต่ำ');assert.equal(risk.level(25).label,'ปานกลาง');assert.equal(risk.level(49.9).label,'ปานกลาง');assert.equal(risk.level(50).label,'สูง');assert.equal(risk.level(74.9).label,'สูง');assert.equal(risk.level(75,{upper:true,highRiskCoverage:49,veryHighShare:29}).label,'สูง');assert.equal(risk.level(75,{upper:true,highRiskCoverage:50,veryHighShare:0}).label,'สูงมาก')});
+test('fixed baseline helpers never normalize from a display subset',()=>{assert.equal(risk.baselineScore(25,100),25);close(risk.areaScore(99,9999),50);assert.equal(risk.baselineScore(1,null),null)});
+test('registry blocks activation while evidence-backed province parameters are absent',()=>{const registry=JSON.parse(fs.readFileSync(path.join(root,'app/config/model-registry.json'),'utf8')),check=risk.registryReadiness(registry,'62');assert.equal(check.ready,false);assert.ok(check.missing.includes('model status is not active'));assert.ok(check.missing.includes('province parameters'))});

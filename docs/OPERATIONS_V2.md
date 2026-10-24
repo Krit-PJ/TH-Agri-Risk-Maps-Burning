@@ -24,6 +24,24 @@
 5. ตรวจว่า `app/data/catalog.json` เพิ่มรหัสจังหวัดใน `activeProvinceCodes`
 6. รันชุดทดสอบก่อน push ไป `main`
 
+## การนำเข้า Excel HS
+
+- ระบบอ่านเฉพาะชีตรายละเอียด `AllData` หรือ `hsAll` และไม่อ่าน `Pivot`, `Month`, `Land2026`, `hsPlant2026` หรือชีตสรุปเป็นข้อมูลจุด
+- `AllData` รองรับข้อมูลย้อนหลังที่ไม่มี `Time`; `hsAll` ต้องมี `Time`
+- พิกัดใช้ค่าใน `Maps` ก่อน แล้วจึงใช้ Longitude/Latitude หรือ X/Y/Q ตามลำดับ
+- กรอง Province → LandType → PlantType ตามสิทธิ์จังหวัด และตรวจ `ProvinceN` เป็น QA
+- โหมดหลายไฟล์ตัดข้อมูลซ้ำข้ามปีด้วย `provinceCode + hsID`; รายการไม่มี hsID ใช้วันที่ เวลา และพิกัด
+- ตรวจ QA และยอดอ้างอิงให้ผ่านก่อนบันทึก ห้ามนำชีตสรุปมาแทนรายละเอียด
+
+## การเปิดใช้ Risk Model V2
+
+1. บันทึกค่า `countBaseline`, `densityBaseline`, `areaBaseline`, `cropRisk` และ `baselineVersion` แยกรายจังหวัด
+2. แนบสูตรและหลักฐานอนุมัติ `TrendScore`, `RecurrenceScore`, `PersistenceScore`
+3. รัน Known-value tests และตรวจความคงที่เมื่อเปลี่ยนตัวกรองแผนที่
+4. ให้ Super Admin เปลี่ยนสถานะ Model version เป็น Active หลังหลักฐานครบเท่านั้น
+
+ห้ามตั้งค่า baseline จากเฉพาะข้อมูลที่กำลังกรองหรือจากพื้นที่ที่มองเห็นบนจอ และห้ามแทน missing data ด้วยศูนย์
+
 ## การกู้คืนและตรวจสอบ
 
 - ทุกการบันทึก อนุมัติ ลบ และเผยแพร่ต้องมีรายการใน `AuditLog`

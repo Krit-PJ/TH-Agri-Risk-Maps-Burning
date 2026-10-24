@@ -1,7 +1,22 @@
 // Generated recovery config snapshot; run tools/sync_config_fallback.py after config changes.
 window.AGRI_CONFIG_FALLBACK = {
   "system": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
+    "detailProfiles": [
+      {
+        "id": "historical-all-data",
+        "sheetNames": ["AllData"],
+        "timeRequired": false,
+        "requiredFields": ["hsID", "Date", "Province", "Amphoe", "Tambon", "LandType", "PlantType", "Maps"]
+      },
+      {
+        "id": "current-hs-all",
+        "sheetNames": ["hsAll"],
+        "timeRequired": true,
+        "requiredFields": ["hsID", "Date", "Time", "Province", "Amphoe", "Tambon", "LandType", "PlantType", "Maps"]
+      }
+    ],
+    "summarySheets": ["Pivot", "2567", "2568", "2569", "Land2026", "hsPlant2026", "Month"],
     "defaultProvinceCode": "",
     "currentYearBE": 2569,
     "provinceDefaults": {
@@ -2206,7 +2221,9 @@ window.AGRI_CONFIG_FALLBACK = {
         "Y"
       ]
     ],
+    "coordinatePriority": ["Maps", "Longitude/Latitude", "X/Y/Q"],
     "deduplicate": "hsID-or-date-time-coordinate",
+    "deduplicateAcrossFiles": true,
     "plantAliases": {
       "ข้าว": "นาข้าว",
       "เกษตรอื่นๆ": "เกษตรอื่น ๆ",
@@ -2217,19 +2234,6 @@ window.AGRI_CONFIG_FALLBACK = {
       "พื้นที่เกษตรกรรม": "พื้นที่เกษตร"
     },
     "referenceSheet": "hsPlant2026",
-    "plantContains": [
-      {
-        "contains": "ข้าวโพด",
-        "value": "ข้าวโพดและไร่หมุนเวียน"
-      },
-      {
-        "contains": "อ้อย",
-        "value": "อ้อย"
-      },
-      {
-        "contains": "ป่า",
-        "value": "พื้นที่ป่า"
-      }
-    ]
+    "plantContains": []
   }
 };

@@ -18,9 +18,15 @@ const App=(()=>{
     populateDistricts();
     try{Dashboard.init();Dashboard.setData(loaded.hotspot);}catch(err){console.error('[Dashboard] initialization failed:',err);showRuntimeWarning('กราฟโหลดไม่สำเร็จ แต่แผนที่และตัวกรองยังใช้งานได้');}
     if(typeof V2!=='undefined')await V2.restore();
-    bindFilters();bindPrint();initAdminAccess();bindExcelImport();bindGeoJSONImport();initProvincePickers();initVisitorCounter();initDesktopSidebarToggle();initMobilePanels();initTimeline();syncYearSelector();populateDayOptions();syncTimelineUI();applyCurrent();
+    bindFilters();bindPrint();initFontSize();initAdminAccess();bindExcelImport();bindGeoJSONImport();initProvincePickers();initDesktopSidebarToggle();initMobilePanels();initTimeline();syncYearSelector();populateDayOptions();syncTimelineUI();applyCurrent();
     if(typeof V2!=='undefined')V2.bind();
     if(typeof AccessContext==='undefined'&&!BoundaryStore.codes.length&&document.getElementById('province-setup')){const d=document.getElementById('province-setup');document.getElementById('first-run-view').onclick=()=>d.close();d.showModal();}
+  }
+  function initFontSize(){
+    const values={small:'14px',medium:'15px',large:'17px'};
+    let selected='medium';try{selected=localStorage.getItem('agri-app-font-size')||selected;}catch{}
+    const apply=size=>{if(!values[size])size='medium';document.documentElement.style.setProperty('--ui-font-size',values[size]);document.querySelectorAll('[data-app-font]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.appFont===size)));try{localStorage.setItem('agri-app-font-size',size);}catch{}};
+    document.querySelectorAll('[data-app-font]').forEach(button=>button.addEventListener('click',()=>apply(button.dataset.appFont)));apply(selected);
   }
   function showRuntimeWarning(message){let el=document.getElementById('runtime-warning');if(!el){el=document.createElement('div');el.id='runtime-warning';el.style.cssText='position:fixed;left:50%;top:86px;transform:translateX(-50%);z-index:9999;background:#7f1d1d;color:white;padding:8px 14px;border-radius:6px;font-size:14px;box-shadow:0 4px 15px rgba(0,0,0,.35)';document.body.appendChild(el);}el.textContent=message;}
   function populateDistricts(){const sel=document.getElementById('filter-district'),current=sel.value;const districts=[...new Set(subdistrictFeatures.map(f=>MapModule.helpers.districtOf(f.properties)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));sel.innerHTML='<option value="">-- ทั้งหมด --</option>'+districts.map(x=>`<option value="${x}">${x}</option>`).join('');sel.value=current;}
@@ -362,34 +368,36 @@ const App=(()=>{
     finally{controls.forEach(el=>{if(el)el.disabled=false;});}
   }
   function findDetailTables(wb){
-    const tables=[],preferred=wb.SheetNames.find(name=>name.trim().toLowerCase()===(ConfigLoader.bundle.importRules.preferredDetailSheet||'AllData').toLowerCase());
-    if(preferred){const detail=findDetailTable({SheetNames:[preferred],Sheets:wb.Sheets});if(!detail)throw new Error(preferred+': ไม่พบหัวตารางรายละเอียดที่รองรับ');return [detail];}
-    for(const name of wb.SheetNames){const detail=findDetailTable({SheetNames:[name],Sheets:wb.Sheets});if(detail)tables.push(detail);}
-    return tables;
+    const profile=ImportContract.selectProfile(wb.SheetNames,ConfigLoader.bundle.importRules);
+    if(!profile)throw new Error('ไม่พบชีตรายละเอียด AllData หรือ hsAll (ระบบจะไม่อ่านชีต Pivot/Summary)');
+    const detail=findDetailTable(wb,profile);
+    if(!detail)throw new Error(profile.sheet+': หัวตารางไม่ครบตามรูปแบบ '+profile.id);
+    return [detail];
   }
   function readHotspotWorkbook(bytes){
     const names=XLSX.read(bytes,{type:'array',bookSheets:true}).SheetNames;
-    const preferred=names.find(name=>name.trim().toLowerCase()===(ConfigLoader.bundle.importRules.preferredDetailSheet||'AllData').toLowerCase());
+    const profile=ImportContract.selectProfile(names,ConfigLoader.bundle.importRules);
+    if(!profile)throw new Error('ไม่พบชีตรายละเอียด AllData หรือ hsAll');
     const reference=names.find(name=>name.trim().toLowerCase()===(ConfigLoader.bundle.importRules.referenceSheet||'').toLowerCase());
     // Keep Excel date serials: formatted text and JS Date conversion can shift dates.
-    return XLSX.read(bytes,{type:'array',cellDates:false,...(preferred?{sheets:[preferred,...(reference?[reference]:[])]}:{})});
+    return XLSX.read(bytes,{type:'array',cellDates:false,sheets:[profile.sheet,...(reference?[reference]:[])]});
   }
   function prepareHotspotImport(tables,mode,yearBE,provinceCodes=null){
     const targets=provinceCodes||BoundaryStore.selectedCodes(),boundaries=BoundaryStore.getLayerForCodes('subdistrict',targets),fileCode=targets.join('-');
     if(!['single','multi'].includes(mode))throw new Error('รูปแบบนำเข้าไม่ถูกต้อง');
     if(mode==='single'){
       if(tables.length!==1)throw new Error('ปีเดียวต้องมีตารางรายละเอียดหนึ่งชุด');
-      const table=tables[0],fc=rowsToGeoJSON(table.rows,table.headers,yearBE,table.reference,table.sheet,{provinceCodes:targets,boundaries});
+      const table=tables[0],fc=rowsToGeoJSON(table.rows,table.headers,yearBE,table.reference,table.sheet,{provinceCodes:targets,boundaries,sourceProfile:table.profileId});
       return{years:fc.features.length?[yearBE]:[],datasets:{[yearBE]:fc},qa:fc.metadata,geojson:fc,fileName:`hotspot_${fileCode}_${yearBE}.geojson`};
     }
     const datasets={},seen=new Set(),qa={mode:'multi',provinceCodes:targets,yearGrouping:'calendar-BE-from-date',sourceFiles:[...new Set(tables.map(t=>t.fileName))],sourceTables:[],inputRows:0,accepted:0,duplicatesAcrossTables:0,normalizationTotals:{},referenceCheck:'not applied: single reference table does not declare comparable year/period'},duplicatesByYear={};
     for(const table of tables){
-      const fc=HSNormalizer.rowsToGeoJSON(table.rows,table.headers,0,null,table.sheet,extractCoordinates,boundaries,{deduplicateByCalendarYear:true,provinceCodes:targets});
+      const fc=HSNormalizer.rowsToGeoJSON(table.rows,table.headers,0,null,table.sheet,extractCoordinates,boundaries,{provinceCodes:targets,sourceProfile:table.profileId});
       qa.sourceTables.push({file:table.fileName,sheet:table.sheet,...fc.metadata});qa.inputRows+=fc.metadata.qa.inputRows;
       for(const [key,value] of Object.entries(fc.metadata.qa))if(typeof value==='number')qa.normalizationTotals[key]=(qa.normalizationTotals[key]||0)+value;
       for(const f of fc.features){
         const p=f.properties,y=p.year_be;if(!Number.isInteger(y)||y<2400||y>2600)throw new Error('วันที่อยู่นอกช่วงปีที่รองรับ: '+p.acq_date);
-        const identity=p.hsID?'id:'+p.provinceCode+':'+y+':'+p.hsID:'point:'+p.acq_date+'|'+p.Time+'|'+f.geometry.coordinates.join(',');
+        const identity=ImportContract.recordIdentity(p,f.geometry.coordinates);
         if(ConfigLoader.bundle.importRules.deduplicate!=='none'&&seen.has(identity)){qa.duplicatesAcrossTables++;duplicatesByYear[y]=(duplicatesByYear[y]||0)+1;continue;}seen.add(identity);
         p.season_be=p.dataset_year_be=y;p.source_file=table.fileName;
         datasets[y]??={type:'FeatureCollection',name:`hotspot_${fileCode}_${y}_imported`,metadata:{yearBE:y,yearGrouping:qa.yearGrouping},features:[]};datasets[y].features.push(f);
@@ -406,15 +414,15 @@ const App=(()=>{
     const geojson={type:'FeatureCollection',name:'hotspot_multi_year_imported',metadata:qa,features};
     return{years,datasets,qa,geojson,fileName:`hotspot_${fileCode}_${years.join('-')}.geojson`};
   }
-  function findDetailTable(wb){
-    const preferred=wb.SheetNames.find(name=>name.trim().toLowerCase()===(ConfigLoader.bundle.importRules.preferredDetailSheet||'AllData').toLowerCase()),names=preferred?[preferred,...wb.SheetNames.filter(n=>n!==preferred)]:wb.SheetNames;
-    for(const name of names){
+  function findDetailTable(wb,selectedProfile=null){
+    const profile=selectedProfile||ImportContract.selectProfile(wb.SheetNames,ConfigLoader.bundle.importRules);
+    if(!profile)return null;
+    for(const name of [profile.sheet]){
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:null,raw:true});
       for(let i=0;i<rows.length;i++){
         const headers=(rows[i]||[]).map(v=>String(v??'').trim());
-        const required=ConfigLoader.bundle.importRules.requiredFields;
-        const hasDate=ConfigLoader.bundle.importRules.dateFields.some(k=>headers.includes(k));
-        if(required.every(k=>headers.includes(k))&&hasDate)return{sheet:name,headers,rows:rows.slice(i+1)};
+        const validation=ImportContract.validateHeaders(headers,profile);
+        if(validation.valid)return{sheet:name,profileId:profile.id,timeRequired:profile.timeRequired,headers,rows:rows.slice(i+1)};
       }
     }
     return null;
@@ -444,8 +452,8 @@ const App=(()=>{
   function downloadQA(){if(!lastQA)return;downloadJSON(lastQA,`hotspot_${lastQA.provinceCodes?.join('-')||ProvinceContext.fileCode()}_qa.json`,'application/json');}
   function downloadJSON(value,name,type){const blob=new Blob([JSON.stringify(value,null,2)],{type}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
   function extractCoordinates(maps,x,y,zone){
-    const m=String(maps||'').match(/[?&]q=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i);
-    if(m)return[Number(m[2]),Number(m[1])];
+    const mapsCoordinate=ImportContract.parseMaps(maps);
+    if(mapsCoordinate)return mapsCoordinate;
     if(x===null||x===undefined||String(x).trim()===''||y===null||y===undefined||String(y).trim()==='')return null;
     const east=Number(x),north=Number(y),z=Number(zone)||47;
     if(Number.isFinite(east)&&Number.isFinite(north)&&window.proj4){try{return proj4(`+proj=utm +zone=${z} +datum=WGS84 +units=m +no_defs`,'EPSG:4326',[east,north]);}catch{}}

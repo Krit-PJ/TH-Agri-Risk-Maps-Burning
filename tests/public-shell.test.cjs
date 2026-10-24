@@ -8,23 +8,32 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
-test('public landing exposes an active-province dropdown backed by the generated catalog', () => {
+test('public landing is map-first, accessible, and exposes only active provinces', () => {
   const html = read('index.html');
   assert.match(html, /id="province-select"/);
-  assert.match(html, /app\/data\/catalog\.json/);
+  assert.match(html, /id="national-map"/);
+  assert.match(html, /app\/js\/landing\.js/);
+  assert.match(html, /data-font-size="small"/);
+  assert.match(html, /data-font-size="medium"/);
+  assert.match(html, /data-font-size="large"/);
+  assert.doesNotMatch(html, /โค้ดโครงการ/);
   const catalog = JSON.parse(read('app/data/catalog.json'));
   assert.equal(catalog.provinceCodes.length, 77);
   assert.deepEqual(catalog.activeProvinceCodes, ['62']);
+  const national = JSON.parse(read('app/data/boundary/provinces.geojson'));
+  assert.equal(national.features.length, 77);
+  assert.equal(new Set(national.features.map(f=>f.properties.provinceCode)).size, 77);
 });
 
 test('static map does not load the local Node access bridge', () => {
   const html = read('app/index.html');
   assert.doesNotMatch(html, /v2\/context\.js|v2\/client\.js|access-loading/);
+  assert.doesNotMatch(html, /free-counters|whomania|acadoo/);
   assert.match(html, /js\/public-shell\.js/);
 });
 
 test('public pages merge the approved Apps Script feed with bundled fallback data', () => {
-  assert.match(read('index.html'), /loadDynamicCatalog/);
+  assert.match(read('app/js/landing.js'), /loadDynamicCatalog/);
   const shell = read('app/js/public-shell.js');
   assert.match(shell, /AgriPublicApi/);
   assert.match(shell, /Public API fallback/);
