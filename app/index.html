@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-<link href="css/style.css?v=20261010-round2" rel="stylesheet"/>
+<link href="css/style.css?v=20261024-landtype-ui" rel="stylesheet"/>
 <style>
     :root { --ui-font-size: 15px; --header-green:#14532d; --header-gold:#d4a72c; }
     .brand-logos { display:flex; align-items:center; gap:10px; flex:0 0 auto; }
@@ -149,8 +149,8 @@
 <a class="header-action-badge partner-link no-print" href="https://krit-pj.github.io/Green_Gain_Hub-KPP/" target="_blank" rel="noopener noreferrer">Green Gain Hub ↗</a>
 <span id="last-updated" class="header-action-badge update-badge">ข้อมูลล่าสุด: กำลังโหลด…</span>
 <div class="font-size-control no-print" role="group" aria-label="ปรับขนาดตัวอักษร"><button type="button" data-app-font="small" aria-label="ตัวอักษรขนาดเล็ก">ก−</button><button type="button" data-app-font="medium" aria-label="ตัวอักษรขนาดกลาง" aria-pressed="true">ก</button><button type="button" data-app-font="large" aria-label="ตัวอักษรขนาดใหญ่">ก+</button></div>
-<button class="btn-print no-print header-action-badge" id="btn-print" title="พิมพ์รายงาน 1 หน้า A4" type="button"><span aria-hidden="true">🖨️</span><span>พิมพ์รายงาน</span></button>
-<button class="btn-admin no-print" id="btn-admin-login" type="button" aria-haspopup="dialog">🔐 Login</button>
+<button class="btn-print no-print header-action-badge" id="btn-print" title="พิมพ์รายงาน 1 หน้า A4" type="button"><span>พิมพ์รายงาน</span></button>
+<button class="btn-admin no-print" id="btn-admin-login" type="button" aria-haspopup="dialog">เข้าสู่ระบบ</button>
 <button class="btn-admin-logout no-print hidden" id="btn-admin-logout" type="button"><span id="admin-session-name" class="admin-session-name"></span><span>ออกจากระบบ</span></button>
 </div>
 </header>
@@ -210,7 +210,7 @@
 <!-- LEFT PANEL: Controls -->
 <aside id="left-panel">
 <section class="panel-section">
-<h3>🗺️ ชั้นข้อมูล</h3>
+<h3>ชั้นข้อมูล</h3>
 <div class="layer-group">
 <label class="section-label">ขอบเขตข้อมูล</label>
 <label class="toggle-row">
@@ -249,11 +249,27 @@
 <label class="toggle-row hs-2568"><input class="hs-layer" data-year="2568" type="checkbox"/> ปี 2568 (2025)</label>
 <label class="toggle-row hs-2569"><input checked="" class="hs-layer" data-year="2569" type="checkbox"/> ปี 2569 (2026)</label>
 </div>
-<div class="layer-group">
-<label class="section-label">แผนที่ความเสี่ยงและชนิดพืช</label>
+<div class="layer-group data-filter-group">
+<label class="section-label">ตัวกรองข้อมูลจุดความร้อน</label>
 <label class="toggle-row hotspot-master-row">
 <input checked="" id="lyr-hotspot" type="checkbox"/> ข้อมูล Hotspot ตามปีที่เลือก
 </label>
+<div class="land-filter-wrap">
+<label for="filter-land-type">ประเภทพื้นที่ <span class="column-hint">LandType</span></label>
+<select id="filter-land-type">
+<option value="พื้นที่เกษตร" selected>พื้นที่เกษตร</option>
+</select>
+</div>
+<div class="crop-filter-wrap">
+<label for="filter-crop">ชนิดพืช <span class="column-hint">PlantType</span></label>
+<select id="filter-crop">
+<option value="">ทุกชนิดพืช</option>
+</select>
+</div>
+<p class="field-help filter-source-note">อ่านค่าจากชีต hsAll และกรองข้อมูลทุกส่วนให้สัมพันธ์กัน</p>
+</div>
+<div class="layer-group">
+<label class="section-label">ชั้นข้อมูลวิเคราะห์</label>
 <label class="toggle-row">
 <input checked="" id="lyr-risk" type="checkbox"/> แผนที่ความเสี่ยง (ตำบล)
           </label>
@@ -263,17 +279,11 @@
 <label class="toggle-row">
 <input id="lyr-crop" type="checkbox"/> พื้นที่เพาะปลูก
           </label>
-<div class="crop-filter-wrap">
-<label for="filter-crop">ชนิดพืช</label>
-<select disabled="" id="filter-crop">
-<option value="">-- ทุกชนิดพืช --</option>
-</select>
-</div>
 </div>
 </section>
 
 <section class="panel-section">
-<h3>🗃️ Basemap</h3>
+<h3>แผนที่พื้นหลัง</h3>
 <div class="radio-group">
 <label><input name="basemap" type="radio" value="osm"/> OpenStreetMap</label>
 <label><input checked="" name="basemap" type="radio" value="satellite"/> Satellite</label>
@@ -295,7 +305,7 @@
 <details><summary>นำเข้าพื้นที่เพาะปลูกหรือรอยไหม้</summary><label>ชนิดข้อมูล<select id="import-layer-type"><option value="crop">พื้นที่เพาะปลูก</option><option value="burnscar">รอยไหม้</option></select></label><label>ไฟล์ GeoJSON<input type="file" id="import-geojson-file" accept=".geojson,.json"/></label><button type="button" id="btn-import-geojson" class="btn-secondary">นำเข้าชั้นข้อมูลเสริม</button><p class="field-help">ข้อมูลเสริมใช้เฉพาะการเปิดหน้านี้ ให้ดาวน์โหลด/เก็บต้นทางไว้</p></details></section>
 </details>
 <details class="admin-import-group no-print admin-only hidden" id="admin-hotspot-group"><summary>นำเข้าข้อมูลจุดความร้อน</summary>
-<section class="panel-section no-print admin-only hidden" id="excel-import-section" aria-hidden="true"><h3>นำเข้าข้อมูลจุดความร้อนจาก Excel</h3><p class="field-help">รองรับไฟล์จริง 2 รูปแบบ: ชีต <strong>AllData</strong> (ข้อมูลย้อนหลัง ไม่บังคับ Time) และชีต <strong>hsAll</strong> (ข้อมูลปัจจุบัน) ระบบอ่านพิกัดจาก Maps ก่อนและไม่นำชีต Pivot/Summary มาคำนวณ</p><label>จังหวัดสำหรับนำเข้า HS<select id="hotspot-import-provinces" multiple size="4" aria-describedby="hotspot-province-help"></select></label><p id="hotspot-province-help" class="field-help">Admin เลือกได้เฉพาะจังหวัดตามสิทธิ์; Super Admin เลือกจังหวัดที่มีชุดแผนที่แล้ว ข้อมูลจังหวัดอื่นใน Excel จะถูกกรองออก</p><label>รูปแบบนำเข้า<select id="hotspot-import-mode"><option value="single">ปีเดียว</option><option value="multi">หลายปี — แยกจากวันที่อัตโนมัติ</option></select></label><p id="hotspot-mode-help" class="field-help">ปีเดียว: ใช้ปีชุดข้อมูลที่ระบุ รองรับช่วงวันที่ข้ามปี · หลายปี: ตรวจข้อมูลซ้ำข้ามไฟล์ด้วย hsID อัตโนมัติ</p><label id="import-year-field">ปีชุดข้อมูล (พ.ศ.)<input id="import-year" inputmode="numeric" max="2600" min="2566" type="number" value="2569"/></label><label>ไฟล์ Excel<input accept=".xlsx,.xls" id="import-excel" type="file"/></label><label id="import-export-year-field" class="hidden">ปีที่ต้องการดาวน์โหลด<select id="import-export-year"></select></label><div class="data-actions"><button class="btn-primary" id="btn-import-excel" type="button">ตรวจสอบและนำเข้า</button><button class="btn-secondary" disabled="" id="btn-download-import" type="button">ดาวน์โหลด GeoJSON</button></div><div aria-live="polite" class="import-status" id="import-status" role="status">ยังไม่ได้เลือกไฟล์</div><details><summary>ผลตรวจสอบข้อมูล QA</summary><pre id="import-qa">ยังไม่มีผลตรวจสอบ</pre></details><button id="btn-download-qa" class="btn-secondary" disabled type="button">ดาวน์โหลด QA</button></section></details>
+<section class="panel-section no-print admin-only hidden" id="excel-import-section" aria-hidden="true"><h3>นำเข้าข้อมูลจุดความร้อนจาก Excel</h3><p class="field-help">ระบบอ่านข้อมูลหลักจากชีต <strong>hsAll</strong> โดยใช้ <strong>LandType</strong> เป็นประเภทพื้นที่ และ <strong>PlantType</strong> เป็นชนิดพืช ไม่อ่าน Pivot/Summary มาคำนวณ รองรับ <strong>AllData</strong> เฉพาะไฟล์ย้อนหลังเดิมที่ไม่มี hsAll</p><label>จังหวัดสำหรับนำเข้า HS<select id="hotspot-import-provinces" multiple size="4" aria-describedby="hotspot-province-help"></select></label><p id="hotspot-province-help" class="field-help">Admin เลือกได้เฉพาะจังหวัดตามสิทธิ์; Super Admin เลือกจังหวัดที่มีชุดแผนที่แล้ว ข้อมูลจังหวัดอื่นใน Excel จะถูกกรองออก</p><label>รูปแบบนำเข้า<select id="hotspot-import-mode"><option value="single">ปีเดียว</option><option value="multi">หลายปี — แยกจากวันที่อัตโนมัติ</option></select></label><p id="hotspot-mode-help" class="field-help">ปีเดียว: ใช้ปีชุดข้อมูลที่ระบุ รองรับช่วงวันที่ข้ามปี · หลายปี: ตรวจข้อมูลซ้ำข้ามไฟล์ด้วย hsID อัตโนมัติ</p><label id="import-year-field">ปีชุดข้อมูล (พ.ศ.)<input id="import-year" inputmode="numeric" max="2600" min="2566" type="number" value="2569"/></label><label>ไฟล์ Excel<input accept=".xlsx,.xls" id="import-excel" type="file"/></label><label id="import-export-year-field" class="hidden">ปีที่ต้องการดาวน์โหลด<select id="import-export-year"></select></label><div class="data-actions"><button class="btn-primary" id="btn-import-excel" type="button">ตรวจสอบและนำเข้า</button><button class="btn-secondary" disabled="" id="btn-download-import" type="button">ดาวน์โหลด GeoJSON</button></div><div aria-live="polite" class="import-status" id="import-status" role="status">ยังไม่ได้เลือกไฟล์</div><details><summary>ผลตรวจสอบข้อมูล QA</summary><pre id="import-qa">ยังไม่มีผลตรวจสอบ</pre></details><button id="btn-download-qa" class="btn-secondary" disabled type="button">ดาวน์โหลด QA</button></section></details>
 <section class="panel-section no-print admin-only hidden" id="guide-visibility-section" aria-hidden="true">
 <h3>📘 คู่มือการประเมินความเสี่ยง</h3>
 <label class="toggle-row guide-toggle-row">
@@ -420,16 +430,16 @@
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
 <script src="config/fallback.js"></script>
 <script src="js/config.js"></script>
-<script src="js/config-loader.js?v=20261010-round2"></script>
+<script src="js/config-loader.js?v=20261024-landtype-ui"></script>
 <script src="js/import-contract.js?v=20261024"></script>
-<script src="js/hs-normalizer.js?v=20261010-round2"></script>
+<script src="js/hs-normalizer.js?v=20261024-landtype-ui"></script>
 <script src="js/data-loader.js"></script>
 <script src="js/boundary-store.js?v=20261010-round2"></script>
-<script src="js/map.js?v=20261010-round2"></script>
+<script src="js/map.js?v=20261024-landtype-ui"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/risk-core.js?v=20261024"></script>
 <script src="js/risk.js"></script>
-<script src="js/app.js?v=20261010-round2"></script>
+<script src="js/app.js?v=20261024-landtype-ui"></script>
 <script src="js/public-shell.js?v=20261021-v2"></script>
 
 <dialog id="province-setup" aria-labelledby="province-setup-title"><h2 id="province-setup-title">เลือกชุดแผนที่ก่อนเริ่มใช้งาน</h2><p>ชื่อพื้นที่เริ่มต้นเว้นว่างจนกว่าจะนำเข้าชุดแผนที่สำเร็จ เลือก Login มุมขวาบนเพื่อนำเข้า</p><p>Admin เลือก 1 จังหวัด; Super Admin เลือกบางจังหวัดหรือครบ 77 จังหวัด</p><div class="data-actions"><button id="first-run-view" class="btn-secondary" type="button">ดูหน้า Dashboard</button></div></dialog>

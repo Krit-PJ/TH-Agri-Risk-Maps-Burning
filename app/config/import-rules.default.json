@@ -2,20 +2,20 @@
   "schemaVersion": 2,
   "detailProfiles": [
     {
-      "id": "historical-all-data",
-      "sheetNames": ["AllData"],
-      "timeRequired": false,
-      "requiredFields": ["hsID", "Date", "Province", "Amphoe", "Tambon", "LandType", "PlantType", "Maps"]
-    },
-    {
       "id": "current-hs-all",
       "sheetNames": ["hsAll"],
       "timeRequired": true,
       "requiredFields": ["hsID", "Date", "Time", "Province", "Amphoe", "Tambon", "LandType", "PlantType", "Maps"]
+    },
+    {
+      "id": "historical-all-data",
+      "sheetNames": ["AllData"],
+      "timeRequired": false,
+      "requiredFields": ["hsID", "Date", "Province", "Amphoe", "Tambon", "LandType", "PlantType", "Maps"]
     }
   ],
   "summarySheets": ["Pivot", "2567", "2568", "2569", "Land2026", "hsPlant2026", "Month"],
-  "preferredDetailSheet": "AllData",
+  "preferredDetailSheet": "hsAll",
   "requiredFields": [
     "Province",
     "LandType",

@@ -1,22 +1,7 @@
-// Generated recovery config snapshot; run tools/sync_config_fallback.py after config changes.
+// Generated recovery config snapshot; run node tools/sync-config-fallback.cjs after config changes.
 window.AGRI_CONFIG_FALLBACK = {
   "system": {
-    "schemaVersion": 2,
-    "detailProfiles": [
-      {
-        "id": "historical-all-data",
-        "sheetNames": ["AllData"],
-        "timeRequired": false,
-        "requiredFields": ["hsID", "Date", "Province", "Amphoe", "Tambon", "LandType", "PlantType", "Maps"]
-      },
-      {
-        "id": "current-hs-all",
-        "sheetNames": ["hsAll"],
-        "timeRequired": true,
-        "requiredFields": ["hsID", "Date", "Time", "Province", "Amphoe", "Tambon", "LandType", "PlantType", "Maps"]
-      }
-    ],
-    "summarySheets": ["Pivot", "2567", "2568", "2569", "Land2026", "hsPlant2026", "Month"],
+    "schemaVersion": 1,
     "defaultProvinceCode": "",
     "currentYearBE": 2569,
     "provinceDefaults": {
@@ -67,7 +52,7 @@ window.AGRI_CONFIG_FALLBACK = {
       "subdistrict": null
     },
     "access": {
-      "type": "static-browser-gate",
+      "type": "server-session",
       "accounts": []
     },
     "legacyExampleProvinceCode": "62",
@@ -1380,15 +1365,15 @@ window.AGRI_CONFIG_FALLBACK = {
         "โกสัมพีนคร"
       ],
       "boundaryPath": {
-        "province": null,
-        "district": "data/boundary/district_kpt.geojson",
-        "subdistrict": "data/boundary/subdistrict_kpt.geojson"
+        "province": "data/boundary/62/province.geojson",
+        "district": "data/boundary/62/districts.geojson",
+        "subdistrict": "data/boundary/62/subdistricts.geojson"
       },
       "hotspotPath": {
-        "2566": "data/hotspot/hotspot_2566.geojson",
-        "2567": "data/hotspot/hotspot_2567.geojson",
-        "2568": "data/hotspot/hotspot_2568.geojson",
-        "2569": "data/hotspot/hotspot_2569.geojson"
+        "2566": "data/hotspot/62/hotspot_2566.geojson",
+        "2567": "data/hotspot/62/hotspot_2567.geojson",
+        "2568": "data/hotspot/62/hotspot_2568.geojson",
+        "2569": "data/hotspot/62/hotspot_2569.geojson"
       },
       "cropPath": "data/crop/crop_kpt.geojson",
       "burnscarPath": "data/burnscar/burnscar_kpt.geojson",
@@ -2192,8 +2177,54 @@ window.AGRI_CONFIG_FALLBACK = {
     "emptyCropType": "อื่น ๆ"
   },
   "importRules": {
-    "schemaVersion": 1,
-    "preferredDetailSheet": "AllData",
+    "schemaVersion": 2,
+    "detailProfiles": [
+      {
+        "id": "current-hs-all",
+        "sheetNames": [
+          "hsAll"
+        ],
+        "timeRequired": true,
+        "requiredFields": [
+          "hsID",
+          "Date",
+          "Time",
+          "Province",
+          "Amphoe",
+          "Tambon",
+          "LandType",
+          "PlantType",
+          "Maps"
+        ]
+      },
+      {
+        "id": "historical-all-data",
+        "sheetNames": [
+          "AllData"
+        ],
+        "timeRequired": false,
+        "requiredFields": [
+          "hsID",
+          "Date",
+          "Province",
+          "Amphoe",
+          "Tambon",
+          "LandType",
+          "PlantType",
+          "Maps"
+        ]
+      }
+    ],
+    "summarySheets": [
+      "Pivot",
+      "2567",
+      "2568",
+      "2569",
+      "Land2026",
+      "hsPlant2026",
+      "Month"
+    ],
+    "preferredDetailSheet": "hsAll",
     "requiredFields": [
       "Province",
       "LandType",
@@ -2221,7 +2252,11 @@ window.AGRI_CONFIG_FALLBACK = {
         "Y"
       ]
     ],
-    "coordinatePriority": ["Maps", "Longitude/Latitude", "X/Y/Q"],
+    "coordinatePriority": [
+      "Maps",
+      "Longitude/Latitude",
+      "X/Y/Q"
+    ],
     "deduplicate": "hsID-or-date-time-coordinate",
     "deduplicateAcrossFiles": true,
     "plantAliases": {

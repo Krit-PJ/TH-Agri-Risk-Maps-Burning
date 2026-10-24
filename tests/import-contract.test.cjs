@@ -6,14 +6,16 @@ const contract=require('../app/js/import-contract.js');
 test('selects only evidence-backed detail sheets and never summary sheets',()=>{
   assert.equal(contract.selectProfile(['Pivot','AllData','2569'],rules).id,'historical-all-data');
   assert.equal(contract.selectProfile(['Land2026','hsPlant2026','Month','hsAll'],rules).id,'current-hs-all');
+  assert.equal(contract.selectProfile(['AllData','hsAll','Pivot'],rules).id,'current-hs-all');
   assert.equal(contract.selectProfile(['Pivot','hsPlant2026','Month'],rules),null);
 });
 
 test('historical permits absent Time while current hsAll requires it',()=>{
   const common=['hsID','Date','Province','Amphoe','Tambon','LandType','PlantType','Maps'];
-  assert.equal(contract.validateHeaders(common,rules.detailProfiles[0]).valid,true);
-  assert.deepEqual(contract.validateHeaders(common,rules.detailProfiles[1]).missing,['Time']);
-  assert.equal(contract.validateHeaders([...common,'Time'],rules.detailProfiles[1]).valid,true);
+  const historical=rules.detailProfiles.find(profile=>profile.id==='historical-all-data'),current=rules.detailProfiles.find(profile=>profile.id==='current-hs-all');
+  assert.equal(contract.validateHeaders(common,historical).valid,true);
+  assert.deepEqual(contract.validateHeaders(common,current).missing,['Time']);
+  assert.equal(contract.validateHeaders([...common,'Time'],current).valid,true);
 });
 
 test('Maps coordinates are parsed as longitude latitude and identities deduplicate across years',()=>{

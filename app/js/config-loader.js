@@ -108,7 +108,9 @@ const ProvinceContext = (() => {
     if(guide){const url=new URL(p.guideUrl||'docs/multi-province-guide.html',ConfigLoader.resolvePath(''));if(url.origin===new URL(ConfigLoader.resolvePath('')).origin){url.searchParams.set('province',p.provinceCode);url.searchParams.set('scopeLabel',label());}if(['http:','https:'].includes(url.protocol))guide.href=url.href;}
     const mapLegend=document.getElementById('map-legend');if(mapLegend){mapLegend.replaceChildren();const title=document.createElement('strong');title.textContent='ระดับความเสี่ยง';mapLegend.append(title);CONFIG.RISK_LEVELS.forEach(l=>{const row=document.createElement('div'),dot=document.createElement('span');dot.className='dot';dot.style.background=l.color;row.append(dot,document.createTextNode(' '+l.label));mapLegend.append(row);});}
     const crop=document.getElementById('filter-crop');
-    if(crop){crop.replaceChildren(new Option('-- ทุกชนิดพืช --',''));p.enabledPlantTypes.forEach(x=>crop.add(new Option(x,x)));}
+    if(crop){crop.replaceChildren(new Option('ทุกชนิดพืช',''));p.enabledPlantTypes.forEach(x=>crop.add(new Option(x,x)));crop.disabled=false;}
+    const land=document.getElementById('filter-land-type');
+    if(land){land.replaceChildren();p.allowedLandTypes.forEach(x=>land.add(new Option(x,x)));if(!land.options.length)land.add(new Option('พื้นที่เกษตร','พื้นที่เกษตร'));land.value=p.allowedLandTypes.includes('พื้นที่เกษตร')?'พื้นที่เกษตร':land.options[0].value;}
     const year=document.getElementById('timeline-year');if(year){year.dataset.years=Object.keys(p.hotspotPath).join(',');year.replaceChildren();Object.keys(p.hotspotPath).forEach(y=>year.add(new Option(y,y)));}
     const importYear=document.getElementById('import-year');if(importYear){importYear.value=CONFIG.CURRENT_YEAR_BE;importYear.min='2400';}
     const section=document.getElementById('excel-import-section');if(section)section.querySelector('h3').textContent=`นำเข้าข้อมูลจุดความร้อนจาก Excel${p.provinceNameTH?' — '+p.provinceNameTH:''}`;

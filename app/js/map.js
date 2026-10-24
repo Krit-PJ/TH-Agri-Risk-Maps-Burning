@@ -7,13 +7,14 @@ const MapModule = (() => {
     risk:null, riskDistrict:null, riskSubdistrict:null
   };
   const shown = { province:null, district:null, subdistrict:null, hotspot:{}, crop:null, burnscar:null, risk:null };
-  let state = { district:'', subdistrict:'', crop:'', months:[], month:'', day:'', startYM:null, endYM:null, startYear:null, startMonth:null, endYear:null, endMonth:null };
+  let state = { district:'', subdistrict:'', landType:'พื้นที่เกษตร', crop:'', months:[], month:'', day:'', startYM:null, endYM:null, startYear:null, startMonth:null, endYear:null, endMonth:null };
 
   const clean = HSNormalizer.normalizeDistrictName;
   const districtOf = DataLoader.districtName;
   const subdistrictOf = DataLoader.tambonName;
   const normalizeCrop = v => HSNormalizer.normalizePlantType(v) || ConfigLoader.bundle.risk.emptyCropType;
   const cropOf = p => normalizeCrop(p?.__plant_type || p?.plant_type || p?.PlantType || p?.crop_type_raw || p?.__crop || p?.crop_type || p?.crop || p?.LU_HP_Name);
+  const landOf = p => HSNormalizer.normalizeLandType(p?.__land_type || p?.land_type || p?.LandType || '');
   const provinceOf = DataLoader.provinceName;
   function excelSerialToDate(value){
     const n=Number(value); if(!Number.isFinite(n)||n<1)return null;
@@ -140,6 +141,7 @@ const MapModule = (() => {
     p.__village=clean(p.__village || p.village || p.BaanN || p.Village || p.Moo || '');
     p.__plant_type=cropOf(p);
     p.__crop=p.__plant_type;
+    p.__land_type=landOf(p);
     p.__province=prov||(DataLoader.areaCodes(p).provinceCode===ProvinceContext.get().provinceCode?ProvinceContext.get().provinceNameTH:'');
     DataLoader.attachAreaCodes(f,raw.subdistrict);
     const identifiedDistrict=raw.district?.features.find(b=>b.properties.districtCode&&b.properties.districtCode===p.__districtCode),identifiedTambon=raw.subdistrict?.features.find(b=>b.properties.subdistrictCode&&b.properties.subdistrictCode===p.__tambonCode);
@@ -181,7 +183,7 @@ const MapModule = (() => {
       years.forEach(y=>{
         const fs=(raw.hotspot[y]?.features||[]).filter(h=>{
           const hp=h.properties||{};
-          return BoundaryStore.accepts(hp) && DataLoader.sameArea(hp,p,level) && (!state.crop||hp.__crop===state.crop) && matchesDate(h);
+          return BoundaryStore.accepts(hp) && DataLoader.sameArea(hp,p,level) && (!state.landType||hp.__land_type===state.landType) && (!state.crop||hp.__crop===state.crop) && matchesDate(h);
         });
         counts[y]=fs.length;
         fs.forEach(h=>{cropSum+=CONFIG.CROP_RISK[h.properties.__crop]??50;cropN++;});
@@ -215,7 +217,7 @@ const MapModule = (() => {
       allYears.forEach(y=>{
         const count=(raw.hotspot[y]?.features||[]).filter(h=>{
           const hp=h.properties||{};
-          return BoundaryStore.accepts(hp) && DataLoader.sameArea(hp,feature.properties,level) && (!state.crop||hp.__crop===state.crop) && matchesDate(h);
+          return BoundaryStore.accepts(hp) && DataLoader.sameArea(hp,feature.properties,level) && (!state.landType||hp.__land_type===state.landType) && (!state.crop||hp.__crop===state.crop) && matchesDate(h);
         }).length;
         if(count>maxCount) maxCount=count;
       });
@@ -282,7 +284,7 @@ const MapModule = (() => {
     return raw.risk;
   }
 
-  function matchesFeature(f){ const p=f.properties||{}; return BoundaryStore.accepts(p)&&(!state.district||p.__district===state.district)&&(!state.subdistrict||p.__subdistrict===state.subdistrict)&&(!state.crop||p.__crop===state.crop)&&matchesDate(f); }
+  function matchesFeature(f){ const p=f.properties||{}; return BoundaryStore.accepts(p)&&(!state.district||p.__district===state.district)&&(!state.subdistrict||p.__subdistrict===state.subdistrict)&&(!state.landType||p.__land_type===state.landType)&&(!state.crop||p.__crop===state.crop)&&matchesDate(f); }
   function matchesBoundary(f,level){ const d=districtOf(f.properties),t=subdistrictOf(f.properties); return(!state.district||d===state.district)&&(!state.subdistrict||level!=='subdistrict'||t===state.subdistrict); }
 
   function renderBoundaries(){
@@ -314,7 +316,7 @@ const MapModule = (() => {
     Object.entries(raw.hotspot).forEach(([year,fc])=>{
       if(active.size && !active.has(String(year)))return;
       const filtered=(fc.features||[]).filter(matchesFeature), group=L.markerClusterGroup({disableClusteringAtZoom:11,chunkedLoading:true,chunkInterval:35,chunkDelay:30});
-      L.geoJSON({type:'FeatureCollection',features:filtered},{pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:5.5,fillColor:CONFIG.YEAR_COLORS[year]||'#ef4444',color:'#ffffff',weight:1.4,fillOpacity:.96}),onEachFeature:(f,l)=>{const popup=document.createElement('div');popup.style.whiteSpace='pre-line';popup.textContent=`Hotspot ปี ${year}\nวันที่ ${f.properties.__date||'-'}\nอ.${f.properties.__district||'-'} ต.${f.properties.__subdistrict||'-'}\nพืช: ${f.properties.__crop||'-'}`;l.bindPopup(popup);l.on('click',()=>highlightPointArea(f));}}).addTo(group);
+      L.geoJSON({type:'FeatureCollection',features:filtered},{pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:5.5,fillColor:CONFIG.YEAR_COLORS[year]||'#ef4444',color:'#ffffff',weight:1.4,fillOpacity:.96}),onEachFeature:(f,l)=>{const popup=document.createElement('div');popup.style.whiteSpace='pre-line';popup.textContent=`Hotspot ปี ${year}\nวันที่ ${f.properties.__date||'-'}\nอ.${f.properties.__district||'-'} ต.${f.properties.__subdistrict||'-'}\nประเภทพื้นที่: ${f.properties.__land_type||'-'}\nชนิดพืช: ${f.properties.__crop||'-'}`;l.bindPopup(popup);l.on('click',()=>highlightPointArea(f));}}).addTo(group);
       group.addTo(map); shown.hotspot[year]=group;
     });
   }
@@ -341,7 +343,7 @@ const MapModule = (() => {
   }
 
   function applyFilter(next){
-    state={district:clean(next.district),subdistrict:clean(next.subdistrict),crop:next.crop||'',months:Array.isArray(next.months)?next.months.map(Number).filter(Number.isFinite):(next.month?[Number(next.month)]:[]),month:String(next.month||''),day:String(next.day||''),startYM:Number(next.startYM)||null,endYM:Number(next.endYM)||null,startYear:Number(next.startYear)||null,startMonth:Number(next.startMonth)||null,endYear:Number(next.endYear)||null,endMonth:Number(next.endMonth)||null};
+    state={district:clean(next.district),subdistrict:clean(next.subdistrict),landType:HSNormalizer.normalizeLandType(next.landType||'พื้นที่เกษตร'),crop:next.crop||'',months:Array.isArray(next.months)?next.months.map(Number).filter(Number.isFinite):(next.month?[Number(next.month)]:[]),month:String(next.month||''),day:String(next.day||''),startYM:Number(next.startYM)||null,endYM:Number(next.endYM)||null,startYear:Number(next.startYear)||null,startMonth:Number(next.startMonth)||null,endYear:Number(next.endYear)||null,endMonth:Number(next.endMonth)||null};
     computeDynamicRisk();
     raw.risk=state.district?raw.riskSubdistrict:raw.riskDistrict;
     renderBoundaries();renderHotspots();renderCrop();renderAux('burnscar');renderAux('risk');focusSelection();
@@ -402,5 +404,5 @@ const MapModule = (() => {
     return { type, count: fc.features.length };
   }
 
-  return { init,reloadData,applyFilter,focusSelection,zoomToProvince,zoomToKPT:zoomToProvince,getRiskLevel,getRiskForScope,getData:()=>raw,map:()=>map,activeYears,computeDynamicRisk,importHotspots,importCustomGeoJSON,availableMonths,availableDays,temporalState,helpers:{districtOf,subdistrictOf,cropOf,provinceOf,clean,normalizeCrop,annualEvidenceScore,datePartsOf,matchesDate} };
+  return { init,reloadData,applyFilter,focusSelection,zoomToProvince,zoomToKPT:zoomToProvince,getRiskLevel,getRiskForScope,getData:()=>raw,map:()=>map,activeYears,computeDynamicRisk,importHotspots,importCustomGeoJSON,availableMonths,availableDays,temporalState,helpers:{districtOf,subdistrictOf,cropOf,landOf,provinceOf,clean,normalizeCrop,annualEvidenceScore,datePartsOf,matchesDate} };
 })();

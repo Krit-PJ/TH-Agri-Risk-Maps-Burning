@@ -1,6 +1,6 @@
 const Dashboard = (() => {
   const charts={}, store={};
-  let state={district:'',subdistrict:'',crop:'',months:[],month:'',day:'',startYM:null,endYM:null,startYear:null,startMonth:null,endYear:null,endMonth:null};
+  let state={district:'',subdistrict:'',landType:'พื้นที่เกษตร',crop:'',months:[],month:'',day:'',startYM:null,endYM:null,startYear:null,startMonth:null,endYear:null,endMonth:null};
   let refreshQueued=false;
   const H=()=>MapModule.helpers;
   function el(id){return document.getElementById(id);}
@@ -119,7 +119,7 @@ const Dashboard = (() => {
   function featureYM(f){const p=f.properties||{},parts=H().datePartsOf(f),year=Number(p.year_be||p.season_be||0);return year&&parts.month?ymIndex(year,parts.month):null;}
   function baseMatches(f){
     const p=f.properties||{};
-    return BoundaryStore.accepts(p)&&(!state.district||p.__district===state.district)&&(!state.subdistrict||p.__subdistrict===state.subdistrict)&&(!state.crop||p.__crop===state.crop);
+    return BoundaryStore.accepts(p)&&(!state.district||p.__district===state.district)&&(!state.subdistrict||p.__subdistrict===state.subdistrict)&&(!state.landType||H().landOf(p)===state.landType)&&(!state.crop||p.__crop===state.crop);
   }
   function matchesRange(f,offsetYears=0){
     const idx=featureYM(f); if(idx===null)return false;
@@ -165,7 +165,7 @@ const Dashboard = (() => {
     setText('comparison-current-header','ช่วงที่เลือก');
     setText('comparison-previous-header','ช่วงเดียวกันปีก่อน');
     setText('title-comparison',`เปรียบเทียบ Hotspot ราย${unitLabel}`);
-    setText('comparison-period',`${temporalText()} เทียบกับ ${previousPeriod.label} · ${state.crop||'ทุกชนิดพืช'}`);
+    setText('comparison-period',`${temporalText()} เทียบกับ ${previousPeriod.label} · ${state.landType||'ทุกประเภทพื้นที่'} · ${state.crop||'ทุกชนิดพืช'}`);
   }
 
   function updateRiskLegend(values){

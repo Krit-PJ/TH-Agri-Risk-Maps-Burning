@@ -15,6 +15,7 @@ const App=(()=>{
     ProvinceContext.applyProvinceContext();
     const loaded=await MapModule.init();
     subdistrictFeatures=loaded.subdistrict?.features||[];
+    populateHotspotFilters(loaded.hotspot);
     populateDistricts();
     try{Dashboard.init();Dashboard.setData(loaded.hotspot);}catch(err){console.error('[Dashboard] initialization failed:',err);showRuntimeWarning('กราฟโหลดไม่สำเร็จ แต่แผนที่และตัวกรองยังใช้งานได้');}
     if(typeof V2!=='undefined')await V2.restore();
@@ -94,11 +95,20 @@ const App=(()=>{
   function current(){const r=activeRange();return{
     district:document.getElementById('filter-district').value,
     subdistrict:document.getElementById('filter-subdistrict').value,
+    landType:document.getElementById('filter-land-type')?.value||'พื้นที่เกษตร',
     crop:document.getElementById('filter-crop').value,
     months:selectedMonths(),
     day:document.getElementById('filter-day')?.value||'',
     startYear:r.startYear,startMonth:r.startMonth,endYear:r.endYear,endMonth:r.endMonth,startYM:r.startYM,endYM:r.endYM
   };}
+  function populateHotspotFilters(hotspotByYear){
+    const features=Object.values(hotspotByYear||{}).flatMap(fc=>fc?.features||[]),helpers=MapModule.helpers;
+    const landTypes=[...new Set(features.map(f=>helpers.landOf(f.properties)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));
+    const plantTypes=[...new Set(features.map(f=>helpers.cropOf(f.properties)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));
+    const land=document.getElementById('filter-land-type'),crop=document.getElementById('filter-crop');
+    if(land){const values=[...new Set(['พื้นที่เกษตร',...landTypes])];land.replaceChildren(...values.map(value=>new Option(value,value)));land.value='พื้นที่เกษตร';land.disabled=false;}
+    if(crop){crop.replaceChildren(new Option('ทุกชนิดพืช',''),...plantTypes.map(value=>new Option(value,value)));crop.value='';crop.disabled=false;}
+  }
   function selectedYear(){return String(activeRange().endYear||CONFIG.CURRENT_YEAR_BE||2569);}
   function ensureYearDropdown(){fillPeriodSelects();}
   function activeRangeYears(){const r=activeRange(),out=[];for(let y=r.startYear;y<=r.endYear;y++)out.push(y);return out;}
@@ -149,7 +159,8 @@ const App=(()=>{
   }
   function updatePrintMeta(){
     const r=activeRange();
-    const period=`ช่วงข้อมูลจุดความร้อนสะสม: ${periodText(r)}`;
+    const land=document.getElementById('filter-land-type')?.value||'ทุกประเภทพื้นที่',crop=document.getElementById('filter-crop')?.value||'ทุกชนิดพืช';
+    const period=`ช่วงข้อมูลจุดความร้อนสะสม: ${periodText(r)} · ประเภทพื้นที่: ${land} · ชนิดพืช: ${crop}`;
     const printSummary=document.getElementById('print-filter-summary');if(printSummary)printSummary.textContent=period;
     const printScope=document.getElementById('print-scope');if(printScope)printScope.textContent=`ขอบเขต: ${scopeText()}`;
     const printDate=document.getElementById('print-date');if(printDate)printDate.textContent='วันที่พิมพ์รายงาน: '+new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
@@ -158,22 +169,20 @@ const App=(()=>{
   }
   function applyCurrent(){const s=current();syncTimelineUI();MapModule.applyFilter(s);try{Dashboard.applyFilter(s);}catch(err){console.warn('[Dashboard] filter skipped:',err.message);}}
   function bindFilters(){
-    const d=document.getElementById('filter-district'),t=document.getElementById('filter-subdistrict'),c=document.getElementById('filter-crop'),cropLayer=document.getElementById('lyr-crop');
+    const d=document.getElementById('filter-district'),t=document.getElementById('filter-subdistrict'),land=document.getElementById('filter-land-type'),c=document.getElementById('filter-crop');
     const day=document.getElementById('filter-day');
-    d.addEventListener('change',()=>{populateSubdistricts();applyCurrent();});t.addEventListener('change',applyCurrent);c.addEventListener('change',applyCurrent);
+    d.addEventListener('change',()=>{populateSubdistricts();applyCurrent();});t.addEventListener('change',applyCurrent);land?.addEventListener('change',applyCurrent);c.addEventListener('change',applyCurrent);
     day?.addEventListener('change',()=>{syncTimelineUI();applyCurrent();});
     document.addEventListener('change',e=>{if(e.target?.classList?.contains('hs-layer')){syncYearSelector();populateDayOptions();}});
-    cropLayer.addEventListener('change',()=>{c.disabled=!cropLayer.checked;if(!cropLayer.checked)c.value='';applyCurrent();});
     document.getElementById('btn-apply-filter').addEventListener('click',applyCurrent);
     document.getElementById('btn-reset-filter')?.addEventListener('click',()=>resetFilters());
   }
   function resetFilters(){
-    const d=document.getElementById('filter-district'),t=document.getElementById('filter-subdistrict'),c=document.getElementById('filter-crop');
+    const d=document.getElementById('filter-district'),t=document.getElementById('filter-subdistrict'),land=document.getElementById('filter-land-type'),c=document.getElementById('filter-crop');
     if(d)d.value='';populateSubdistricts();
     if(t){t.value='';t.disabled=true;t.innerHTML='<option value="">-- เลือกอำเภอก่อน --</option>';}
+    if(land)land.value=[...land.options].some(option=>option.value==='พื้นที่เกษตร')?'พื้นที่เกษตร':land.options[0]?.value||'';
     if(c)c.value='';
-    const cropLayer=document.getElementById('lyr-crop');
-    if(cropLayer&&!cropLayer.checked&&c)c.disabled=true;
     setLatestPeriod();
     const day=document.getElementById('filter-day');
     if(day){day.value='';day.disabled=true;day.innerHTML='<option value="">-- ไม่ใช้ตัวกรองวันที่ --</option>';}
@@ -329,7 +338,7 @@ const App=(()=>{
     btn?.addEventListener('click',importExcel);
     dl?.addEventListener('click',downloadImportedGeoJSON);
     document.getElementById('btn-download-qa')?.addEventListener('click',downloadQA);
-    document.getElementById('hotspot-import-mode')?.addEventListener('change',()=>{const multi=document.getElementById('hotspot-import-mode').value==='multi';const input=document.getElementById('import-excel');input.multiple=multi;input.value='';document.getElementById('import-year-field')?.classList.toggle('hidden',multi);document.getElementById('hotspot-mode-help').textContent=multi?'หลายปี: เลือกไฟล์รวมหลายปีหรือหลายไฟล์ ระบบอ่าน AllData เป็นหลัก หรือชีตรายละเอียดเมื่อไม่มี AllData และแยกปีปฏิทิน พ.ศ. จากวันที่จริง':'ปีเดียว: ใช้ปีชุดข้อมูลที่ระบุตามวิธีเดิม รองรับช่วงวันที่ข้ามปี';});
+    document.getElementById('hotspot-import-mode')?.addEventListener('change',()=>{const multi=document.getElementById('hotspot-import-mode').value==='multi';const input=document.getElementById('import-excel');input.multiple=multi;input.value='';document.getElementById('import-year-field')?.classList.toggle('hidden',multi);document.getElementById('hotspot-mode-help').textContent=multi?'หลายปี: เลือกได้หลายไฟล์ ระบบใช้ชีต hsAll ก่อนและแยกปี พ.ศ. จาก Date โดยอัตโนมัติ':'ปีเดียว: ใช้ชีต hsAll และปีชุดข้อมูลที่ระบุ รองรับช่วงวันที่ข้ามปี';});
   }
   async function importExcel(){
     if(!isAdminAuthenticated()){openAdminModal('กรุณาเข้าสู่ระบบผู้ดูแลก่อนนำเข้าข้อมูล');return;}
