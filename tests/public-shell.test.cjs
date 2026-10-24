@@ -16,6 +16,12 @@ test('public landing is map-first, accessible, and exposes only active provinces
   assert.match(html, /data-font-size="small"/);
   assert.match(html, /data-font-size="medium"/);
   assert.match(html, /data-font-size="large"/);
+  assert.match(html, /leaflet@1\.9\.4/);
+  assert.match(html, /assets\/tailwind\.css/);
+  assert.match(html, /Copyright ©/);
+  assert.match(html, /id="visitor-count"/);
+  assert.match(html, /agri-hs-verification/);
+  assert.match(html, /Green_Gain_Hub-KPP/);
   assert.doesNotMatch(html, /โค้ดโครงการ/);
   const catalog = JSON.parse(read('app/data/catalog.json'));
   assert.equal(catalog.provinceCodes.length, 77);
@@ -33,11 +39,32 @@ test('static map does not load the local Node access bridge', () => {
 });
 
 test('public pages merge the approved Apps Script feed with bundled fallback data', () => {
-  assert.match(read('app/js/landing.js'), /loadDynamicCatalog/);
+  const landing = read('app/js/landing.js');
+  assert.match(landing, /jsonp\(runtime\.appsScriptWebAppUrl,'catalog'/);
+  assert.match(landing, /jsonp\(runtime\.appsScriptWebAppUrl,'visit'/);
+  assert.match(landing, /L\.tileLayer/);
   const shell = read('app/js/public-shell.js');
   assert.match(shell, /AgriPublicApi/);
   assert.match(shell, /Public API fallback/);
   assert.match(shell, /bundledHotspots/);
+});
+
+test('login separates province Admin phone access from Super Admin credentials', () => {
+  const html = read('app/cloud/apps-script/Index.html');
+  assert.match(html, /role="tablist"/);
+  assert.match(html, /Admin จังหวัด/);
+  assert.match(html, /Super Admin/);
+  assert.match(html, /name="phone" type="tel"/);
+  assert.match(html, /pattern="0\[689\]\[0-9\]\{8\}"/);
+  assert.match(read('app/cloud/apps-script/Code.gs'), /normalizePhone_\(value\)/);
+});
+
+test('print report keeps every district row and removes score bars', () => {
+  const css = read('app/css/rebuild.css');
+  assert.match(css, /#tbl-hotspot-comparison tbody tr\{display:table-row!important\}/);
+  assert.match(css, /\.score-bar,.risk-score-bar,.progress-bar/);
+  const dashboard = read('app/js/dashboard.js');
+  assert.match(dashboard, /names=\[\.\.\.new Set\(\[\.\.\.order,\.\.\.boundaryNames,\.\.\.names\]\)\]/);
 });
 
 test('Kamphaeng Phet uses the canonical national data paths', () => {

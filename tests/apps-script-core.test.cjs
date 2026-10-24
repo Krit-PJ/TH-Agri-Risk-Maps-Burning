@@ -104,3 +104,14 @@ test('public catalog activates only ready provinces with published rows', () => 
   ];
   assert.deepEqual(JSON.parse(JSON.stringify(core.publicCatalog_())), { ok: true, schemaVersion: 2, activeProvinceCodes: ['62'] });
 });
+
+test('visitor counter increments a shared server-side value', () => {
+  const core = loadCore();
+  const values = new Map();
+  core.LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
+  core.PropertiesService = { getScriptProperties: () => ({ getProperty: key => values.get(key) || null, setProperty: (key, value) => values.set(key, value) }) };
+  core.now_ = () => '2026-10-24T00:00:00.000Z';
+  assert.equal(core.visitCounter_('public-home').count, 1);
+  assert.equal(core.visitCounter_('public-home').count, 2);
+  assert.equal(values.get('VISITOR_COUNT_public-home'), '2');
+});

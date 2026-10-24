@@ -9,11 +9,11 @@
 </head>
 <body>
 <header>
-  <div><h1>Thailand Agri‑Risk Maps Burning</h1><p>ลงทะเบียนผู้บันทึกข้อมูลและจัดการข้อมูลตามขอบเขตจังหวัด</p></div>
+  <div class="cloud-brand"><img src="https://krit-pj.github.io/TH-Agri-Risk-Maps-Burning/app/assets/logo-doae.png" alt="ตรากรมส่งเสริมการเกษตร"><div><h1>Thailand Agri‑Risk Map Burning</h1><p>ลงทะเบียนผู้บันทึกข้อมูลและจัดการข้อมูลตามขอบเขตจังหวัด</p></div></div>
   <a class="home-link" id="public-home" href="https://krit-pj.github.io/TH-Agri-Risk-Maps-Burning/">กลับหน้าหลัก</a>
 </header>
 <main>
-  <nav aria-label="ส่วนงาน"><button data-view="register">ลงทะเบียน</button><button data-view="login">เจ้าหน้าที่</button><button data-view="admin" hidden>จัดการระบบ</button></nav>
+  <nav aria-label="ส่วนงาน"><button data-view="register">ลงทะเบียน</button><button data-view="login">เข้าสู่ระบบ</button><button data-view="admin" hidden>จัดการระบบ</button></nav>
   <section id="view-register" class="view surface">
     <div id="register-form-step"><h2>ลงทะเบียนผู้บันทึกข้อมูล</h2>
       <form id="registration"><label>ชื่อ-สกุล<input name="fullName" required maxlength="120"></label><label>หมายเลขโทรศัพท์<input name="phone" required inputmode="tel" autocomplete="tel"></label><label>ตำแหน่ง<select name="position" required><option value="">เลือกตำแหน่ง</option><option>นักวิชาการส่งเสริมการเกษตร</option><option>นักวิชาการเกษตร</option><option>เกษตรอำเภอ</option><option>อื่นๆ</option></select></label><label id="position-other-field" hidden>อื่นๆ โปรดระบุ<input name="positionOther" maxlength="120"></label><label>สังกัด<select name="affiliation" required><option value="">เลือกสังกัด</option><option>สำนักงานเกษตรอำเภอ</option><option>สำนักงานเกษตรจังหวัด</option></select></label><label>จังหวัด<select name="provinceCode" id="province-code" required></select></label><div class="actions"><button type="submit" class="primary">ถัดไป : อ่านประกาศ</button><button type="button" data-cancel>ยกเลิกการลงทะเบียน</button></div></form>
@@ -23,7 +23,12 @@
       <label class="ack"><input id="acknowledged" type="checkbox"> <span>ข้าพเจ้าได้อ่านและรับทราบรายละเอียดการใช้ข้อมูลส่วนบุคคลข้างต้น และประสงค์ส่งคำขอลงทะเบียน</span></label><div class="actions"><button type="button" data-cancel>ยกเลิกการลงทะเบียน</button><button type="button" id="confirm-registration" class="primary">ยืนยันการลงทะเบียน</button></div>
     </div>
   </section>
-  <section id="view-login" class="view surface" hidden><h2>เข้าใช้งานระบบเจ้าหน้าที่</h2><p>หลังเปิดใช้งานครั้งแรก ระบบจะจดจำอุปกรณ์นี้ การเข้าใช้ครั้งต่อไปกรอกหมายเลขโทรศัพท์เท่านั้น</p><form id="admin-login"><label>หมายเลขโทรศัพท์<input name="phone" inputmode="tel" autocomplete="tel" required></label><label>รหัสเปิดใช้งานครั้งแรก<input name="activationCode" autocomplete="one-time-code" minlength="16" maxlength="16"></label><button class="primary">เข้าสู่ระบบ</button></form><details><summary>Super Admin</summary><form id="owner-login"><label>User<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">เข้าสู่ระบบ Super Admin</button></form></details></section>
+  <section id="view-login" class="view surface" hidden>
+    <h2>เข้าสู่ระบบ</h2>
+    <div class="role-tabs" role="tablist" aria-label="เลือกประเภทผู้ใช้งาน"><button id="tab-admin" type="button" role="tab" aria-selected="true" aria-controls="panel-admin">Admin จังหวัด</button><button id="tab-owner" type="button" role="tab" aria-selected="false" aria-controls="panel-owner">Super Admin</button></div>
+    <div id="panel-admin" class="role-panel" role="tabpanel" aria-labelledby="tab-admin"><p>กรอกหมายเลขโทรศัพท์เท่านั้น ระบบจะตรวจสิทธิ์จังหวัดและจดจำอุปกรณ์ที่ได้รับอนุญาต</p><form id="admin-login"><label>หมายเลขโทรศัพท์<input name="phone" type="tel" inputmode="numeric" pattern="0[689][0-9]{8}" maxlength="10" autocomplete="tel" placeholder="เช่น 0841157666" required></label><details class="activation-help"><summary>เข้าสู่ระบบครั้งแรก</summary><label>รหัสเปิดใช้งานครั้งแรก<input name="activationCode" autocomplete="one-time-code" minlength="16" maxlength="16"></label><p>กรอกรหัสนี้เฉพาะครั้งแรกหลัง Super Admin อนุมัติ</p></details><button class="primary">เข้าสู่ระบบ Admin</button></form></div>
+    <div id="panel-owner" class="role-panel" role="tabpanel" aria-labelledby="tab-owner" hidden><p>สำหรับผู้ดูแลระบบกลาง ผู้อนุมัติสิทธิ์ และดูแลข้อมูลครบ 77 จังหวัด</p><form id="owner-login"><label>User<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">เข้าสู่ระบบ Super Admin</button></form></div>
+  </section>
   <section id="view-admin" class="view surface" hidden>
     <div class="admin-head"><div><h2 id="session-name">จัดการข้อมูล</h2><p id="session-role"></p></div><button id="logout">ออกจากระบบ</button></div>
     <label id="admin-province-field">จังหวัดที่กำลังจัดการ<select id="admin-province"></select></label>

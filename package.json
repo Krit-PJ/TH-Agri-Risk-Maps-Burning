@@ -1,0 +1,11 @@
+{
+  "name": "th-agri-risk-maps-burning",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/tailwind.css -o ./assets/tailwind.css --minify",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

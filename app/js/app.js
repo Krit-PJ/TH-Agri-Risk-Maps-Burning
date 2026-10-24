@@ -194,16 +194,23 @@ const App=(()=>{
   function bindPrint(){
     const prepare=()=>{
       updatePrintMeta();
+      const alreadyPreparing=document.body.classList.contains('print-preparing');
       document.body.classList.add('print-preparing');
       try{Dashboard.setPrintMode?.(true);}catch(err){console.warn('[Print] chart contrast:',err.message);}
+      // Clicking the print button already prepares and fits the map before the
+      // browser opens its dialog. Chromium fires beforeprint again; fitting a
+      // second time there can capture half-loaded tiles in the PDF.
+      if(alreadyPreparing)return;
       const refit=()=>{
         const map=MapModule.map?.();
         if(!map)return;
+        map.stop?.();
         map.invalidateSize({pan:false});
         // Fit the selected province/district/subdistrict after the print-sized map container is applied.
         // Larger padding prevents the selected boundary from being clipped in A4 landscape output.
         MapModule.focusSelection?.({padding:[70,70],maxZoom:10});
       };
+      refit();
       requestAnimationFrame(refit);
       [180,420,850,1200].forEach(ms=>setTimeout(refit,ms));
     };

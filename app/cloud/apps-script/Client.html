@@ -15,6 +15,8 @@ function renderPreview(rows){$('import-preview').hidden=false;$('import-preview'
 function selectedIds(){return[...document.querySelectorAll('[data-hotspot]:checked')].map(input=>input.dataset.hotspot);}
 provinces.forEach(([code,name])=>$('province-code').add(new Option(name,String(code))));
 document.querySelectorAll('[data-view]').forEach(button=>button.onclick=()=>show(button.dataset.view));
+function selectRoleTab(role){const admin=role!=='owner';$('tab-admin').setAttribute('aria-selected',String(admin));$('tab-owner').setAttribute('aria-selected',String(!admin));$('panel-admin').hidden=!admin;$('panel-owner').hidden=admin;(admin?document.querySelector('#admin-login [name="phone"]'):document.querySelector('#owner-login [name="username"]')).focus();}
+$('tab-admin').onclick=()=>selectRoleTab('admin');$('tab-owner').onclick=()=>selectRoleTab('owner');
 document.querySelectorAll('[data-cancel]').forEach(button=>button.onclick=()=>location.href=$('public-home').href);
 $('registration').position.onchange=()=>{$('position-other-field').hidden=$('registration').position.value!=='อื่นๆ';};
 $('registration').onsubmit=event=>{event.preventDefault();draft=formData(event.currentTarget);draft.idempotencyKey=crypto.randomUUID().replace(/-/g,'');draft.noticeVersion='2026-10-21.1';$('register-form-step').hidden=true;$('notice-step').hidden=false;status('โปรดอ่านประกาศและยืนยันด้วยตนเอง');};
@@ -31,6 +33,6 @@ $('save-hotspots').onclick=async()=>{try{const rows=importedRows.length?imported
 async function runWorkflow(action,extra={}){try{const hotspotIds=selectedIds();if(!hotspotIds.length)throw new Error('กรุณาเลือกรายการ');await call(action,{provinceCode:currentProvince(),hotspotIds,...extra});await loadWorkspace();status('ดำเนินการสำเร็จ '+hotspotIds.length+' รายการ');}catch(error){status(error.message,true);}}
 $('submit-hotspots').onclick=()=>runWorkflow('submitHotspots');$('approve-hotspots').onclick=()=>runWorkflow('approveHotspots');$('publish-hotspots').onclick=()=>runWorkflow('publishHotspots',{published:true});$('unpublish-hotspots').onclick=()=>runWorkflow('publishHotspots',{published:false});$('delete-hotspots').onclick=()=>{const reason=prompt('ระบุเหตุผลการลบ');if(reason)runWorkflow('deleteHotspots',{reason});};
 $('logout').onclick=async()=>{try{await call('logout');}catch{}session=null;localStorage.removeItem('agri-session');document.querySelector('[data-view="admin"]').hidden=true;show('login');status('ออกจากระบบแล้ว');};
-if(session&&session.expiresAt>Date.now())enterAdmin().catch(()=>$('logout').click());else show(location.hash==='#login'?'login':'register');
+if(session&&session.expiresAt>Date.now())enterAdmin().catch(()=>$('logout').click());else{show(location.hash==='#login'?'login':'register');if(location.hash==='#login')selectRoleTab('admin');}
 })();
 </script>

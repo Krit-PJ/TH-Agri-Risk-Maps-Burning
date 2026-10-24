@@ -9,3 +9,4 @@
 .superpowers/
 .private/
 .clasp.json
+node_modules/

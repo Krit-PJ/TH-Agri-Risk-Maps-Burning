@@ -1,6 +1,6 @@
 const MapModule = (() => {
   const sessionImports={};
-  let map, currentBasemap = 'satellite';
+  let map, polygonRenderer, currentBasemap = 'satellite';
   const base = {};
   const raw = {
     province:null, district:null, subdistrict:null, hotspot:{}, crop:null, burnscar:null,
@@ -83,6 +83,10 @@ const MapModule = (() => {
 
   async function init(){
     map = L.map('map',{ center:CONFIG.MAP_CENTER, zoom:CONFIG.MAP_ZOOM, minZoom:CONFIG.MAP_MIN_ZOOM, maxZoom:CONFIG.MAP_MAX_ZOOM, zoomControl:false,preferCanvas:true });
+    // Keep administrative/risk polygons as vectors. Canvas remains the fast
+    // default for thousands of hotspot points, while SVG avoids bitmap
+    // distortion when the browser changes the map to A4 print dimensions.
+    polygonRenderer=L.svg({padding:.5});
     L.control.zoom({position:'bottomright'}).addTo(map);
     Object.entries(CONFIG.BASEMAPS).forEach(([k,u]) => base[k] = L.tileLayer(u,{ maxZoom:19, attribution:k==='satellite'?'Tiles © Esri':k==='topo'?'© OpenTopoMap':'© OpenStreetMap contributors' }));
     base.satellite.addTo(map);
@@ -296,17 +300,17 @@ const MapModule = (() => {
       // legacy district dissolve so changing filters does not recompute a large union.
       if(typeof AccessContext==='undefined'&&!raw.province?.features?.length&&window.turf?.dissolve){try{raw.province=turf.dissolve(raw.district);}catch{}}
       const fc=raw.province?.features?.length?raw.province:raw.district;
-      shown.province=L.geoJSON(fc,{style:{color:'#f8fafc',weight:3,fillOpacity:0,opacity:1},interactive:false}).addTo(map);
+      shown.province=L.geoJSON(fc,{renderer:polygonRenderer,style:{color:'#f8fafc',weight:3,fillOpacity:0,opacity:1},interactive:false}).addTo(map);
     }
-    if(showDist&&raw.district) shown.district=L.geoJSON({type:'FeatureCollection',features:raw.district.features.filter(f=>matchesBoundary(f,'district'))},{style:{color:'#22d3ee',weight:2.2,fillOpacity:.03},onEachFeature:(f,l)=>l.bindTooltip(`อ.${districtOf(f.properties)}`)}).addTo(map);
-    if(showSub&&raw.subdistrict) shown.subdistrict=L.geoJSON({type:'FeatureCollection',features:raw.subdistrict.features.filter(f=>matchesBoundary(f,'subdistrict'))},{style:{color:'#e2e8f0',weight:1.1,fillOpacity:.02},onEachFeature:(f,l)=>l.bindTooltip(`ต.${subdistrictOf(f.properties)}`)}).addTo(map);
+    if(showDist&&raw.district) shown.district=L.geoJSON({type:'FeatureCollection',features:raw.district.features.filter(f=>matchesBoundary(f,'district'))},{renderer:polygonRenderer,style:{color:'#22d3ee',weight:2.2,fillOpacity:.03},onEachFeature:(f,l)=>l.bindTooltip(`อ.${districtOf(f.properties)}`)}).addTo(map);
+    if(showSub&&raw.subdistrict) shown.subdistrict=L.geoJSON({type:'FeatureCollection',features:raw.subdistrict.features.filter(f=>matchesBoundary(f,'subdistrict'))},{renderer:polygonRenderer,style:{color:'#e2e8f0',weight:1.1,fillOpacity:.02},onEachFeature:(f,l)=>l.bindTooltip(`ต.${subdistrictOf(f.properties)}`)}).addTo(map);
   }
 
   function highlightPointArea(feature){
     remove(shown.selectedArea);shown.selectedArea=null;
     const codes=DataLoader.areaCodes(feature.properties||{});
     const related=(raw.district?.features||[]).filter(f=>{const c=DataLoader.areaCodes(f.properties||{});return codes.districtCode&&c.districtCode===codes.districtCode&&c.provinceCode===codes.provinceCode;});
-    if(related.length)shown.selectedArea=L.geoJSON({type:'FeatureCollection',features:related},{interactive:false,style:{color:'#f59e0b',weight:4,fillOpacity:.08}}).addTo(map);
+    if(related.length)shown.selectedArea=L.geoJSON({type:'FeatureCollection',features:related},{renderer:polygonRenderer,interactive:false,style:{color:'#f59e0b',weight:4,fillOpacity:.08}}).addTo(map);
   }
   function renderHotspots(){
     remove(shown.selectedArea);shown.selectedArea=null;
@@ -334,6 +338,7 @@ const MapModule = (() => {
     }else collection=raw[type];
     const fs=(collection?.features||[]).filter(f=>matchesBoundary(f,level));
     shown[type]=L.geoJSON({type:'FeatureCollection',features:fs},{
+      renderer:polygonRenderer,
       style:type==='burnscar'?{color:'#dc2626',fillColor:'#ef4444',weight:.8,fillOpacity:.4}:f=>{const l=getRiskLevel(Number(f.properties?.risk_score||0));return{color:l.color,fillColor:l.color,weight:1.4,fillOpacity:.62};},
       onEachFeature:type==='risk'?(f,l)=>{
         const p=f.properties||{}, score=Number(p.risk_score||0), name=level==='district'?`อ.${districtOf(p)}`:`ต.${subdistrictOf(p)}`;
