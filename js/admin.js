@@ -9,6 +9,9 @@ const Admin = (() => {
   /* ======================= helpers ======================= */
   function user() { return Api.session()?.user || null; }
   function isSuper() { return user()?.role === 'superadmin'; }
+  /** Super Admin และ Mini Super Admin: ขอบเขตทุกจังหวัด */
+  function isNational() { return ['superadmin', 'minisuper'].includes(user()?.role); }
+  const ROLE_LABEL = { superadmin: 'Super Admin', minisuper: 'Mini Super Admin', admin: 'Admin' };
   function setMsg(node, text, type = '') {
     if (!node) return;
     node.textContent = text;
@@ -131,14 +134,16 @@ const Admin = (() => {
     const u = user();
     el('btn-login').classList.toggle('hidden', !!u);
     el('user-menu').classList.toggle('hidden', !u);
+    document.querySelectorAll('.national-only').forEach(n => n.classList.toggle('hidden', !isNational()));
     document.querySelectorAll('.super-only').forEach(n => n.classList.toggle('hidden', !isSuper()));
     if (!u) return;
-    el('user-initial').textContent = isSuper() ? 'S' : 'A';
+    el('user-initial').textContent = { superadmin: 'S', minisuper: 'M', admin: 'A' }[u.role] || 'A';
     el('user-label').textContent = u.name;
     el('user-name').textContent = u.name;
-    el('user-scope').textContent = isSuper() ? 'Super Admin · จัดการได้ทั้งระบบ' : `Admin · จังหวัด${u.provName}`;
-    el('console-scope').textContent = isSuper() ? 'Super Admin — จัดการได้ทุกจังหวัด' : `Admin — จัดการได้เฉพาะจังหวัด${u.provName}`;
-    const s = el('acc-province'); s.disabled = !isSuper(); if (!isSuper()) s.value = u.prov;
+    const scope = { superadmin: 'สิทธิ์เต็ม จัดการได้ทั้งระบบ รวมถึง Mini Super Admin', minisuper: 'จัดการได้ทุกจังหวัด (ยกเว้นการจัดการ Mini Super Admin)', admin: `จัดการได้เฉพาะจังหวัด${u.provName}` }[u.role];
+    el('user-scope').textContent = `${ROLE_LABEL[u.role]} · ${scope}`;
+    el('console-scope').textContent = `${ROLE_LABEL[u.role]} — ${scope}`;
+    const s = el('acc-province'); s.disabled = !isNational(); if (!isNational()) s.value = u.prov;
     renderImportScope();
   }
 
@@ -146,7 +151,7 @@ const Admin = (() => {
   function openConsole(tab = 'import') {
     if (!user()) return openLogin();
     updateUI(); el('console').classList.remove('hidden'); consoleTab(tab); refreshBadge();
-    if (isSuper() && !el('batches-province').value && hooks.currentProvince?.()) el('batches-province').value = hooks.currentProvince();
+    if (isNational() && !el('batches-province').value && hooks.currentProvince?.()) el('batches-province').value = hooks.currentProvince();
   }
   function consoleTab(tab) {
     document.querySelectorAll('#console-tabs [data-tab]').forEach(b => b.classList.toggle('is-active', b.dataset.tab === tab));
@@ -189,11 +194,12 @@ const Admin = (() => {
     const box = el('accounts-list'); box.innerHTML = '<span class="spinner"></span>';
     const r = await run(() => Api.post('accounts_list'));
     if (!r) { box.innerHTML = ''; return; }
-    accounts = r.accounts.sort((a, b) => String(a.provinceName).localeCompare(String(b.provinceName), 'th') || String(a.accountId).localeCompare(String(b.accountId)));
-    box.innerHTML = accounts.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>ชื่อ</th><th>เบอร์โทร</th><th>จังหวัด</th><th>สถานะ</th><th>เข้าใช้ล่าสุด</th><th></th></tr></thead><tbody>${accounts.map(a => `<tr>
+    accounts = r.accounts.sort((a, b) => (a.role === 'minisuper' ? 0 : 1) - (b.role === 'minisuper' ? 0 : 1) || String(a.provinceName).localeCompare(String(b.provinceName), 'th') || String(a.accountId).localeCompare(String(b.accountId)));
+    box.innerHTML = accounts.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>ชื่อ</th><th>บทบาท</th><th>เบอร์โทร</th><th>จังหวัด</th><th>สถานะ</th><th>เข้าใช้ล่าสุด</th><th></th></tr></thead><tbody>${accounts.map(a => `<tr>
       <td><p class="font-semibold">${esc(a.fullName)}</p><p class="text-xs text-ink-soft">${esc(a.position || '')} ${esc(a.affiliation || '')}</p></td>
+      <td>${a.role === 'minisuper' ? '<span class="status-pill bg-indigo-50 text-indigo-700">Mini Super Admin</span>' : '<span class="status-pill bg-paper text-ink-soft">Admin</span>'}</td>
       <td class="tabular-nums">${esc(a.phone)}</td><td>${esc(a.provinceName)}</td><td>${statusPill(a.status)}</td><td class="text-xs">${dt(a.lastLoginAt)}</td>
-      <td class="whitespace-nowrap text-right">${a.accountId === user().sub ? '<span class="text-xs text-ink-mute">บัญชีของท่าน</span>' : `
+      <td class="whitespace-nowrap text-right">${a.accountId === user().sub ? '<span class="text-xs text-ink-mute">บัญชีของท่าน</span>' : (a.role === 'minisuper' && !isSuper()) ? '<span class="text-xs text-ink-mute">จัดการได้เฉพาะ Super Admin</span>' : `
         <button class="btn-ghost btn-sm" data-acc-edit="${esc(a.accountId)}">แก้ไข</button>
         <button class="btn-ghost btn-sm" data-acc-status="${esc(a.accountId)}" data-to="${a.status === 'approved' ? 'disabled' : 'approved'}">${a.status === 'approved' ? 'ระงับ' : 'เปิดใช้'}</button>
         <button class="btn-ghost btn-sm text-red-700" data-acc-del="${esc(a.accountId)}">ลบ</button>`}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีผู้ดูแลในขอบเขตของท่าน');
@@ -210,29 +216,29 @@ const Admin = (() => {
   function editAccount(id) {
     const a = accounts.find(x => x.accountId === id); if (!a) return;
     el('acc-id').value = a.accountId; el('acc-phone').value = a.phone; el('acc-name').value = a.fullName; el('acc-position').value = a.position || '';
-    el('acc-affiliation').value = a.affiliation || ''; el('acc-province').value = a.provinceCode;
+    el('acc-affiliation').value = a.affiliation || ''; el('acc-province').value = a.provinceCode; el('acc-role').value = a.role === 'minisuper' ? 'minisuper' : 'admin';
     el('btn-acc-save').textContent = 'บันทึกการแก้ไข'; el('btn-acc-cancel').classList.remove('hidden'); el('acc-phone').focus();
   }
   function resetAccountForm() {
     el('form-account').reset(); el('acc-id').value = ''; el('btn-acc-save').textContent = 'เพิ่มผู้ดูแล'; el('btn-acc-cancel').classList.add('hidden');
-    if (!isSuper()) el('acc-province').value = user().prov;
+    if (!isNational()) el('acc-province').value = user().prov;
   }
   async function saveAccount(e) {
     e.preventDefault();
-    const body = { accountId: el('acc-id').value, phone: Api.normalizePhone(el('acc-phone').value), fullName: el('acc-name').value, position: el('acc-position').value, affiliation: el('acc-affiliation').value, provinceCode: isSuper() ? el('acc-province').value : user().prov };
+    const body = { accountId: el('acc-id').value, phone: Api.normalizePhone(el('acc-phone').value), fullName: el('acc-name').value, position: el('acc-position').value, affiliation: el('acc-affiliation').value, provinceCode: isNational() ? el('acc-province').value : user().prov, role: isSuper() ? el('acc-role').value : 'admin' };
     if (!/^0\d{8,9}$/.test(body.phone)) return setMsg(el('console-status'), 'เบอร์โทรศัพท์ไม่ถูกต้อง', 'error');
     if (!body.provinceCode) return setMsg(el('console-status'), 'กรุณาเลือกจังหวัด', 'error');
-    if (await run(() => Api.post('account_save', body), body.accountId ? 'บันทึกการแก้ไขแล้ว' : 'เพิ่มผู้ดูแลแล้ว')) { resetAccountForm(); loadAccounts(); }
+    if (await run(() => Api.post('account_save', body), body.accountId ? 'บันทึกการแก้ไขแล้ว' : `เพิ่ม ${ROLE_LABEL[body.role]} แล้ว`)) { resetAccountForm(); loadAccounts(); }
   }
 
   /* ---------- batches ---------- */
   async function loadBatches() {
     const box = el('batches-list'); box.innerHTML = '<span class="spinner"></span>';
     const bp = el('batches-province');
-    if (isSuper() && bp.options[0]?.value === '') bp.options[0].textContent = 'ทุกจังหวัด';
-    el('btn-clear-province').textContent = isSuper() ? (bp.value ? `ล้างข้อมูล HS จังหวัด${provName(bp.value)}` : 'ล้างข้อมูล HS ทั้งจังหวัด') : `ล้างข้อมูล HS ทั้งจังหวัด${user().provName}`;
-    el('btn-clear-province').disabled = isSuper() && !bp.value;
-    const r = await run(() => Api.post('hs_batches', isSuper() && bp.value ? { provinceCode: bp.value } : {}));
+    if (isNational() && bp.options[0]?.value === '') bp.options[0].textContent = 'ทุกจังหวัด';
+    el('btn-clear-province').textContent = isNational() ? (bp.value ? `ล้างข้อมูล HS จังหวัด${provName(bp.value)}` : 'ล้างข้อมูล HS ทั้งจังหวัด') : `ล้างข้อมูล HS ทั้งจังหวัด${user().provName}`;
+    el('btn-clear-province').disabled = isNational() && !bp.value;
+    const r = await run(() => Api.post('hs_batches', isNational() && bp.value ? { provinceCode: bp.value } : {}));
     if (!r) { box.innerHTML = ''; return; }
     box.innerHTML = r.batches.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>ไฟล์</th><th>จังหวัด</th><th class="num">นำเข้า</th><th class="num">ซ้ำ</th><th>ช่วงวันที่</th><th>ผู้นำเข้า</th><th></th></tr></thead><tbody>${r.batches.map(b => `<tr>
       <td><p class="font-semibold">${esc(b.fileName || b.batchId)}</p><p class="text-xs text-ink-mute">${dt(b.importedAt)}</p></td><td>${esc(provName(String(b.provinceCode)))}</td>
@@ -245,7 +251,7 @@ const Admin = (() => {
     }));
   }
   async function clearProvince() {
-    const code = isSuper() ? el('batches-province').value : user().prov;
+    const code = isNational() ? el('batches-province').value : user().prov;
     if (!code) return setMsg(el('console-status'), 'Super Admin: เลือกจังหวัดจากรายการก่อนล้างข้อมูล', 'warn');
     const name = provName(code);
     if (!await confirmBox(`ลบจุดความร้อนทั้งหมดของจังหวัด${name} และประวัติชุดข้อมูล การลบไม่สามารถย้อนกลับได้`, { requireText: name, yes: 'ล้างข้อมูล' })) return;
@@ -326,7 +332,7 @@ const Admin = (() => {
 
   function renderImportScope() {
     const box = el('import-scope'), u = user(); if (!u || !box) return;
-    box.innerHTML = isSuper()
+    box.innerHTML = isNational()
       ? '<b>Super Admin</b> — เลือกไฟล์แล้วระบบแยกจังหวัดจากคอลัมน์ Province ให้อัตโนมัติ เลือกนำเข้าได้ 1 จังหวัด หลายจังหวัด หรือทุกจังหวัด'
       : `<b>จังหวัด${esc(u.provName)}</b> — ระบบผูกการนำเข้ากับจังหวัดตามสิทธิ์ของท่านโดยอัตโนมัติ และนำเข้าเฉพาะแถวที่ Province = ${esc(u.provName)} แถวของจังหวัดอื่นจะถูกข้าม`;
   }
@@ -358,7 +364,7 @@ const Admin = (() => {
       const found = Object.values(counts).sort((a, b) => b.ag - a.ag || a.name.localeCompare(b.name, 'th'));
       imp = { fileName: file.name, wb, detail, idx, found, unknown, selected: new Set(), results: {} };
       if (!found.length) throw new Error('ไม่พบชื่อจังหวัดที่ระบบรู้จักในคอลัมน์ Province');
-      if (!isSuper()) {
+      if (!isNational()) {
         const mine = counts[user().prov];
         if (!mine) throw new Error(`ไม่พบข้อมูลจังหวัด${user().provName}ในไฟล์นี้ (ไฟล์มีข้อมูล: ${found.slice(0, 8).map(f => f.name).join(', ')}${found.length > 8 ? ' …' : ''})`);
         imp.selected.add(user().prov);
@@ -524,7 +530,7 @@ const Admin = (() => {
   }
   async function loadLogins() {
     el('logins-list').innerHTML = '<span class="spinner"></span>';
-    el('logins-scope').textContent = isSuper() ? 'บันทึกทุกครั้งที่มีการกดเข้าสู่ระบบ รวมหมายเลขที่ไม่มีในระบบ (ไม่บันทึกรหัสผ่าน)' : `การเข้าใช้ของผู้ดูแลจังหวัด${user().provName} (ไม่บันทึกรหัสผ่าน)`;
+    el('logins-scope').textContent = isNational() ? 'บันทึกทุกครั้งที่มีการกดเข้าสู่ระบบ รวมหมายเลขที่ไม่มีในระบบ (ไม่บันทึกรหัสผ่าน)' : `การเข้าใช้ของผู้ดูแลจังหวัด${user().provName} (ไม่บันทึกรหัสผ่าน)`;
     const r = await run(() => Api.post('login_report', { days: Number(el('logins-days').value) }));
     if (!r) { el('logins-list').innerHTML = ''; return; }
     logins = r; renderLogins();
@@ -536,7 +542,7 @@ const Admin = (() => {
     el('logins-summary').innerHTML = [[fmt(total), `ครั้งใน ${logins.days} วัน`], [fmt(sum.success), 'เข้าใช้สำเร็จ'], [fmt(sum.not_found), 'หมายเลขไม่มีในระบบ'], [fmt((sum.pending || 0) + (sum.disabled || 0) + (sum.wrong_credentials || 0) + (sum.invalid || 0)), 'ไม่สำเร็จด้วยเหตุอื่น']]
       .map(([v, l]) => `<div class="rounded-lg bg-paper p-2.5"><div class="text-lg font-bold">${v}</div><div class="text-xs text-ink-soft">${l}</div></div>`).join('');
     const unk = el('logins-unknown');
-    if (isSuper()) {
+    if (isNational()) {
       unk.classList.remove('hidden');
       unk.innerHTML = `<h4 class="mb-2 text-sm font-bold">หมายเลขที่ไม่มีในระบบแต่พยายามเข้าใช้ (${fmt(logins.unknown.length)} หมายเลข)</h4>` + (logins.unknown.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>เบอร์โทรศัพท์</th><th class="num">จำนวนครั้ง</th><th>ครั้งแรก</th><th>ล่าสุด</th><th></th></tr></thead><tbody>${logins.unknown.map(u => `<tr><td class="tabular-nums font-semibold">${esc(u.phone)}</td><td class="num">${fmt(u.attempts)}</td><td class="text-xs">${dt(u.firstAt)}</td><td class="text-xs">${dt(u.lastAt)}</td><td class="text-right"><button type="button" class="btn-ghost btn-sm" data-add-phone="${esc(u.phone)}">เพิ่มเป็นผู้ดูแล</button></td></tr>`).join('')}</tbody></table></div>` : empty('ไม่มีหมายเลขที่ไม่รู้จักในช่วงนี้'));
       unk.querySelectorAll('[data-add-phone]').forEach(b => b.addEventListener('click', () => { consoleTab('accounts'); resetAccountForm(); el('acc-phone').value = b.dataset.addPhone; el('acc-name').focus(); }));
@@ -544,7 +550,7 @@ const Admin = (() => {
     const filter = el('logins-result').value;
     const rows = logins.attempts.filter(a => !filter || a.result === filter);
     el('logins-list').innerHTML = rows.length ? `<h4 class="mb-2 text-sm font-bold">รายการล่าสุด</h4><div class="overflow-x-auto"><table class="data-table"><thead><tr><th>เวลา</th><th>บทบาท</th><th>หมายเลข/ชื่อผู้ใช้</th><th>ผล</th><th>ชื่อ</th><th>จังหวัด</th><th>อุปกรณ์</th></tr></thead><tbody>${rows.map(a => `<tr>
-        <td class="whitespace-nowrap text-xs">${dt(a.time)}</td><td class="text-xs">${a.role === 'superadmin' ? 'Super Admin' : 'Admin'}</td><td class="tabular-nums">${esc(a.identifier)}</td>
+        <td class="whitespace-nowrap text-xs">${dt(a.time)}</td><td class="text-xs">${ROLE_LABEL[a.role] || a.role}</td><td class="tabular-nums">${esc(a.identifier)}</td>
         <td><span class="status-pill ${(L[a.result] || ['', 'bg-paper'])[1]}">${esc((L[a.result] || [a.resultLabel])[0])}</span></td><td>${esc(a.fullName || '-')}</td><td>${esc(a.provinceName || '-')}</td><td class="text-xs text-ink-soft">${esc(a.device || '-')}</td></tr>`).join('')}</tbody></table></div>` : empty('ไม่มีรายการในช่วงนี้');
   }
 

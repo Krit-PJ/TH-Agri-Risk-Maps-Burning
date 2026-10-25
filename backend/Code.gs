@@ -2,7 +2,7 @@
  * TH Agri-Risk Map Burning — Backend (Google Apps Script Web App)
  * ----------------------------------------------------------------
  * ฐานข้อมูล : Google Sheet "TH Agri-Risk Map Burning V3 - Database"
- * บทบาท    : public (ผู้ใช้ทั่วไป) | admin (ระดับจังหวัด) | superadmin (ทั้งระบบ)
+ * บทบาท    : public (ผู้ใช้ทั่วไป) | admin (ระดับจังหวัด) | minisuper (ทั้งระบบ ยกเว้นจัดการสิทธิ์ Mini Super Admin) | superadmin (สิทธิ์เต็ม)
  *
  * วิธีติดตั้ง (สรุป — ดูรายละเอียดใน README.md)
  *   1) เปิด Google Sheet ฐานข้อมูล > ส่วนขยาย > Apps Script แล้ววางไฟล์นี้
@@ -49,6 +49,7 @@ const TEXT_COLUMNS = {
   LoginAttempts: ['identifier', 'accountId', 'provinceCode']
 };
 const SETUP_VERSION = '3.1';
+const ACCOUNT_ROLES = { admin: 'Admin', minisuper: 'Mini Super Admin' };
 const LOGIN_RESULTS = { success: 'สำเร็จ', not_found: 'ไม่มีหมายเลขในระบบ', pending: 'รออนุมัติ', disabled: 'บัญชีถูกระงับ', invalid: 'รูปแบบไม่ถูกต้อง', wrong_credentials: 'ชื่อผู้ใช้/รหัสผ่านไม่ถูกต้อง' };
 const HS_HEADERS = ['hotspotId', 'date', 'time', 'districtCode', 'subdistrictCode', 'districtName', 'subdistrictName', 'village', 'plantType', 'lat', 'lng', 'batchId', 'importedAt'];
 const HS_TEXT = ['hotspotId', 'date', 'time', 'districtCode', 'subdistrictCode', 'batchId'];
@@ -155,11 +156,12 @@ function loginAdmin_(b) {
     logAttempt_('admin', phone, pending ? 'pending' : 'not_found', pending ? { fullName: pending.fullName, provinceCode: pending.provinceCode } : null, device);
     throw new Error(pending ? 'คำขอของท่านอยู่ระหว่างรอการอนุมัติ' : 'ไม่พบเบอร์โทรศัพท์นี้ในระบบ กรุณายื่นคำขอใช้งาน');
   }
-  if (acc.status !== 'approved') { logAttempt_('admin', phone, 'disabled', acc, device); throw new Error('บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ'); }
-  logAttempt_('admin', phone, 'success', acc, device);
+  const lrole = acc.role === 'minisuper' ? 'minisuper' : 'admin';
+  if (acc.status !== 'approved') { logAttempt_(lrole, phone, 'disabled', acc, device); throw new Error('บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ'); }
+  logAttempt_(lrole, phone, 'success', acc, device);
   updateRow_('Accounts', acc._row, { lastLoginAt: now_() });
-  const user = { sub: acc.accountId, name: acc.fullName, phone: phone, role: 'admin', prov: String(acc.provinceCode), provName: PROVINCES[String(acc.provinceCode)] || '' };
-  audit_(user, 'login', 'admin login');
+  const user = accountUser_(acc);
+  audit_(user, 'login', user.role + ' login', user.role === 'minisuper' ? String(acc.provinceCode) : '');
   return { ok: true, token: signToken_(user), user: user };
 }
 
@@ -192,6 +194,14 @@ function register_(b) {
   return { ok: true, requestId: id };
 }
 
+/** แปลงบัญชีในชีตเป็นผู้ใช้ในระบบ: minisuper มีขอบเขตทุกจังหวัด */
+function accountUser_(acc) {
+  const role = acc.role === 'minisuper' ? 'minisuper' : 'admin';
+  const home = String(acc.provinceCode);
+  return { sub: acc.accountId, name: acc.fullName, phone: normalizePhone_(acc.phone), role: role,
+    prov: role === 'minisuper' ? '*' : home, provName: role === 'minisuper' ? 'ทุกจังหวัด' : (PROVINCES[home] || ''), homeProv: home };
+}
+
 function signToken_(user) {
   const payload = Object.assign({}, user, { exp: Date.now() + TOKEN_HOURS * 3600 * 1000 });
   const p = Utilities.base64EncodeWebSafe(JSON.stringify(payload));
@@ -203,22 +213,26 @@ function verifyToken_(token) {
   if (parts.length !== 2 || hmac_(parts[0]) !== parts[1]) throw new Error('AUTH: กรุณาเข้าสู่ระบบ');
   const user = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString());
   if (!user.exp || Date.now() > user.exp) throw new Error('AUTH: หมดเวลาการใช้งาน กรุณาเข้าสู่ระบบใหม่');
-  if (user.role === 'admin') { // ตรวจสถานะล่าสุดทุกครั้ง (ระงับสิทธิ์มีผลทันที)
+  if (user.role === 'admin' || user.role === 'minisuper') { // ตรวจสถานะและบทบาทล่าสุดทุกครั้ง (ระงับ/ปรับสิทธิ์มีผลทันที)
     const acc = findRow_('Accounts', r => r.accountId === user.sub);
     if (!acc || acc.status !== 'approved') throw new Error('AUTH: บัญชีถูกระงับหรือถูกลบ');
-    user.prov = String(acc.provinceCode);
+    return Object.assign(user, accountUser_(acc));
   }
   return user;
 }
 
+function isNational_(user) { return user.role === 'superadmin' || user.role === 'minisuper'; }
+function requireNational_(user) { if (!isNational_(user)) throw new Error('เฉพาะ Super Admin / Mini Super Admin เท่านั้น'); }
 function requireProvince_(user, prov) {
   prov = String(prov || '');
-  if (user.role === 'superadmin') { if (!PROVINCES[prov]) throw new Error('รหัสจังหวัดไม่ถูกต้อง'); return prov; }
+  if (isNational_(user)) { if (!PROVINCES[prov]) throw new Error('รหัสจังหวัดไม่ถูกต้อง'); return prov; }
   if (user.role === 'admin' && user.prov === prov) return prov;
   throw new Error('ไม่มีสิทธิ์จัดการข้อมูลจังหวัดนี้');
 }
 function requireSuper_(user) { if (user.role !== 'superadmin') throw new Error('เฉพาะ Super Admin เท่านั้น'); }
-function inScope_(user, prov) { return user.role === 'superadmin' || String(prov) === user.prov; }
+function inScope_(user, prov) { return isNational_(user) || String(prov) === user.prov; }
+/** บัญชี Mini Super Admin จัดการได้โดย Super Admin เท่านั้น */
+function requireRoleManager_(user, role) { if (role === 'minisuper' && user.role !== 'superadmin') throw new Error('การเพิ่ม/แก้ไข/ระงับ/ลบ Mini Super Admin ทำได้เฉพาะ Super Admin'); }
 
 /* ====================== REQUESTS / ACCOUNTS ====================== */
 function requestsList_(user, b) {
@@ -266,17 +280,21 @@ function accountSave_(user, b) {
     if (!clean_(b.fullName)) throw new Error('กรุณากรอกชื่อ-นามสกุล');
     const dup = findRow_('Accounts', r => normalizePhone_(r.phone) === phone && r.accountId !== b.accountId);
     if (dup) throw new Error('เบอร์โทรศัพท์นี้มีในระบบแล้ว');
-    const data = { phone: phone, fullName: clean_(b.fullName), position: clean_(b.position), affiliation: clean_(b.affiliation), provinceCode: prov, provinceName: PROVINCES[prov] };
+    const role = b.role === 'minisuper' ? 'minisuper' : 'admin';
+    requireRoleManager_(user, role);
+    const data = { phone: phone, fullName: clean_(b.fullName), position: clean_(b.position), affiliation: clean_(b.affiliation), provinceCode: prov, provinceName: PROVINCES[prov], role: role };
     if (b.accountId) {
       const acc = findRow_('Accounts', r => r.accountId === b.accountId);
       if (!acc) throw new Error('ไม่พบบัญชี');
       requireProvince_(user, acc.provinceCode);
+      requireRoleManager_(user, acc.role);
+      if (acc.accountId === user.sub && role !== acc.role) throw new Error('ไม่สามารถเปลี่ยนบทบาทของตนเองได้');
       updateRow_('Accounts', acc._row, data);
-      audit_(user, 'account_update', b.accountId, prov);
+      audit_(user, 'account_update', b.accountId + ' (' + ACCOUNT_ROLES[role] + ')', prov);
     } else {
       const id = nextAccountId_(prov);
-      appendObj_('Accounts', Object.assign(data, { accountId: id, role: 'admin', status: 'approved', createdAt: now_(), approvedAt: now_(), approvedBy: user.name, lastLoginAt: '' }));
-      audit_(user, 'account_create', id, prov);
+      appendObj_('Accounts', Object.assign(data, { accountId: id, status: 'approved', createdAt: now_(), approvedAt: now_(), approvedBy: user.name, lastLoginAt: '' }));
+      audit_(user, 'account_create', id + ' (' + ACCOUNT_ROLES[role] + ')', prov);
     }
     return { ok: true };
   } finally { lock.releaseLock(); }
@@ -286,6 +304,7 @@ function accountStatus_(user, b) {
   const acc = findRow_('Accounts', r => r.accountId === b.accountId);
   if (!acc) throw new Error('ไม่พบบัญชี');
   requireProvince_(user, acc.provinceCode);
+  requireRoleManager_(user, acc.role);
   if (acc.accountId === user.sub) throw new Error('ไม่สามารถระงับบัญชีของตนเองได้');
   const status = b.status === 'approved' ? 'approved' : 'disabled';
   updateRow_('Accounts', acc._row, { status: status });
@@ -297,6 +316,7 @@ function accountDelete_(user, b) {
   const acc = findRow_('Accounts', r => r.accountId === b.accountId);
   if (!acc) throw new Error('ไม่พบบัญชี');
   requireProvince_(user, acc.provinceCode);
+  requireRoleManager_(user, acc.role);
   if (acc.accountId === user.sub) throw new Error('ไม่สามารถลบบัญชีของตนเองได้');
   sheet_('Accounts').deleteRow(acc._row);
   audit_(user, 'account_delete', acc.accountId + ' ' + acc.fullName, acc.provinceCode);
@@ -487,10 +507,10 @@ function loginReport_(user, b) {
   const days = Math.min(Math.max(Number(b.days) || 30, 1), 365);
   const since = Utilities.formatDate(new Date(Date.now() - days * 864e5), 'Asia/Bangkok', "yyyy-MM-dd'T'HH:mm:ss");
   const all = readAll_('LoginAttempts').filter(r => String(r.time) >= since).map(stripRow_);
-  const rows = all.filter(r => user.role === 'superadmin' || (r.role === 'admin' && String(r.provinceCode) === user.prov))
-    .map(r => Object.assign(r, { identifier: r.role === 'admin' ? normalizePhone_(r.identifier) || r.identifier : r.identifier, resultLabel: LOGIN_RESULTS[r.result] || r.result }));
+  const rows = all.filter(r => user.role === 'superadmin' || (user.role === 'minisuper' && r.role !== 'superadmin') || (r.role === 'admin' && String(r.provinceCode) === user.prov))
+    .map(r => Object.assign(r, { identifier: r.role !== 'superadmin' ? normalizePhone_(r.identifier) || r.identifier : r.identifier, resultLabel: LOGIN_RESULTS[r.result] || r.result }));
   const unknownMap = {};
-  if (user.role === 'superadmin') {
+  if (isNational_(user)) {
     all.filter(r => r.result === 'not_found').forEach(r => {
       const k = normalizePhone_(r.identifier) || String(r.identifier);
       const u = unknownMap[k] || (unknownMap[k] = { phone: k, attempts: 0, firstAt: r.time, lastAt: r.time });
@@ -510,7 +530,7 @@ function loginReport_(user, b) {
 /* ============================== SETTINGS / AUDIT ============================== */
 function setting_(key) { const r = findRow_('Settings', x => x.key === key); return r ? String(r.value || '') : ''; }
 function settingsSave_(user, b) {
-  requireSuper_(user);
+  requireNational_(user);
   const url = String(b.guideUrl || '').trim();
   if (url && !/^https:\/\//.test(url)) throw new Error('ลิงก์ต้องขึ้นต้นด้วย https://');
   const r = findRow_('Settings', x => x.key === 'guide_url');
