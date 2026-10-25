@@ -64,8 +64,8 @@
   .modal { @apply fixed inset-0 z-[2000] grid place-items-center bg-ink/50 p-4; }
   .modal.hidden { display: none; }
   .modal-card { @apply max-h-[92vh] overflow-y-auto rounded-2xl bg-white shadow-2xl; }
-  .modal-right { @apply place-items-stretch justify-items-end p-0; }
-  .drawer { @apply flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl; }
+  .modal-right { @apply place-items-stretch justify-items-end p-0; grid-template-columns: minmax(0, 1fr); }
+  .drawer { @apply flex h-full w-full min-w-0 max-w-3xl flex-col overflow-hidden bg-white shadow-2xl; }
 
   .tabs { @apply grid grid-cols-2 gap-1 rounded-xl bg-paper p-1; }
   .tab { @apply rounded-lg px-3 py-2 text-center text-sm font-semibold text-ink-soft transition; }
