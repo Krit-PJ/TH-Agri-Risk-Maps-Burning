@@ -102,5 +102,5 @@ npm run build:css
 ## ที่มาของข้อมูล
 
 * ขอบเขตการปกครอง: [OpenGISData-Thailand](https://github.com/chingchai/OpenGISData-Thailand) (CC BY 4.0) ข้อมูลต้นทาง กรมการปกครอง
-* แผนที่ฐาน: © OpenStreetMap contributors, © CARTO, Esri, OpenTopoMap
+* แผนที่ฐาน: Esri (World Street Map, World Imagery, Light Gray Canvas), © OpenStreetMap contributors, OpenTopoMap
 * จุดความร้อน: NASA FIRMS VIIRS (นำเข้าโดยผู้ดูแลจังหวัด)
