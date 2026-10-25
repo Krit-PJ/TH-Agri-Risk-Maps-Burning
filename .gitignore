@@ -1,12 +1,5 @@
-**/state/
-**/*-state/
-**/access-state.json
-**/accounts.json
-**/provider-secrets.json
-**/google-tokens.json
-**/.env*
-*.zip
-.superpowers/
-.private/
-.clasp.json
 node_modules/
+.DS_Store
+Thumbs.db
+*.log
+backend/Secrets.gs

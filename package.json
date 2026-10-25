@@ -1,11 +1,12 @@
 {
-  "name": "th-agri-risk-maps-burning",
+  "name": "agri-risk-map-burning",
+  "version": "3.0.0",
   "private": true,
+  "description": "Agri-Risk Map Burning — ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่เกษตร (ระดับประเทศ เลือกรายจังหวัด)",
   "scripts": {
-    "build:css": "tailwindcss -i ./src/tailwind.css -o ./assets/tailwind.css --minify",
-    "test": "node --test tests/*.test.cjs"
+    "build:css": "tailwindcss -c tailwind.config.js -i css/src.css -o css/app.css --minify",
+    "watch:css": "tailwindcss -c tailwind.config.js -i css/src.css -o css/app.css --watch"
   },
-  "devDependencies": {
-    "tailwindcss": "3.4.17"
-  }
+  "devDependencies": { "tailwindcss": "^3.4.19" },
+  "license": "UNLICENSED"
 }

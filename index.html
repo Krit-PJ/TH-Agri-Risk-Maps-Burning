@@ -1,53 +1,470 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Thailand Agri-Risk Map Burning | แผนที่ความเสี่ยงการเผา</title>
-  <meta name="theme-color" content="#0f172a">
-  <meta name="description" content="ระบบกลางเพื่อใช้ข้อมูลจุดความร้อนชี้เป้าและจัดลำดับพื้นที่เสี่ยงการเผาในพื้นที่เกษตรของประเทศไทย">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="assets/tailwind.css?v=20261024-rebuild">
-  <link rel="stylesheet" href="app/css/landing.css?v=20261024-rebuild">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="theme-color" content="#1f6f43"/>
+<meta name="description" content="ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่เกษตร ระดับจังหวัด กรมส่งเสริมการเกษตร"/>
+<title>Agri-Risk Map Burning | ระบบเฝ้าระวังความเสี่ยงการเผาในพื้นที่เกษตร</title>
+<link rel="icon" type="image/png" href="assets/logo-doae.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<link rel="stylesheet" href="css/app.css"/>
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
-  <a class="skip-link" href="#main">ข้ามไปยังเนื้อหาหลัก</a>
-  <header class="border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
-    <div class="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-4 px-4 py-3 lg:px-8">
-      <a class="flex min-w-0 items-center gap-3 no-underline" href="./" aria-label="หน้าแรก Thailand Agri-Risk Map Burning">
-        <img class="h-14 w-14 shrink-0 object-contain" src="app/assets/logo-doae.png" alt="ตรากรมส่งเสริมการเกษตร" width="56" height="56">
-        <span class="min-w-0"><strong class="block truncate text-lg font-extrabold tracking-tight text-slate-900 lg:text-xl">Thailand Agri-Risk Map Burning</strong><small class="block text-sm font-medium text-slate-600">ระบบชี้เป้าพื้นที่เสี่ยงการเผาในพื้นที่เกษตร</small></span>
-      </a>
-      <div class="flex flex-wrap items-center justify-end gap-2">
-        <div class="font-controls flex items-center rounded-xl border border-slate-300 bg-white p-1" role="group" aria-label="ปรับขนาดตัวอักษร"><button type="button" data-font-size="small" aria-label="ตัวอักษรขนาดเล็ก">ก−</button><button type="button" data-font-size="medium" aria-label="ตัวอักษรขนาดกลาง" aria-pressed="true">ก</button><button type="button" data-font-size="large" aria-label="ตัวอักษรขนาดใหญ่">ก+</button></div>
-        <a class="partner-button hidden sm:inline-flex" href="https://krit-pj.github.io/agri-hs-verification/" target="_blank" rel="noopener noreferrer">ตรวจสอบจุดความร้อน</a>
-        <a class="partner-button hidden md:inline-flex" href="https://krit-pj.github.io/Green_Gain_Hub-KPP/" target="_blank" rel="noopener noreferrer">Green Gain Hub</a>
-        <a id="staff-app" class="login-button" href="#" aria-disabled="true">เข้าสู่ระบบ</a>
+<body class="bg-paper font-sans text-ink antialiased">
+
+<!-- ============================ HEADER ============================ -->
+<header id="app-header" class="no-print relative z-[1100] bg-brand-800 text-white">
+  <div class="flex items-center gap-3 px-3 py-2 sm:px-5">
+    <img src="assets/logo-doae.png" alt="ตรากรมส่งเสริมการเกษตร" class="h-11 w-11 shrink-0 rounded-full bg-white p-0.5 sm:h-12 sm:w-12"/>
+    <div class="min-w-0 flex-1">
+      <h1 class="truncate text-lg font-bold leading-tight sm:text-xl">Agri-Risk Map Burning</h1>
+      <p class="truncate text-[13px] text-brand-100 sm:text-sm">ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่เกษตร<span id="header-province" class="font-semibold text-white"></span></p>
+    </div>
+    <nav class="flex items-center gap-1.5" aria-label="เมนูหลัก">
+      <span id="last-updated" class="hidden rounded-md bg-brand-900/60 px-2.5 py-1.5 text-xs text-brand-100 xl:inline">ข้อมูลล่าสุด: -</span>
+      <div id="ext-links" class="hidden items-center gap-1.5 lg:flex"></div>
+      <button id="btn-links-menu" type="button" class="hdr-btn lg:hidden" aria-haspopup="true" aria-expanded="false" title="ลิงก์ระบบที่เกี่ยวข้อง">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+        <span class="sr-only">ลิงก์ระบบที่เกี่ยวข้อง</span>
+      </button>
+      <button id="btn-print" type="button" class="hdr-btn hidden" title="พิมพ์รายงาน A4">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7" rx="1"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/></svg>
+        <span class="hidden sm:inline">พิมพ์รายงาน</span>
+      </button>
+      <button id="btn-login" type="button" class="hdr-btn hdr-btn-solid" aria-haspopup="dialog">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
+        <span>เข้าสู่ระบบ</span>
+      </button>
+      <div id="user-menu" class="relative hidden">
+        <button id="btn-user" type="button" class="hdr-btn hdr-btn-solid max-w-[220px]" aria-haspopup="true" aria-expanded="false">
+          <span class="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-600 text-xs font-bold" id="user-initial">A</span>
+          <span id="user-label" class="hidden truncate sm:inline">ผู้ดูแล</span>
+        </button>
+        <div id="user-dropdown" class="dropdown hidden right-0 w-64">
+          <div class="border-b border-line px-4 py-3">
+            <p id="user-name" class="truncate font-semibold text-ink">-</p>
+            <p id="user-scope" class="text-xs text-ink-soft">-</p>
+          </div>
+          <button type="button" id="btn-open-console" class="dropdown-item">แผงผู้ดูแลระบบ</button>
+          <button type="button" id="btn-logout" class="dropdown-item text-red-700">ออกจากระบบ</button>
+        </div>
+      </div>
+      <div id="links-dropdown" class="dropdown hidden right-2 top-14 w-72"></div>
+    </nav>
+  </div>
+</header>
+
+<!-- ============================ PERIOD BAR (province mode) ============================ -->
+<section id="period-bar" class="no-print hidden border-b border-line bg-white">
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 sm:px-5">
+    <button id="btn-back-national" type="button" class="btn-ghost">
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      เปลี่ยนจังหวัด
+    </button>
+    <div class="flex items-center gap-2">
+      <span class="text-sm text-ink-soft">จังหวัด</span>
+      <strong id="province-title" class="text-base text-brand-800">-</strong>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 text-sm" aria-label="ช่วงข้อมูลจุดความร้อนสะสม">
+      <span class="text-ink-soft">ช่วงข้อมูล HS ตั้งแต่</span>
+      <select id="range-start-month" class="field-sm" aria-label="เดือนเริ่มต้น"></select>
+      <select id="range-start-year" class="field-sm" aria-label="ปีเริ่มต้น"></select>
+      <span class="text-ink-soft">ถึง</span>
+      <select id="range-end-month" class="field-sm" aria-label="เดือนสิ้นสุด"></select>
+      <select id="range-end-year" class="field-sm" aria-label="ปีสิ้นสุด"></select>
+      <button id="btn-apply-period" type="button" class="btn-primary btn-sm">แสดงข้อมูล</button>
+    </div>
+    <p id="timeline-status" class="text-sm text-ink-soft" role="status" aria-live="polite"></p>
+  </div>
+</section>
+
+<!-- ============================ MAIN ============================ -->
+<div id="app-body" class="relative flex min-h-0 flex-1">
+
+  <!-- LEFT: national picker OR province layer controls -->
+  <aside id="left-panel" class="side-panel no-print" aria-label="แผงควบคุม">
+
+    <!-- National: province picker -->
+    <div id="national-panel" class="flex h-full flex-col">
+      <div class="border-b border-line p-4">
+        <h2 class="text-base font-bold text-brand-800">เลือกจังหวัด</h2>
+        <p class="mt-1 text-sm leading-relaxed text-ink-soft">แสดงเฉพาะจังหวัดที่มีข้อมูลจุดความร้อน (HS) คลิกที่แผนที่หรือเลือกจากรายการ</p>
+        <label class="relative mt-3 block">
+          <span class="sr-only">ค้นหาจังหวัด</span>
+          <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input id="province-search" type="search" class="field w-full pl-9" placeholder="ค้นหาจังหวัด" autocomplete="off"/>
+        </label>
+      </div>
+      <ul id="province-list" class="min-h-0 flex-1 overflow-y-auto p-2" aria-label="จังหวัดที่มีข้อมูล HS"></ul>
+      <div id="province-list-foot" class="border-t border-line px-4 py-3 text-xs text-ink-soft"></div>
+    </div>
+
+    <!-- Province: controls (template layers & filters) -->
+    <div id="province-panel" class="hidden h-full overflow-y-auto">
+      <section class="panel-sec">
+        <h3 class="panel-h">ชั้นข้อมูล</h3>
+        <p class="panel-sub">ขอบเขตการปกครอง</p>
+        <label class="toggle"><input id="lyr-province" type="checkbox" checked/> จังหวัด</label>
+        <label class="toggle"><input id="lyr-district" type="checkbox" checked/> อำเภอ</label>
+        <label class="toggle"><input id="lyr-subdistrict" type="checkbox"/> ตำบล</label>
+        <p class="panel-sub mt-3">ข้อมูลวิเคราะห์</p>
+        <label class="toggle"><input id="lyr-hotspot" type="checkbox" checked/> จุดความร้อน (HS) ตามช่วงที่เลือก</label>
+        <label class="toggle"><input id="lyr-risk" type="checkbox" checked/> แผนที่ระดับความเสี่ยง</label>
+      </section>
+
+      <section class="panel-sec">
+        <h3 class="panel-h">เลือกพื้นที่วิเคราะห์</h3>
+        <label class="field-label" for="filter-district">อำเภอ</label>
+        <select id="filter-district" class="field w-full"><option value="">ทุกอำเภอ</option></select>
+        <label class="field-label mt-2" for="filter-subdistrict">ตำบล</label>
+        <select id="filter-subdistrict" class="field w-full" disabled><option value="">เลือกอำเภอก่อน</option></select>
+        <label class="field-label mt-2" for="filter-crop">ชนิดพืช (PlantType)</label>
+        <select id="filter-crop" class="field w-full"><option value="">ทุกชนิดพืช</option></select>
+        <div class="mt-3 flex gap-2">
+          <button id="btn-reset-filter" type="button" class="btn-ghost btn-sm flex-1 justify-center">ล้างตัวกรอง</button>
+        </div>
+      </section>
+
+      <section class="panel-sec">
+        <h3 class="panel-h">แผนที่ฐาน</h3>
+        <div class="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="แผนที่ฐาน">
+          <label class="chip"><input type="radio" name="basemap" value="voyager" checked/> แผนที่ถนน</label>
+          <label class="chip"><input type="radio" name="basemap" value="satellite"/> ภาพดาวเทียม</label>
+          <label class="chip"><input type="radio" name="basemap" value="topo"/> ภูมิประเทศ</label>
+          <label class="chip"><input type="radio" name="basemap" value="osm"/> OpenStreetMap</label>
+        </div>
+      </section>
+
+      <section class="panel-sec" id="risk-methodology">
+        <h3 class="panel-h">เกณฑ์ระดับความเสี่ยง</h3>
+        <ul class="space-y-1.5 text-sm" id="risk-criteria"></ul>
+        <p class="mt-2 text-xs leading-relaxed text-ink-soft">ช่วงข้อมูล 1 ฤดูกาล (ต.ค.–ก.ย.) ใช้แบบจำลองหลักฐานรายปี; มากกว่า 1 ฤดูกาลใช้ Multi-year Model A (HS 40% · แนวโน้ม 20% · ชนิดพืช 20% · ขนาดพื้นที่ 20%)</p>
+        <a id="risk-guide-link" class="btn-ghost btn-sm mt-3 hidden w-full justify-center" target="_blank" rel="noopener noreferrer">คู่มือการประเมินความเสี่ยง</a>
+      </section>
+    </div>
+  </aside>
+
+  <!-- CENTER: map -->
+  <main id="map-container" class="relative min-w-0 flex-1">
+    <div id="map" class="absolute inset-0" role="application" aria-label="แผนที่"></div>
+    <div id="map-legend" class="map-card no-print absolute bottom-4 left-4 z-[500] hidden"></div>
+    <div id="map-hint" class="map-card no-print absolute left-1/2 top-4 z-[500] -translate-x-1/2 px-4 py-2 text-sm"></div>
+    <div id="map-loading" class="no-print absolute inset-0 z-[600] hidden place-items-center bg-white/60">
+      <div class="map-card flex items-center gap-3 px-5 py-3 text-sm"><span class="spinner"></span><span id="map-loading-text">กำลังโหลดข้อมูล…</span></div>
+    </div>
+  </main>
+
+  <!-- RIGHT: dashboard (province mode) -->
+  <aside id="right-panel" class="side-panel side-right no-print hidden" aria-label="สรุปผล">
+    <div class="space-y-3 p-3">
+      <div id="summary-cards" class="grid grid-cols-2 gap-2"></div>
+
+      <section class="dash-card" id="hotspot-comparison-box">
+        <div class="mb-2 flex flex-wrap items-baseline justify-between gap-1">
+          <h4 id="title-comparison" class="dash-h">เปรียบเทียบ HS รายอำเภอ</h4>
+          <span id="comparison-period" class="text-xs text-ink-soft">-</span>
+        </div>
+        <div class="max-h-72 overflow-auto">
+          <table id="tbl-hotspot-comparison" class="data-table">
+            <thead><tr><th id="comparison-area-header">อำเภอ</th><th class="num">ช่วงเดียวกันปีก่อน</th><th class="num">ช่วงที่เลือก</th><th class="num">เพิ่ม/ลด</th></tr></thead>
+            <tbody></tbody>
+            <tfoot><tr><th>รวม</th><th class="num" id="comparison-previous-total">0</th><th class="num" id="comparison-current-total">0</th><th class="num" id="comparison-change-total">0%</th></tr></tfoot>
+          </table>
+        </div>
+      </section>
+
+      <section class="dash-card">
+        <h4 id="title-trend" class="dash-h mb-2">จำนวน HS รายเดือน</h4>
+        <div class="h-40"><canvas id="chart-trend"></canvas></div>
+      </section>
+
+      <section class="dash-card">
+        <h4 id="title-top5" class="dash-h mb-2">5 อันดับอำเภอที่มี HS สูงสุด</h4>
+        <div class="h-44"><canvas id="chart-top-district"></canvas></div>
+      </section>
+
+      <section class="dash-card">
+        <h4 id="title-risk" class="dash-h mb-2">สัดส่วนระดับความเสี่ยง</h4>
+        <div class="grid grid-cols-[1fr_1fr] items-center gap-3">
+          <div class="h-36"><canvas id="chart-risk"></canvas></div>
+          <div id="risk-legend-list" class="space-y-1.5"></div>
+        </div>
+      </section>
+
+      <section class="dash-card">
+        <h4 id="title-top10" class="dash-h mb-2">ทุกอำเภอ เรียงตาม HS</h4>
+        <div class="max-h-80 overflow-auto">
+          <table id="tbl-top-district" class="data-table">
+            <thead><tr><th class="num w-8">#</th><th id="rank-area-header">อำเภอ</th><th class="num">HS</th><th>ความเสี่ยง</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <div id="mobile-overlay" class="no-print fixed inset-0 z-[1140] hidden bg-ink/40"></div>
+</div>
+
+<!-- mobile toolbar -->
+<div id="mobile-toolbar" class="no-print fixed bottom-3 left-1/2 z-[1050] flex -translate-x-1/2 gap-2 md:hidden">
+  <button id="mobile-toggle-left" type="button" class="btn-primary shadow-panel">รายการจังหวัด</button>
+  <button id="mobile-toggle-right" type="button" class="btn-primary hidden shadow-panel">สรุปผล</button>
+</div>
+
+<!-- ============================ FOOTER ============================ -->
+<footer id="app-footer" class="no-print border-t border-line bg-white pb-14 text-sm md:pb-0">
+  <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 px-3 py-2 sm:px-5">
+    <p class="text-ink-soft">© <span id="footer-year">2569</span> copyright By Dr. Kitti PhoJuang กรมส่งเสริมการเกษตร</p>
+    <div id="visitor-counter" class="flex items-center gap-2 text-ink-soft" aria-live="polite" title="นับจากการเข้าใช้งานจริง 1 ครั้งต่อการเปิดเบราว์เซอร์">
+      <svg class="h-4 w-4 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span>ผู้เข้าใช้งาน</span>
+      <strong id="counter-total" class="tabular-nums text-ink">-</strong>
+      <span>ครั้ง</span>
+      <span class="mx-1 h-3 w-px bg-line"></span>
+      <span>วันนี้</span>
+      <strong id="counter-today" class="tabular-nums text-ink">-</strong>
+    </div>
+  </div>
+</footer>
+
+<!-- ============================ LOGIN MODAL ============================ -->
+<div id="login-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="login-title">
+  <div class="modal-card w-full max-w-md">
+    <div class="flex items-start justify-between border-b border-line px-5 py-4">
+      <div>
+        <h2 id="login-title" class="text-lg font-bold text-brand-800">เข้าสู่ระบบ</h2>
+        <p class="text-sm text-ink-soft">เลือกบทบาทที่ต้องการเข้าใช้งาน</p>
+      </div>
+      <button type="button" class="icon-btn" data-close-modal aria-label="ปิด">✕</button>
+    </div>
+    <div class="px-5 pt-4">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" class="tab is-active" data-login-tab="admin" aria-selected="true">Admin<span class="block text-xs font-normal">ผู้ดูแลระดับจังหวัด</span></button>
+        <button type="button" role="tab" class="tab" data-login-tab="super" aria-selected="false">Super Admin<span class="block text-xs font-normal">ผู้ดูแลทั้งระบบ</span></button>
       </div>
     </div>
+
+    <!-- Admin: phone only -->
+    <form id="form-admin" class="space-y-3 px-5 py-4" autocomplete="off" data-login-pane="admin">
+      <label class="field-label" for="admin-phone">เบอร์โทรศัพท์ที่ได้รับอนุญาต</label>
+      <input id="admin-phone" class="field w-full text-lg tracking-wide" type="tel" inputmode="numeric" placeholder="08x-xxx-xxxx" maxlength="12" required/>
+      <button type="submit" class="btn-primary w-full justify-center">เข้าสู่ระบบ</button>
+      <p class="text-center text-sm text-ink-soft">ยังไม่มีสิทธิ์ใช้งาน? <button type="button" id="btn-show-register" class="font-semibold text-brand-700 underline underline-offset-2">ขออนุญาตใช้งาน</button></p>
+    </form>
+
+    <!-- Admin: registration request -->
+    <form id="form-register" class="hidden space-y-2.5 px-5 py-4" autocomplete="off" data-login-pane="register">
+      <p class="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-800">คำขอจะส่งถึงผู้ดูแลจังหวัดหรือ Super Admin เพื่อพิจารณาอนุมัติ เมื่ออนุมัติแล้วเข้าสู่ระบบด้วยเบอร์โทรศัพท์นี้</p>
+      <label class="field-label" for="reg-phone">เบอร์โทรศัพท์</label>
+      <input id="reg-phone" class="field w-full" type="tel" inputmode="numeric" placeholder="08x-xxx-xxxx" maxlength="12" required/>
+      <label class="field-label" for="reg-name">ชื่อ-นามสกุล</label>
+      <input id="reg-name" class="field w-full" type="text" required maxlength="120"/>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="field-label" for="reg-position">ตำแหน่ง</label><input id="reg-position" class="field w-full" type="text" maxlength="120"/></div>
+        <div><label class="field-label" for="reg-province">จังหวัด</label><select id="reg-province" class="field w-full" required></select></div>
+      </div>
+      <label class="field-label" for="reg-affiliation">สังกัด/หน่วยงาน</label>
+      <input id="reg-affiliation" class="field w-full" type="text" maxlength="160"/>
+      <div class="flex gap-2 pt-1">
+        <button type="button" id="btn-hide-register" class="btn-ghost flex-1 justify-center">ย้อนกลับ</button>
+        <button type="submit" class="btn-primary flex-1 justify-center">ส่งคำขอ</button>
+      </div>
+    </form>
+
+    <!-- Super Admin -->
+    <form id="form-super" class="hidden space-y-3 px-5 py-4" autocomplete="off" data-login-pane="super">
+      <label class="field-label" for="super-user">ชื่อผู้ใช้</label>
+      <input id="super-user" class="field w-full" type="text" autocomplete="username" required/>
+      <label class="field-label" for="super-pass">รหัสผ่าน</label>
+      <input id="super-pass" class="field w-full" type="password" autocomplete="current-password" required/>
+      <button type="submit" class="btn-primary w-full justify-center">เข้าสู่ระบบ</button>
+    </form>
+    <p id="login-status" class="min-h-[1.5rem] px-5 pb-4 text-sm" role="status" aria-live="polite"></p>
+  </div>
+</div>
+
+<!-- ============================ ADMIN CONSOLE (drawer) ============================ -->
+<div id="console" class="modal modal-right hidden" role="dialog" aria-modal="true" aria-labelledby="console-title">
+  <div class="drawer">
+    <div class="flex items-center justify-between border-b border-line bg-brand-800 px-5 py-3 text-white">
+      <div class="min-w-0">
+        <h2 id="console-title" class="text-lg font-bold">แผงผู้ดูแลระบบ</h2>
+        <p id="console-scope" class="truncate text-sm text-brand-100">-</p>
+      </div>
+      <button type="button" class="icon-btn text-white hover:bg-white/10" data-close-modal aria-label="ปิด">✕</button>
+    </div>
+    <div class="border-b border-line px-3">
+      <div class="tabs-line" role="tablist" id="console-tabs">
+        <button type="button" class="tab-line is-active" data-tab="import">นำเข้า HS</button>
+        <button type="button" class="tab-line" data-tab="batches">ชุดข้อมูล</button>
+        <button type="button" class="tab-line" data-tab="requests">คำขอใช้งาน <span id="badge-requests" class="badge hidden">0</span></button>
+        <button type="button" class="tab-line" data-tab="accounts">ผู้ดูแลจังหวัด</button>
+        <button type="button" class="tab-line" data-tab="logins">รายงานการเข้าใช้</button>
+        <button type="button" class="tab-line" data-tab="audit">ประวัติการใช้งาน</button>
+        <button type="button" class="tab-line super-only hidden" data-tab="settings">ตั้งค่าระบบ</button>
+      </div>
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto p-5">
+
+      <!-- Import -->
+      <section data-pane="import" class="space-y-4">
+        <div>
+          <h3 class="text-base font-bold">นำเข้าข้อมูลจุดความร้อน (HS) จาก Excel</h3>
+          <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ระบบอ่านคอลัมน์ Province แล้วแยกข้อมูลรายจังหวัดให้อัตโนมัติ คัดเฉพาะ LandType = พื้นที่เกษตร ตัดรายการซ้ำ และตรวจยอดกับชีต hsPlant (ถ้ามี)</p>
+        </div>
+        <div id="import-scope" class="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800"></div>
+        <div><label class="field-label" for="import-file">ไฟล์ข้อมูล</label><input id="import-file" type="file" accept=".xlsx,.xls,.csv" class="field w-full file:mr-3 file:rounded file:border-0 file:bg-brand-50 file:px-2 file:py-1 file:text-brand-800"/></div>
+        <div id="import-provinces" class="hidden"></div>
+        <div class="flex flex-wrap gap-2">
+          <button id="btn-import-save" type="button" class="btn-primary" disabled>บันทึกเข้าฐานข้อมูล</button>
+        </div>
+        <div id="import-progress" class="hidden h-2 overflow-hidden rounded-full bg-line"><div class="h-full w-0 bg-brand-600 transition-all"></div></div>
+        <div id="import-status" class="text-sm" role="status" aria-live="polite"></div>
+        <div id="import-preview" class="space-y-3"></div>
+      </section>
+
+      <!-- Batches -->
+      <section data-pane="batches" class="hidden space-y-3">
+        <div class="flex flex-wrap items-end justify-between gap-2">
+          <div><h3 class="text-base font-bold">ชุดข้อมูลที่นำเข้า</h3><p class="text-sm text-ink-soft">ลบชุดข้อมูลที่นำเข้าผิดพลาดได้ทีละชุด</p></div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="batches-province" class="field-sm super-only hidden" aria-label="จังหวัด"></select>
+            <button id="btn-clear-province" type="button" class="btn-danger btn-sm">ล้างข้อมูล HS ทั้งจังหวัด</button>
+          </div>
+        </div>
+        <div id="batches-list"></div>
+      </section>
+
+      <!-- Requests -->
+      <section data-pane="requests" class="hidden space-y-3">
+        <div class="flex flex-wrap items-end justify-between gap-2">
+          <div><h3 class="text-base font-bold">คำขออนุญาตใช้งาน</h3><p class="text-sm text-ink-soft">อนุมัติแล้วผู้ขอเข้าสู่ระบบด้วยเบอร์โทรศัพท์ได้ทันที</p></div>
+          <select id="requests-filter" class="field-sm"><option value="pending">รออนุมัติ</option><option value="approved">อนุมัติแล้ว</option><option value="rejected">ไม่อนุมัติ</option><option value="all">ทั้งหมด</option></select>
+        </div>
+        <div id="requests-list"></div>
+      </section>
+
+      <!-- Accounts -->
+      <section data-pane="accounts" class="hidden space-y-3">
+        <div><h3 class="text-base font-bold">ผู้ดูแลระดับจังหวัด (Admin)</h3><p class="text-sm text-ink-soft">เพิ่ม แก้ไข ระงับ หรือลบสิทธิ์ ระบบเก็บเบอร์โทรเป็นข้อความเพื่อคงเลข 0 นำหน้า</p></div>
+        <form id="form-account" class="grid gap-2 rounded-xl border border-line p-3 sm:grid-cols-2">
+          <input type="hidden" id="acc-id"/>
+          <div><label class="field-label" for="acc-phone">เบอร์โทรศัพท์</label><input id="acc-phone" class="field w-full" type="tel" inputmode="numeric" required maxlength="12"/></div>
+          <div><label class="field-label" for="acc-name">ชื่อ-นามสกุล</label><input id="acc-name" class="field w-full" required maxlength="120"/></div>
+          <div><label class="field-label" for="acc-position">ตำแหน่ง</label><input id="acc-position" class="field w-full" maxlength="120"/></div>
+          <div><label class="field-label" for="acc-province">จังหวัด</label><select id="acc-province" class="field w-full"></select></div>
+          <div class="sm:col-span-2"><label class="field-label" for="acc-affiliation">สังกัด/หน่วยงาน</label><input id="acc-affiliation" class="field w-full" maxlength="160"/></div>
+          <div class="flex gap-2 sm:col-span-2">
+            <button type="submit" class="btn-primary" id="btn-acc-save">เพิ่มผู้ดูแล</button>
+            <button type="button" class="btn-ghost hidden" id="btn-acc-cancel">ยกเลิกการแก้ไข</button>
+          </div>
+        </form>
+        <div id="accounts-list"></div>
+      </section>
+
+      <!-- Login attempts -->
+      <section data-pane="logins" class="hidden space-y-4">
+        <div class="flex flex-wrap items-end justify-between gap-2">
+          <div><h3 class="text-base font-bold">รายงานการพยายามเข้าใช้งาน</h3><p id="logins-scope" class="text-sm text-ink-soft">บันทึกทุกครั้งที่มีการกดเข้าสู่ระบบ รวมหมายเลขที่ไม่มีในระบบ (ไม่บันทึกรหัสผ่าน)</p></div>
+          <div class="flex gap-2">
+            <select id="logins-days" class="field-sm" aria-label="ช่วงเวลา"><option value="7">7 วัน</option><option value="30" selected>30 วัน</option><option value="90">90 วัน</option><option value="365">1 ปี</option></select>
+            <select id="logins-result" class="field-sm" aria-label="ผลการเข้าใช้"><option value="">ทุกผล</option><option value="success">สำเร็จ</option><option value="not_found">ไม่มีหมายเลขในระบบ</option><option value="pending">รออนุมัติ</option><option value="disabled">บัญชีถูกระงับ</option><option value="wrong_credentials">Super Admin รหัสผิด</option><option value="invalid">รูปแบบไม่ถูกต้อง</option></select>
+          </div>
+        </div>
+        <div id="logins-summary" class="grid grid-cols-2 gap-2 sm:grid-cols-4"></div>
+        <div id="logins-unknown" class="super-only hidden"></div>
+        <div id="logins-list"></div>
+      </section>
+
+      <!-- Audit -->
+      <section data-pane="audit" class="hidden space-y-3">
+        <h3 class="text-base font-bold">ประวัติการใช้งาน</h3>
+        <div id="audit-list"></div>
+      </section>
+
+      <!-- Settings (super only) -->
+      <section data-pane="settings" class="hidden space-y-3">
+        <h3 class="text-base font-bold">ตั้งค่าระบบ</h3>
+        <form id="form-settings" class="space-y-2">
+          <label class="field-label" for="set-guide">ลิงก์คู่มือการประเมินความเสี่ยง (เว้นว่างเพื่อซ่อนปุ่ม)</label>
+          <input id="set-guide" class="field w-full" type="url" placeholder="https://drive.google.com/…"/>
+          <button type="submit" class="btn-primary">บันทึกการตั้งค่า</button>
+        </form>
+      </section>
+      <p id="console-status" class="mt-4 text-sm" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+</div>
+
+<!-- confirm dialog -->
+<div id="confirm-modal" class="modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div class="modal-card w-full max-w-sm p-5">
+    <h2 id="confirm-title" class="text-base font-bold">ยืนยัน</h2>
+    <p id="confirm-text" class="mt-2 text-sm leading-relaxed text-ink-soft"></p>
+    <input id="confirm-input" class="field mt-3 hidden w-full"/>
+    <div class="mt-4 flex justify-end gap-2">
+      <button type="button" class="btn-ghost" id="confirm-no">ยกเลิก</button>
+      <button type="button" class="btn-danger" id="confirm-yes">ยืนยัน</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="no-print pointer-events-none fixed bottom-16 left-1/2 z-[3000] hidden -translate-x-1/2 rounded-lg px-4 py-2.5 text-sm text-white shadow-panel"></div>
+
+<!-- ============================ PRINT REPORT (A4 landscape) ============================ -->
+<section id="print-report" aria-hidden="true">
+  <header class="pr-head">
+    <img src="assets/logo-doae.png" alt="" class="pr-logo"/>
+    <div class="pr-title">
+      <h1>รายงานความเสี่ยงการเผาในพื้นที่เกษตร <span id="pr-province">-</span></h1>
+      <p>Agri-Risk Map Burning ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่เกษตร กรมส่งเสริมการเกษตร</p>
+    </div>
+    <dl class="pr-meta">
+      <div><dt>ขอบเขต</dt><dd id="pr-scope">-</dd></div>
+      <div><dt>ช่วงข้อมูล HS</dt><dd id="pr-period">-</dd></div>
+      <div><dt>ข้อมูลล่าสุด</dt><dd id="pr-updated">-</dd></div>
+      <div><dt>วันที่พิมพ์</dt><dd id="pr-date">-</dd></div>
+    </dl>
   </header>
-  <main id="main" class="mx-auto max-w-screen-2xl px-4 py-5 lg:px-8 lg:py-7">
-    <section class="mb-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end" aria-labelledby="page-title">
-      <div><p class="mb-2 text-sm font-bold uppercase tracking-wider text-indigo-700">ข้อมูลเพื่อการตัดสินใจเชิงพื้นที่</p><h1 id="page-title" class="m-0 max-w-5xl text-3xl font-extrabold leading-tight tracking-tight text-slate-950 md:text-4xl">เลือกจังหวัด เพื่อดูพื้นที่เสี่ยงและจัดลำดับการทำงาน</h1><p class="mt-3 max-w-4xl text-base leading-7 text-slate-600">แผนที่แสดงขอบเขตครบ 77 จังหวัด และเปิดข้อมูลเฉพาะจังหวัดที่มีจุดความร้อน (HS) พร้อมใช้งานแล้ว</p></div>
-      <dl class="grid grid-cols-3 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="สถานะข้อมูล"><div class="summary-cell"><dt>77</dt><dd>จังหวัด</dd></div><div class="summary-cell"><dt id="active-count">—</dt><dd>มีข้อมูล HS</dd></div><div class="summary-cell"><dt id="hs-count">—</dt><dd>จุดในระบบ</dd></div></dl>
-    </section>
-    <section class="grid min-h-[680px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10 lg:grid-cols-[370px_minmax(0,1fr)]" aria-labelledby="map-title">
-      <aside class="relative z-10 flex flex-col border-b border-slate-200 bg-white p-5 lg:border-b-0 lg:border-r lg:p-7">
-        <p class="mb-2 text-sm font-bold text-indigo-700">แผนที่ประเทศไทย</p><h2 id="map-title" class="m-0 text-2xl font-extrabold leading-snug text-slate-950">จังหวัดที่มีข้อมูลพร้อมใช้งาน</h2><p class="mt-3 text-sm leading-6 text-slate-600">ขอบเขตสีจางใช้เพื่อระบุตำแหน่งเท่านั้น ไม่ใช่ระดับความเสี่ยง และยังมองเห็นแผนที่ฐานได้ชัดเจน</p>
-        <label class="mt-6 text-sm font-bold text-slate-800" for="province-select">เลือกจังหวัด</label><select id="province-select" class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 font-semibold text-slate-900 shadow-sm focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-100" disabled><option value="">กำลังตรวจสอบชุดข้อมูล…</option></select>
-        <p id="province-status" class="mt-3 min-h-12 text-sm leading-6 text-slate-600" role="status" aria-live="polite">ระบบจะแสดงเฉพาะจังหวัดที่มีข้อมูล HS ผ่านการเผยแพร่</p><a id="open-map" class="primary-action mt-2" href="app/" aria-disabled="true">เปิดแผนที่และรายงาน <span aria-hidden="true">→</span></a>
-        <div class="mt-6 rounded-2xl bg-slate-100 p-4 text-sm text-slate-600"><strong class="block text-slate-900">วิธีใช้งาน</strong><ol class="mt-2 list-decimal space-y-1 pl-5"><li>เลือกจังหวัดจากรายการหรือแตะขอบเขตสีน้ำเงิน</li><li>ระบบจะเชื่อมข้อมูล HS และผลประเมินของจังหวัดนั้น</li><li>พิมพ์รายงานจากหน้าผลลัพธ์ได้ทันที</li></ol></div>
-        <div class="mt-auto grid gap-2 pt-5 sm:grid-cols-2 lg:grid-cols-1"><a class="mobile-partner" href="https://krit-pj.github.io/agri-hs-verification/" target="_blank" rel="noopener noreferrer">ระบบตรวจสอบจุดความร้อน <span>↗</span></a><a class="mobile-partner" href="https://krit-pj.github.io/Green_Gain_Hub-KPP/" target="_blank" rel="noopener noreferrer">Green Gain Hub <span>↗</span></a></div>
-      </aside>
-      <div class="relative min-h-[520px] bg-slate-100 lg:min-h-[680px]"><div id="national-map" class="absolute inset-0" role="application" aria-label="แผนที่ฐานและขอบเขต 77 จังหวัดของประเทศไทย"></div><div class="map-legend" aria-label="คำอธิบายแผนที่"><span><i class="legend-active"></i>มีข้อมูล HS</span><span><i class="legend-inactive"></i>ยังไม่มีข้อมูล HS</span><small>สีขอบเขตไม่ใช่ระดับความเสี่ยง</small></div></div>
-    </section>
-  </main>
-  <footer class="mt-3 border-t border-slate-200 bg-slate-950 text-slate-200"><div class="mx-auto max-w-screen-2xl px-4 py-5 text-center lg:px-8"><p class="m-0 text-sm font-semibold">Copyright © <span id="copyright-year"></span> By Dr. Kitti&nbsp; PhoJuang กรมส่งเสริมการเกษตร</p><p class="mt-2 text-xs text-slate-400">จำนวนการเข้าใช้งานทั้งหมด <strong id="visitor-count" class="font-bold text-white">กำลังนับ…</strong> ครั้ง</p></div></footer>
-  <noscript><p class="m-0 bg-amber-100 p-3 text-center text-amber-950">กรุณาเปิด JavaScript เพื่อใช้งานแผนที่และเลือกจังหวัด</p></noscript>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app/js/landing.js?v=20261024-rebuild" defer></script>
+  <div class="pr-body">
+    <div class="pr-left">
+      <div id="pr-map"></div>
+      <div class="pr-legend" id="pr-legend"></div>
+      <div class="pr-kpis" id="pr-kpis"></div>
+    </div>
+    <div class="pr-right">
+      <h2 id="pr-table-title">จุดความร้อน (HS) รายอำเภอ</h2>
+      <table class="pr-table" id="pr-table"><thead></thead><tbody></tbody><tfoot></tfoot></table>
+      <div class="pr-notes" id="pr-notes"></div>
+    </div>
+  </div>
+  <footer class="pr-foot">
+    <span id="pr-source">ที่มา: จุดความร้อน NASA FIRMS VIIRS (นำเข้าโดยผู้ดูแลจังหวัด) · ขอบเขตการปกครอง OpenGISData-Thailand (CC BY 4.0) · แผนที่ฐาน © OpenStreetMap contributors © CARTO</span>
+    <span>© copyright By Dr. Kitti PhoJuang กรมส่งเสริมการเกษตร</span>
+  </footer>
+</section>
+
+<!-- Libraries -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
+<!-- App -->
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/map.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/report.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
