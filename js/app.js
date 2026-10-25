@@ -33,8 +33,10 @@ const App = (() => {
 
   function renderLinks() {
     const icon = '<svg class="h-3.5 w-3.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>';
-    el('ext-links').innerHTML = CONFIG.LINKS.map(l => `<a class="hdr-link" href="${l.url}" target="_blank" rel="noopener noreferrer" title="${l.title}">${l.label}${icon}</a>`).join('');
-    el('links-dropdown').innerHTML = CONFIG.LINKS.map(l => `<a class="dropdown-item" href="${l.url}" target="_blank" rel="noopener noreferrer"><span class="font-semibold">${l.label}</span><span class="block text-xs text-ink-soft">${l.title}</span></a>`).join('');
+    const team = '<svg class="h-3.5 w-3.5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+    const attrs = l => l.internal ? '' : ' target="_blank" rel="noopener noreferrer"';
+    el('ext-links').innerHTML = CONFIG.LINKS.map(l => `<a class="hdr-link" href="${l.url}"${attrs(l)} title="${l.title}">${l.internal ? team : ''}${l.label}${l.internal ? '' : icon}</a>`).join('');
+    el('links-dropdown').innerHTML = CONFIG.LINKS.map(l => `<a class="dropdown-item" href="${l.url}"${attrs(l)}><span class="font-semibold">${l.label}</span><span class="block text-xs text-ink-soft">${l.title}</span></a>`).join('');
     el('btn-links-menu').addEventListener('click', e => { e.stopPropagation(); const open = el('links-dropdown').classList.toggle('hidden') === false; el('btn-links-menu').setAttribute('aria-expanded', String(open)); });
     document.addEventListener('click', () => el('links-dropdown').classList.add('hidden'));
   }

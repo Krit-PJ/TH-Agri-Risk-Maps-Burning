@@ -5,6 +5,7 @@
 /* ---------- Layout ---------- */
 @layer base {
   html, body { height: 100%; }
+  body.team-page { height: auto; min-height: 100%; }
   body { display: flex; flex-direction: column; font-feature-settings: "tnum" 1; }
   :focus-visible { outline: 2px solid #2f8a57; outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

@@ -14,7 +14,8 @@ const CONFIG = {
 
   LINKS: [
     { label: 'ตรวจสอบจุดความร้อน', title: 'ระบบตรวจสอบจุดความร้อนในพื้นที่การเกษตรของประเทศไทย', url: 'https://krit-pj.github.io/agri-hs-verification/' },
-    { label: 'Green Gain Hub', title: 'Green Gain Hub — เชื่อมเกษตรกรผู้ขายเศษวัสดุการเกษตรกับผู้รับซื้อ', url: 'https://krit-pj.github.io/Green_Gain_Hub-KPP/' }
+    { label: 'Green Gain Hub', title: 'Green Gain Hub — เชื่อมเกษตรกรผู้ขายเศษวัสดุการเกษตรกับผู้รับซื้อ', url: 'https://krit-pj.github.io/Green_Gain_Hub-KPP/' },
+    { label: 'ทีมผู้พัฒนาและที่ปรึกษา', title: 'ผู้ร่วมพัฒนาและให้คำปรึกษา ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่เกษตร', url: 'team.html', internal: true }
   ],
 
   BASEMAPS: {

@@ -36,7 +36,8 @@ const SHEETS = {
   Counter: ['date', 'hits'],
   Settings: ['key', 'value'],
   AuditLog: ['time', 'actor', 'role', 'provinceCode', 'action', 'detail'],
-  LoginAttempts: ['time', 'role', 'identifier', 'result', 'accountId', 'fullName', 'provinceCode', 'provinceName', 'device']
+  LoginAttempts: ['time', 'role', 'identifier', 'result', 'accountId', 'fullName', 'provinceCode', 'provinceName', 'device'],
+  Team: ['memberId', 'sortOrder', 'photo', 'fullName', 'role', 'roleOther', 'position', 'affiliation', 'provinceCode', 'provinceName', 'education', 'expertise', 'links', 'createdAt', 'updatedAt', 'updatedBy']
 };
 // คอลัมน์ข้อความที่ต้องคงเลข 0 นำหน้า (กัน Google Sheet ตัดเลข 0)
 const TEXT_COLUMNS = {
@@ -46,9 +47,11 @@ const TEXT_COLUMNS = {
   Batches: ['batchId', 'provinceCode', 'firstDate', 'lastDate'],
   Counter: ['date'],
   Settings: ['key', 'value'],
-  LoginAttempts: ['identifier', 'accountId', 'provinceCode']
+  LoginAttempts: ['identifier', 'accountId', 'provinceCode'],
+  Team: ['memberId', 'provinceCode', 'photo', 'links']
 };
-const SETUP_VERSION = '3.1';
+const SETUP_VERSION = '3.2';
+const TEAM_ROLES = ['ผู้พัฒนาระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];
 const ACCOUNT_ROLES = { admin: 'Admin', minisuper: 'Mini Super Admin' };
 const LOGIN_RESULTS = { success: 'สำเร็จ', not_found: 'ไม่มีหมายเลขในระบบ', pending: 'รออนุมัติ', disabled: 'บัญชีถูกระงับ', invalid: 'รูปแบบไม่ถูกต้อง', wrong_credentials: 'ชื่อผู้ใช้/รหัสผ่านไม่ถูกต้อง' };
 const HS_HEADERS = ['hotspotId', 'date', 'time', 'districtCode', 'subdistrictCode', 'districtName', 'subdistrictName', 'village', 'plantType', 'lat', 'lng', 'batchId', 'importedAt'];
@@ -108,6 +111,7 @@ function doGet(e) {
       case 'hit': return json_({ ok: true, counter: counter_(true) });
       case 'counter': return json_({ ok: true, counter: counter_(false) });
       case 'settings': return json_({ ok: true, settings: { guideUrl: setting_('guide_url') } });
+      case 'team': return json_({ ok: true, members: teamList_() });
       case 'ping': return json_({ ok: true, time: now_() });
       default: return json_({ ok: false, error: 'unknown action' });
     }
@@ -140,6 +144,8 @@ function doPost(e) {
       case 'settings_save': return json_(settingsSave_(user, body));
       case 'audit_list': return json_(auditList_(user, body));
       case 'login_report': return json_(loginReport_(user, body));
+      case 'team_save': return json_(teamSave_(user, body));
+      case 'team_delete': return json_(teamDelete_(user, body));
       default: return json_({ ok: false, error: 'unknown action' });
     }
   } catch (err) { return json_({ ok: false, error: String(err.message || err) }); }
@@ -527,6 +533,58 @@ function loginReport_(user, b) {
     unknown: Object.keys(unknownMap).map(k => unknownMap[k]).sort((a, c) => c.attempts - a.attempts || String(c.lastAt).localeCompare(String(a.lastAt))) };
 }
 
+/* ============================== TEAM (ทีมผู้พัฒนาและที่ปรึกษา) ============================== */
+function teamList_() {
+  return readAll_('Team').map(stripRow_).map(r => {
+    let links = []; try { links = JSON.parse(r.links || '[]'); } catch (_) { }
+    return { id: String(r.memberId), sortOrder: Number(r.sortOrder) || 0, photo: String(r.photo || ''), fullName: r.fullName, role: r.role, roleOther: r.roleOther,
+      position: r.position, affiliation: r.affiliation, provinceCode: String(r.provinceCode || ''), provinceName: r.provinceName,
+      education: r.education, expertise: r.expertise, links: links, updatedAt: r.updatedAt };
+  }).sort((a, b) => (a.sortOrder || 9999) - (b.sortOrder || 9999) || String(a.fullName).localeCompare(String(b.fullName), 'th'));
+}
+
+/** เพิ่ม/แก้ไขสมาชิกทีม: Super Admin และ Mini Super Admin */
+function teamSave_(user, b) {
+  requireNational_(user);
+  const fullName = clean_(b.fullName);
+  if (!fullName) throw new Error('กรุณากรอกชื่อ-สกุล');
+  const role = TEAM_ROLES.indexOf(b.role) >= 0 ? b.role : 'อื่น ๆ';
+  const prov = b.provinceCode ? String(b.provinceCode).padStart(2, '0') : '';
+  if (prov && !PROVINCES[prov]) throw new Error('รหัสจังหวัดไม่ถูกต้อง');
+  const photo = String(b.photo || '');
+  if (photo && !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(photo) && !/^https:\/\/\S+$/.test(photo)) throw new Error('รูปภาพไม่ถูกต้อง');
+  if (photo.length > 48000) throw new Error('รูปภาพมีขนาดใหญ่เกินไป');
+  const links = (Array.isArray(b.links) ? b.links : []).slice(0, 10).map(l => ({ label: clean_(l && l.label) || 'ลิงก์', url: String((l && l.url) || '').trim() }))
+    .filter(l => l.url);
+  links.forEach(l => { if (!/^https?:\/\/[^\s<>"]+$/.test(l.url)) throw new Error('ลิงก์ไม่ถูกต้อง: ' + l.url); });
+  const data = { sortOrder: Number(b.sortOrder) || '', photo: photo, fullName: fullName, role: role, roleOther: role === 'อื่น ๆ' ? clean_(b.roleOther) : '',
+    position: clean_(b.position), affiliation: clean_(b.affiliation), provinceCode: prov, provinceName: PROVINCES[prov] || '',
+    education: cleanLong_(b.education), expertise: cleanLong_(b.expertise), links: JSON.stringify(links), updatedAt: now_(), updatedBy: user.name };
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    if (b.id) {
+      const row = findRow_('Team', r => String(r.memberId) === String(b.id));
+      if (!row) throw new Error('ไม่พบรายการ');
+      updateRow_('Team', row._row, data);
+      audit_(user, 'team_update', b.id + ' ' + fullName);
+      return { ok: true, id: String(b.id) };
+    }
+    const id = 'T-' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyMMddHHmmss') + '-' + Math.floor(Math.random() * 900 + 100);
+    appendObj_('Team', Object.assign(data, { memberId: id, createdAt: now_() }));
+    audit_(user, 'team_create', id + ' ' + fullName);
+    return { ok: true, id: id };
+  } finally { lock.releaseLock(); }
+}
+
+function teamDelete_(user, b) {
+  requireNational_(user);
+  const row = findRow_('Team', r => String(r.memberId) === String(b.id));
+  if (!row) throw new Error('ไม่พบรายการ');
+  sheet_('Team').deleteRow(row._row);
+  audit_(user, 'team_delete', b.id + ' ' + row.fullName);
+  return { ok: true };
+}
+
 /* ============================== SETTINGS / AUDIT ============================== */
 function setting_(key) { const r = findRow_('Settings', x => x.key === key); return r ? String(r.value || '') : ''; }
 function settingsSave_(user, b) {
@@ -586,6 +644,7 @@ function normalizePhone_(v) {
   return s;
 }
 function validPhone_(s) { return /^0\d{8,9}$/.test(s); }
+function cleanLong_(v) { return String(v === undefined || v === null ? '' : v).replace(/[<>]/g, '').replace(/^[=+\-@]+/, '').trim().slice(0, 1500); }
 function clean_(v) { return String(v === undefined || v === null ? '' : v).replace(/[<>]/g, '').replace(/^[=+\-@]+/, '').trim().slice(0, 200); }
 function now_() { return Utilities.formatDate(new Date(), 'Asia/Bangkok', "yyyy-MM-dd'T'HH:mm:ss"); }
 function sha256_(text) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8).map(b => ('0' + (b & 255).toString(16)).slice(-2)).join(''); }

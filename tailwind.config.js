@@ -1,6 +1,6 @@
 /** Tailwind build config — สร้าง css/app.css ด้วย: npm run build:css */
 module.exports = {
-  content: ['./index.html', './js/**/*.js'],
+  content: ['./index.html', './team.html', './js/**/*.js'],
   theme: {
     extend: {
       colors: {
