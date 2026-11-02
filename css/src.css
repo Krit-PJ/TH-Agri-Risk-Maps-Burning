@@ -85,6 +85,47 @@
   .spinner { @apply inline-block h-5 w-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600; }
 }
 
+/* ---------- Left panel collapse (desktop) ---------- */
+.sidebar-tab { position: absolute; left: 0; top: 50%; z-index: 520; display: none; height: 3.25rem; width: 1.25rem; transform: translateY(-50%);
+  align-items: center; justify-content: center; border-radius: 0 .6rem .6rem 0; background: #fff; color: #124429;
+  box-shadow: 1px 0 0 #dfe6e2, 0 6px 16px -8px rgba(12,47,28,.45); transition: background .15s, width .15s; }
+.sidebar-tab:hover { background: #eef7f1; width: 1.5rem; }
+.sidebar-tab svg { transition: transform .2s ease; }
+@media (min-width: 768px) {
+  .sidebar-tab { display: flex; }
+  #left-panel { transition: width .22s ease, border-color .22s ease; }
+  body.left-collapsed #left-panel { width: 0; border-right-width: 0; overflow: hidden; }
+  body.left-collapsed #left-panel > * { visibility: hidden; }
+  body.left-collapsed .sidebar-tab svg { transform: rotate(180deg); }
+}
+
+/* ---------- Crop filter bar (map) ---------- */
+.crop-bar { position: absolute; top: .75rem; left: 50%; z-index: 510; transform: translateX(-50%); display: flex; gap: .25rem;
+  max-width: calc(100% - 4.5rem); overflow-x: auto; padding: .3rem; border-radius: .85rem; background: rgba(255,255,255,.96);
+  box-shadow: 0 1px 2px rgba(12,47,28,.08), 0 10px 26px -14px rgba(12,47,28,.5); scrollbar-width: none; }
+.crop-bar.hidden { display: none; }
+.crop-bar::-webkit-scrollbar { display: none; }
+.crop-chip { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .35rem; border-radius: .6rem; padding: .35rem .6rem;
+  font-size: 13px; font-weight: 600; color: #4a5a51; white-space: nowrap; transition: background .15s, color .15s; }
+.crop-chip:hover:not(:disabled):not(.is-on) { background: #eef7f1; color: #124429; }
+.crop-chip.is-on { background: #185a36; color: #fff; }
+.crop-chip:disabled { opacity: .38; cursor: not-allowed; }
+.crop-chip-n { border-radius: .4rem; background: rgba(23,35,28,.07); padding: 0 .35rem; font-size: 12px; font-variant-numeric: tabular-nums; }
+.crop-chip.is-on .crop-chip-n { background: rgba(255,255,255,.2); }
+/* แผนที่แคบ: ซ่อนชื่อพืช เหลือ icon + จำนวน (ชิปที่เลือกยังแสดงชื่อ) */
+.crop-bar.is-compact .crop-chip:not(.is-on) .crop-chip-label { display: none; }
+@media (max-width: 767px) {
+  .crop-bar { left: .5rem; right: .5rem; max-width: none; transform: none; }
+  .crop-chip-label { display: none; }
+  .crop-chip.is-on .crop-chip-label { display: inline; }
+}
+
+/* ---------- HS popup ---------- */
+.hs-pop { display: grid; gap: .2rem; min-width: 210px; }
+.hs-pop-crop { display: inline-flex; align-items: center; gap: .35rem; font-weight: 600; color: #185a36; }
+.hs-pop-ic { width: 1.1rem; height: 1.1rem; }
+.hs-pop-note { color: #7a8a81; font-size: 12px; }
+
 /* ---------- Leaflet tweaks ---------- */
 .leaflet-container { font-family: "IBM Plex Sans Thai", sans-serif; background: #e9eeeb; }
 .leaflet-tooltip.prov-tip { border: 0; border-radius: 8px; padding: 6px 10px; box-shadow: 0 6px 18px -8px rgba(12,47,28,.45); font-size: 13px; color: #17231c; }

@@ -50,7 +50,7 @@ const TEXT_COLUMNS = {
   LoginAttempts: ['identifier', 'accountId', 'provinceCode'],
   Team: ['memberId', 'provinceCode', 'photo', 'links']
 };
-const SETUP_VERSION = '3.2';
+const SETUP_VERSION = '3.3';
 const TEAM_ROLES = ['ผู้พัฒนาระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];
 const ACCOUNT_ROLES = { admin: 'Admin', minisuper: 'Mini Super Admin' };
 const LOGIN_RESULTS = { success: 'สำเร็จ', not_found: 'ไม่มีหมายเลขในระบบ', pending: 'รออนุมัติ', disabled: 'บัญชีถูกระงับ', invalid: 'รูปแบบไม่ถูกต้อง', wrong_credentials: 'ชื่อผู้ใช้/รหัสผ่านไม่ถูกต้อง' };
@@ -80,8 +80,9 @@ function setup() {
   }
   if (!findRow_('Settings', r => r.key === 'counter_total')) appendObj_('Settings', { key: 'counter_total', value: '0' });
   if (!findRow_('Settings', r => r.key === 'guide_url')) appendObj_('Settings', { key: 'guide_url', value: '' });
+  const fixed = migrateHsText_();
   props.setProperty('SETUP_VERSION', SETUP_VERSION);
-  audit_({ sub: 'SETUP', role: 'system', prov: '' }, 'setup', 'initialized v' + SETUP_VERSION);
+  audit_({ sub: 'SETUP', role: 'system', prov: '' }, 'setup', 'initialized v' + SETUP_VERSION + (fixed ? ' (แก้รูปแบบเวลา/วันที่ HS ' + fixed + ' ค่า)' : ''));
   Logger.log('Setup complete');
 }
 
@@ -363,10 +364,14 @@ function hsImport_(user, b) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) || !isFinite(lat) || !isFinite(lng)) return;
       if (existing.has(id)) { dup++; return; }
       existing.add(id);
-      out.push([id, String(r.date), String(r.time || ''), String(r.dCode || ''), String(r.sCode || ''), clean_(r.dName), clean_(r.sName),
+      out.push([id, String(r.date), normalizeTime_(r.time), String(r.dCode || ''), String(r.sCode || ''), clean_(r.dName), clean_(r.sName),
         clean_(r.village), PLANT_TYPES.indexOf(r.plant) >= 0 ? r.plant : 'อื่น ๆ', lat, lng, batchId, at]);
     });
-    if (out.length) sh.getRange(sh.getLastRow() + 1, 1, out.length, HS_HEADERS.length).setValues(out);
+    if (out.length) {
+      const start = sh.getLastRow() + 1;
+      hsTextFormat_(sh, start, out.length); // กัน Google Sheet แปลง "13:22" / "2026-01-02" เป็นเวลา/วันที่เอง
+      sh.getRange(start, 1, out.length, HS_HEADERS.length).setValues(out);
+    }
 
     const dates = out.map(r => r[1]).sort();
     const bt = findRow_('Batches', r => r.batchId === batchId);
@@ -445,21 +450,93 @@ function publicProvinces_() {
   }));
 }
 
-/** คืนข้อมูลแบบกระชับ: [date,time,dCode,sCode,dName,sName,village,plant,lat,lng] */
+/** คืนข้อมูลแบบกระชับ: [date,time,dCode,sCode,dName,sName,village,plant,lat,lng,tsrc]
+ *  time = HH:MM เวลาไทย; tsrc = '' (จากไฟล์ต้นทาง) | 'hsid' (คำนวณจากเวลา UTC ใน hsID เมื่อไฟล์ไม่มีเวลา) */
 function publicHotspots_(prov) {
   prov = String(prov).padStart(2, '0');
   if (!PROVINCES[prov]) return { ok: false, error: 'invalid province' };
   const cache = CacheService.getScriptCache();
   const ver = cache.get('ver:' + prov) || '0';
-  const key = 'hs:' + prov + ':' + ver;
+  const key = 'hs3:' + prov + ':' + ver;
   const cached = cacheGet_(cache, key);
   if (cached) return JSON.parse(cached);
   const sh = hsSheet_(prov, false);
   const rows = (sh && sh.getLastRow() > 1) ? sh.getRange(2, 1, sh.getLastRow() - 1, 11).getValues() : [];
-  const out = { ok: true, province: prov, cols: ['date', 'time', 'dCode', 'sCode', 'dName', 'sName', 'village', 'plant', 'lat', 'lng'],
-    rows: rows.filter(r => r[0]).map(r => [String(r[1]), String(r[2]), String(r[3]), String(r[4]), r[5], r[6], r[7], r[8], Number(r[9]), Number(r[10])]) };
+  const out = { ok: true, province: prov, cols: ['date', 'time', 'dCode', 'sCode', 'dName', 'sName', 'village', 'plant', 'lat', 'lng', 'tsrc'],
+    rows: rows.filter(r => r[0]).map(r => {
+      const date = normalizeDate_(r[1]);
+      let time = normalizeTime_(r[2]), tsrc = '';
+      if (!time) { time = timeFromHsId_(r[0], date); if (time) tsrc = 'hsid'; }
+      return [date, time, String(r[3]), String(r[4]), r[5], r[6], r[7], r[8], Number(r[9]), Number(r[10]), tsrc];
+    }) };
   cachePut_(cache, key, JSON.stringify(out));
   return out;
+}
+
+/* ---------- รูปแบบวันที่/เวลา HS (เวลาไทย Asia/Bangkok) ---------- */
+/** แปลงค่าเวลาทุกรูปแบบเป็น "HH:MM": Date, เศษส่วนวันของ Excel, 1322, "13:22", "Sat Dec 30 1899 13:22:00 GMT+0642" */
+function normalizeTime_(v) {
+  if (v === undefined || v === null || v === '') return '';
+  let h = NaN, m = NaN;
+  if (v instanceof Date) { const t = Utilities.formatDate(v, 'Asia/Bangkok', 'HH:mm').split(':'); h = +t[0]; m = +t[1]; }
+  else if (typeof v === 'number') {
+    if (v >= 0 && v < 1) { const mins = Math.round(v * 1440) % 1440; h = Math.floor(mins / 60); m = mins % 60; }
+    else if (Number.isInteger(v) && v >= 0 && v <= 2359) { h = Math.floor(v / 100); m = v % 100; }
+  } else {
+    const s = String(v).trim();
+    let x = s.match(/(\d{1,2}):(\d{2})/);
+    if (x) { h = +x[1]; m = +x[2]; }
+    else if ((x = s.match(/^(\d{1,2})(\d{2})$/))) { h = +x[1]; m = +x[2]; }
+    else if (/^0?\.\d+$/.test(s)) return normalizeTime_(Number(s));
+  }
+  if (!(h >= 0 && h < 24 && m >= 0 && m < 60)) return '';
+  return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+}
+function normalizeDate_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Bangkok', 'yyyy-MM-dd');
+  return String(v === undefined || v === null ? '' : v).trim();
+}
+/** hsID ของ NASA FIRMS VIIRS เช่น VI1202608260622… = วันที่และเวลา UTC 2026-08-26 06:22 → 13:22 น. เวลาไทย
+ *  ใช้เมื่อไฟล์ไม่มีเวลาเท่านั้น และต้องสอดคล้องกับวันที่ของรายการ */
+function timeFromHsId_(id, date) {
+  const x = String(id || '').match(/^VI\d(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})/);
+  if (!x) return '';
+  const h = +x[4], m = +x[5];
+  if (h > 23 || m > 59) return '';
+  const utc = new Date(Date.UTC(+x[1], +x[2] - 1, +x[3], h, m));
+  if (isNaN(utc.getTime())) return '';
+  const localDate = Utilities.formatDate(utc, 'Asia/Bangkok', 'yyyy-MM-dd');
+  const utcDate = x[1] + '-' + x[2] + '-' + x[3];
+  if (date && date !== localDate && date !== utcDate) return '';
+  return Utilities.formatDate(utc, 'Asia/Bangkok', 'HH:mm');
+}
+/** ตั้งรูปแบบข้อความ (@) ให้คอลัมน์ข้อความของแถว HS ที่กำลังเขียน */
+function hsTextFormat_(sh, startRow, n) {
+  HS_TEXT.forEach(c => { const i = HS_HEADERS.indexOf(c); if (i >= 0) sh.getRange(startRow, i + 1, n, 1).setNumberFormat('@'); });
+}
+/** ติดตั้ง v3.3: แก้ค่าเวลา/วันที่ที่บันทึกผิดรูปแบบใน HS_xx ทุกชีต (เช่น "Sat Dec 30 1899 13:22:00 GMT+0642") */
+function migrateHsText_() {
+  let fixed = 0;
+  db_().getSheets().filter(sh => /^HS_\d{2}$/.test(sh.getName())).forEach(sh => {
+    const last = sh.getLastRow();
+    if (last < 2) return;
+    const range = sh.getRange(2, 2, last - 1, 2); // date, time
+    const vals = range.getValues();
+    let changed = 0;
+    const next = vals.map(r => {
+      const d = normalizeDate_(r[0]);
+      const t = String(r[1]) === '' ? '' : normalizeTime_(r[1]);
+      if (d !== r[0] || t !== r[1]) changed++;
+      return [d, t];
+    });
+    if (changed) {
+      hsTextFormat_(sh, 2, last - 1);
+      range.setValues(next);
+      bumpCache_(sh.getName().slice(3));
+      fixed += changed;
+    }
+  });
+  return fixed;
 }
 
 function bumpCache_(prov) { CacheService.getScriptCache().put('ver:' + prov, String(Date.now()), 21600); }

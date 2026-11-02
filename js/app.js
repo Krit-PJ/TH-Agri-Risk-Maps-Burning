@@ -16,6 +16,7 @@ const App = (() => {
     renderRiskCriteria();
     el('footer-year').textContent = new Date().getFullYear() + 543;
     initPanels();
+    initSidebarToggle();
     bindProvinceControls();
     bindPrint();
     await Admin.init({
@@ -95,7 +96,7 @@ const App = (() => {
     document.body.dataset.mode = 'national';
     el('national-panel').classList.remove('hidden'); el('province-panel').classList.add('hidden');
     el('right-panel').classList.add('hidden'); el('period-bar').classList.add('hidden');
-    el('btn-print').classList.add('hidden'); el('map-legend').classList.add('hidden');
+    el('btn-print').classList.add('hidden'); el('map-legend').classList.add('hidden'); el('crop-bar').classList.add('hidden');
     el('mobile-toggle-left').textContent = 'รายการจังหวัด'; el('mobile-toggle-right').classList.add('hidden');
     el('header-province').textContent = '';
     el('map-hint').classList.remove('hidden');
@@ -193,7 +194,9 @@ const App = (() => {
     const info = MapModule.applyFilter(filterState());
     current.seasons = info.seasons;
     Dashboard.refresh();
-    el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)} · ฤดูกาล ${info.seasons.join(', ')}`;
+    renderCropBar();
+    const crop = el('filter-crop').value;
+    el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)} · ฤดูกาล ${info.seasons.join(', ')}${crop ? ` · ชนิดพืช: ${crop}` : ''}`;
   }
   function scopeText() {
     const d = el('filter-district'), t = el('filter-subdistrict');
@@ -252,8 +255,64 @@ const App = (() => {
     el('mobile-toggle-left').addEventListener('click', () => toggle(left));
     el('mobile-toggle-right').addEventListener('click', () => toggle(right));
     overlay.addEventListener('click', closePanels);
-    window.addEventListener('resize', () => { if (window.innerWidth >= 768) closePanels(); clearTimeout(initPanels._t); initPanels._t = setTimeout(MapModule.invalidate, 150); });
+    window.addEventListener('resize', () => { if (window.innerWidth >= 768) closePanels(); clearTimeout(initPanels._t); initPanels._t = setTimeout(() => { MapModule.invalidate(); fitCropBar(); }, 150); });
   }
+  /* ---------- แถบซ้าย: ย่อ/ขยาย (Desktop) ---------- */
+  const SIDEBAR_KEY = 'agri-risk-left-collapsed';
+  function initSidebarToggle() {
+    let collapsed = false;
+    try { collapsed = localStorage.getItem(SIDEBAR_KEY) === '1'; } catch { }
+    setSidebar(collapsed, false);
+    el('btn-sidebar').addEventListener('click', () => setSidebar(!document.body.classList.contains('left-collapsed'), true));
+    el('left-panel').addEventListener('transitionend', e => { if (e.target === el('left-panel')) { MapModule.invalidate(); fitCropBar(); } });
+  }
+  function setSidebar(collapsed, save) {
+    document.body.classList.toggle('left-collapsed', collapsed);
+    const label = collapsed ? 'ขยายแถบด้านซ้าย' : 'ย่อแถบด้านซ้าย';
+    el('btn-sidebar').setAttribute('aria-expanded', String(!collapsed));
+    el('btn-sidebar').title = label; el('btn-sidebar-label').textContent = label;
+    if (save) { try { localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0'); } catch { } }
+    setTimeout(MapModule.invalidate, 280);
+  }
+
+  /* ---------- แถบ icon ชนิดพืชบนแผนที่ (เชื่อมกับตัวกรองชนิดพืช) ---------- */
+  function cropCounts() {
+    const st = MapModule.getState(), counts = {};
+    (MapModule.getData().hotspot?.features || []).forEach(f => {
+      const p = f.properties;
+      if (!MapModule.inRange(p) || (st.district && p.__dCode !== st.district) || (st.subdistrict && p.__sCode !== st.subdistrict)) return;
+      counts[p.__crop] = (counts[p.__crop] || 0) + 1;
+    });
+    return counts;
+  }
+  function renderCropBar() {
+    const bar = el('crop-bar');
+    if (!current) { bar.classList.add('hidden'); return; }
+    const counts = cropCounts(), selected = el('filter-crop').value;
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    const chip = (value, label, icon, n) => {
+      const on = value === selected, off = !on && value && !n;
+      return `<button type="button" class="crop-chip${on ? ' is-on' : ''}" data-crop="${value}" aria-pressed="${on}" ${off ? 'disabled' : ''} title="${value || 'ทุกชนิดพืช'}: ${fmt(n)} จุดในช่วงที่เลือก${value && on ? ' (กดอีกครั้งเพื่อยกเลิก)' : ''}">
+        ${icon}<span class="crop-chip-label">${label}</span><span class="crop-chip-n">${fmt(n)}</span></button>`;
+    };
+    bar.innerHTML = chip('', 'ทุกชนิด', '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>', total)
+      + CONFIG.PLANT_TYPES.map(c => chip(c, CONFIG.CROP_ICONS[c].short, Geo.cropIcon(c), counts[c] || 0)).join('');
+    bar.classList.remove('hidden');
+    fitCropBar();
+    bar.querySelectorAll('[data-crop]').forEach(b => b.addEventListener('click', () => setCrop(b.dataset.crop === selected ? '' : b.dataset.crop)));
+  }
+  function fitCropBar() {
+    const bar = el('crop-bar'); if (bar.classList.contains('hidden')) return;
+    bar.classList.remove('is-compact');
+    if (bar.scrollWidth > bar.clientWidth + 1) bar.classList.add('is-compact');
+  }
+  function setCrop(crop) {
+    const sel = el('filter-crop');
+    if (crop && !sel.querySelector(`option[value="${crop}"]`)) sel.insertAdjacentHTML('beforeend', `<option value="${crop}">${crop}</option>`);
+    sel.value = crop;
+    applyCurrent();
+  }
+
   function closePanels() { el('left-panel').classList.remove('mobile-open'); el('right-panel').classList.remove('mobile-open'); el('mobile-overlay').classList.add('hidden'); }
 
   return { init };

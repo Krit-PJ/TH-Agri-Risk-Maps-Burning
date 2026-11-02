@@ -14,7 +14,7 @@ const MapModule = (() => {
     L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
     Object.entries(CONFIG.BASEMAPS).forEach(([k, b]) => { if (k !== 'print') base[k] = L.tileLayer(b.url, { maxZoom: 19, attribution: b.attribution, crossOrigin: true }); });
     base[basemapKey].addTo(map);
-    map.fitBounds(CONFIG.THAILAND_BOUNDS);
+    map.fitBounds(CONFIG.THAILAND_BOUNDS, { animate: false });
 
     document.querySelectorAll('input[name="basemap"]').forEach(el => el.addEventListener('change', () => setBasemap(el.value)));
     ['lyr-province', 'lyr-district', 'lyr-subdistrict'].forEach(id => document.getElementById(id)?.addEventListener('change', renderBoundaries));
@@ -220,7 +220,11 @@ const MapModule = (() => {
       pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5.5, fillColor: seasonColor(f.properties.__season), color: '#ffffff', weight: 1.4, fillOpacity: 0.95 }),
       onEachFeature: (f, l) => {
         const p = f.properties;
-        l.bindPopup(`<strong>จุดความร้อน ${Geo.thaiDate(p.__date)}</strong>${p.__time ? ` เวลา ${p.__time}` : ''}<br>อ.${p.__district} ต.${p.__subdistrict}${p.__village ? `<br>${p.__village}` : ''}<br>ชนิดพืช: ${p.__crop}<br>ฤดูกาล ${p.__season}`);
+        l.bindPopup(`<div class="hs-pop"><strong>จุดความร้อน</strong>
+          <div>${Geo.thaiDateTime(p.__date, p.__time)}${p.__time && p.__timeSrc === 'hsid' ? ' <span class="hs-pop-note" title="ไฟล์ต้นทางไม่มีเวลา ระบบคำนวณจากเวลา UTC ใน hsID ของ NASA FIRMS">(จาก hsID)</span>' : ''}</div>
+          <div>อ.${p.__district} ต.${p.__subdistrict}${p.__village ? ` · ${p.__village}` : ''}</div>
+          <div class="hs-pop-crop">${Geo.cropIcon(p.__crop, 'hs-pop-ic')}<span>${p.__crop}</span></div>
+          <div class="hs-pop-note">ฤดูกาล ${p.__season} (ต.ค. ${p.__season - 1} – ก.ย. ${p.__season})</div></div>`);
       }
     }).addTo(group);
     group.addTo(map); shown.hotspot = group;
@@ -253,7 +257,11 @@ const MapModule = (() => {
   function focusSelection(options = {}) {
     const fs = selectionFeatures();
     if (!fs.length) return;
-    map.fitBounds(L.geoJSON({ type: 'FeatureCollection', features: fs }).getBounds(), { padding: options.padding || [24, 24], animate: false });
+    const bounds = L.geoJSON({ type: 'FeatureCollection', features: fs }).getBounds(), opts = { padding: options.padding || [24, 24], animate: false };
+    map.stop();
+    map.fitBounds(bounds, opts);
+    // หากแผนที่ยังอยู่ระหว่างแอนิเมชันซูมก่อนหน้า (พบบนมือถือ) ให้จัดกรอบซ้ำเมื่อแอนิเมชันจบ
+    if (map._animatingZoom) map.once('zoomend', () => map.fitBounds(bounds, opts));
   }
   function getRiskLevel(score) { return CONFIG.RISK_LEVELS.find(x => score >= x.min && score < x.max) || CONFIG.RISK_LEVELS[0]; }
 

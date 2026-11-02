@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.3.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.4.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -155,6 +155,11 @@
     <div id="map" class="absolute inset-0" role="application" aria-label="แผนที่"></div>
     <div id="map-legend" class="map-card no-print absolute bottom-4 left-4 z-[500] hidden"></div>
     <div id="map-hint" class="map-card no-print absolute left-1/2 top-4 z-[500] -translate-x-1/2 px-4 py-2 text-sm"></div>
+    <div id="crop-bar" class="crop-bar no-print hidden" role="toolbar" aria-label="กรองจุดความร้อนตามชนิดพืช"></div>
+    <button id="btn-sidebar" type="button" class="sidebar-tab no-print" aria-controls="left-panel" aria-expanded="true" title="ย่อแถบด้านซ้าย">
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      <span class="sr-only" id="btn-sidebar-label">ย่อแถบด้านซ้าย</span>
+    </button>
     <div id="map-loading" class="no-print absolute inset-0 z-[600] hidden place-items-center bg-white/60">
       <div class="map-card flex items-center gap-3 px-5 py-3 text-sm"><span class="spinner"></span><span id="map-loading-text">กำลังโหลดข้อมูล…</span></div>
     </div>
@@ -460,13 +465,13 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.3.0"></script>
-<script src="js/api.js?v=3.3.0"></script>
-<script src="js/geo.js?v=3.3.0"></script>
-<script src="js/map.js?v=3.3.0"></script>
-<script src="js/dashboard.js?v=3.3.0"></script>
-<script src="js/report.js?v=3.3.0"></script>
-<script src="js/admin.js?v=3.3.0"></script>
-<script src="js/app.js?v=3.3.0"></script>
+<script src="js/config.js?v=3.4.0"></script>
+<script src="js/api.js?v=3.4.0"></script>
+<script src="js/geo.js?v=3.4.0"></script>
+<script src="js/map.js?v=3.4.0"></script>
+<script src="js/dashboard.js?v=3.4.0"></script>
+<script src="js/report.js?v=3.4.0"></script>
+<script src="js/admin.js?v=3.4.0"></script>
+<script src="js/app.js?v=3.4.0"></script>
 </body>
 </html>

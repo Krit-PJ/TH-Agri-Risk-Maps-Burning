@@ -438,7 +438,7 @@ const Admin = (() => {
       if (!Geo.insideProvince(bundle, c[0], c[1])) qa.outside++;
       const dName = String(get('Amphoe') ?? '').trim(), sName = String(get('Tambon') ?? '').trim();
       const codes = Geo.resolveCodes(bundle, c[0], c[1], dName, sName);
-      const date = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`, time = String(get('Time') ?? '').trim();
+      const date = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`, time = Geo.normalizeTime(get('Time'));
       records.push({ id: id || `${date}_${time}_${c[1].toFixed(5)}_${c[0].toFixed(5)}`, date, time, dCode: codes.dCode, sCode: codes.sCode, dName, sName, village: String(get('BaanN') ?? '').trim(), plant, lat: +c[1].toFixed(6), lng: +c[0].toFixed(6) });
       byPlant[plant] = (byPlant[plant] || 0) + 1;
       const ym = `${d.y}-${String(d.m).padStart(2, '0')}`; byMonth[ym] = (byMonth[ym] || 0) + 1;

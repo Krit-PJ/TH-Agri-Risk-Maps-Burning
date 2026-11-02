@@ -72,7 +72,7 @@ const Dashboard = (() => {
     const cmp = S.rows.slice().sort((a, b) => b.current - a.current || a.name.localeCompare(b.name, 'th'));
     el('comparison-area-header').textContent = u;
     el('title-comparison').textContent = `เปรียบเทียบ HS ราย${u}`;
-    el('comparison-period').textContent = `${Geo.periodText(MapModule.getState().startYM ? currentRange() : null)} เทียบ ${S.priorText}`;
+    el('comparison-period').textContent = `${Geo.periodText(MapModule.getState().startYM ? currentRange() : null)} เทียบ ${S.priorText}${MapModule.getState().crop ? ` · ${MapModule.getState().crop}` : ''}`;
     document.querySelector('#tbl-hotspot-comparison tbody').innerHTML = cmp.map(r => `<tr><td>${r.name}</td><td class="num">${fmt(r.previous)}</td><td class="num">${fmt(r.current)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`).join('');
     el('comparison-previous-total').textContent = fmt(S.totalPrev);
     el('comparison-current-total').textContent = fmt(S.totalCur);

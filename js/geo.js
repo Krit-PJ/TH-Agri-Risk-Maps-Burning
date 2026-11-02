@@ -42,6 +42,29 @@ const Geo = (() => {
     const a = `${M[r.startMonth]} ${r.startYear}`, b = `${M[r.endMonth]} ${r.endYear}`;
     return r.startYM === r.endYM ? a : `${a} – ${b}`;
   }
+  /** เวลาเป็น "HH:MM" (เวลาไทย) จาก: Date ของ Excel, เศษส่วนวัน, 1322, "13:22", "Sat Dec 30 1899 13:22:00 GMT+0642" */
+  function normalizeTime(v) {
+    if (v === undefined || v === null || v === '') return '';
+    let mins = NaN;
+    if (v instanceof Date && !Number.isNaN(v.getTime())) mins = Math.round(v.getHours() * 60 + v.getMinutes() + v.getSeconds() / 60); // ปัดวินาทีที่คลาดจาก LMT ปี 1899
+    else if (typeof v === 'number') mins = v >= 0 && v < 1 ? Math.round(v * 1440) : Number.isInteger(v) && v <= 2359 ? Math.floor(v / 100) * 60 + (v % 100 < 60 ? v % 100 : NaN) : NaN;
+    else {
+      const s = String(v).trim(); let x;
+      if ((x = s.match(/(\d{1,2}):(\d{2})/))) mins = +x[1] * 60 + +x[2];
+      else if ((x = s.match(/^(\d{1,2})(\d{2})$/))) mins = +x[2] < 60 ? +x[1] * 60 + +x[2] : NaN;
+      else if (/^0?\.\d+$/.test(s)) return normalizeTime(Number(s));
+    }
+    if (!Number.isFinite(mins)) return '';
+    mins = ((mins % 1440) + 1440) % 1440;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return h < 24 ? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` : '';
+  }
+  /** "2 ธ.ค. 2568 เวลา 13:22 น." */
+  function thaiDateTime(iso, time, short = false) {
+    const d = new Date(String(iso).slice(0, 10) + 'T00:00:00Z');
+    const date = Number.isNaN(d.getTime()) ? (iso || '-') : d.toLocaleDateString('th-TH', { year: 'numeric', month: short ? 'short' : 'long', day: 'numeric', timeZone: 'UTC' });
+    return time ? `${date} เวลา ${time} น.` : date;
+  }
   function thaiDate(iso) {
     if (!iso) return '-';
     const d = new Date(String(iso).slice(0, 10) + 'T00:00:00Z');
@@ -74,7 +97,7 @@ const Geo = (() => {
       }
       const year = Number(m[1]) + 543, month = Number(m[2]);
       Object.assign(pt.properties, {
-        __date: date, __time: String(r[idx.time] || ''), __month: month, __day: Number(m[3]), year_be: year,
+        __date: date, __time: normalizeTime(r[idx.time]), __timeSrc: idx.tsrc !== undefined ? String(r[idx.tsrc] || '') : '', __month: month, __day: Number(m[3]), year_be: year,
         __ym: ymIndex(year, month), __season: seasonOf(year, month),
         __dCode: dCode, __sCode: sCode,
         __district: dByCode.get(dCode)?.properties.amp_th || clean(r[idx.dName]) || 'ไม่ระบุ',
@@ -97,5 +120,9 @@ const Geo = (() => {
     try { return turf.booleanPointInPolygon(turf.point([lng, lat]), bundle.province); } catch { return true; }
   }
 
-  return { provinces, provinceBundle, clean, normalizeCrop, ymIndex, ymFromIndex, seasonOf, periodText, thaiDate, buildHotspots, resolveCodes, insideProvince };
+  function cropIcon(crop, cls = 'h-4 w-4') {
+    const ic = CONFIG.CROP_ICONS[crop] || CONFIG.CROP_ICONS['อื่น ๆ'];
+    return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic.svg}</svg>`;
+  }
+  return { provinces, provinceBundle, clean, normalizeCrop, ymIndex, ymFromIndex, seasonOf, periodText, thaiDate, thaiDateTime, normalizeTime, cropIcon, buildHotspots, resolveCodes, insideProvince };
 })();
