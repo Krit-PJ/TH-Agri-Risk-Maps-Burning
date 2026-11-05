@@ -52,9 +52,9 @@ const Report = (() => {
     while (!fits() && f > 5.2) { f -= 0.25; p = Math.max(0.12, p - 0.1); setSize(f, p); }
 
     // ---- legend & KPIs (outside the map so nothing covers data) ----
-    const seasons = [...new Set(MapModule.filteredHotspots().map(f => f.properties.__season))].sort((a, b) => b - a);
+    const seasons = MapModule.displaySeason() ? [MapModule.displaySeason()] : [];
     el('pr-legend').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join('')
-      + seasons.map(s => `<span><i class="pt" style="background:${MapModule.seasonColor(s)}"></i>HS ฤดูกาล ${s}</span>`).join('')
+      + seasons.map(s => `<span><i class="pt" style="background:${CONFIG.SEASON_COLORS[0]}"></i>HS ฤดู ${s} (ล่าสุด)</span>`).join('')
       + `<span class="north">▲ ทิศเหนือ</span>`;
     const withHs = rows.filter(r => r.current > 0).length;
     el('pr-kpis').innerHTML = [
@@ -77,8 +77,8 @@ const Report = (() => {
     const focus = MapModule.selectionFeatures();
     const frame = L.geoJSON({ type: 'FeatureCollection', features: focus }, { style: { color: '#0f172a', weight: 2.2, fill: false }, interactive: false }).addTo(m);
     layers.push(frame);
-    const pts = L.geoJSON({ type: 'FeatureCollection', features: MapModule.filteredHotspots() }, {
-      pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 2.4, fillColor: MapModule.seasonColor(f.properties.__season), color: '#ffffff', weight: 0.6, fillOpacity: 1 }), interactive: false
+    const pts = L.geoJSON({ type: 'FeatureCollection', features: MapModule.mapHotspots() }, {
+      pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 2.4, fillColor: CONFIG.SEASON_COLORS[0], color: '#ffffff', weight: 0.6, fillOpacity: 1 }), interactive: false
     }).addTo(m);
     layers.push(pts);
     // labels at an interior point of every unit

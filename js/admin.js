@@ -67,7 +67,13 @@ const Admin = (() => {
 
     document.querySelectorAll('#console-tabs [data-tab]').forEach(b => b.addEventListener('click', () => consoleTab(b.dataset.tab)));
     el('btn-import-save').addEventListener('click', saveImport);
-    el('import-file').addEventListener('change', readImportFile);
+    // ขั้นตอนเหมือนเวอร์ชันก่อน: เลือกไฟล์ → กด "ตรวจสอบไฟล์" → ดูผลตรวจ → กด "บันทึกเข้าฐานข้อมูล" และยืนยัน (ระบบไม่นำเข้าเอง)
+    el('import-file').addEventListener('change', () => {
+      resetImport(); const f = el('import-file').files?.[0];
+      el('btn-import-check').disabled = !f;
+      if (f) setMsg(el('import-status'), `เลือกไฟล์ ${f.name} แล้ว กด "ตรวจสอบไฟล์" เพื่ออ่านและตรวจสอบข้อมูล`);
+    });
+    el('btn-import-check').addEventListener('click', readImportFile);
     el('logins-days').addEventListener('change', loadLogins);
     el('logins-result').addEventListener('change', renderLogins);
     el('requests-filter').addEventListener('change', loadRequests);
@@ -388,7 +394,7 @@ const Admin = (() => {
   function renderImportScope() {
     const box = el('import-scope'), u = user(); if (!u || !box) return;
     box.innerHTML = isNational()
-      ? '<b>Super Admin</b> — เลือกไฟล์แล้วระบบแยกจังหวัดจากคอลัมน์ Province ให้อัตโนมัติ เลือกนำเข้าได้ 1 จังหวัด หลายจังหวัด หรือทุกจังหวัด'
+      ? '<b>Super Admin / Mini Super Admin</b> — กด “ตรวจสอบไฟล์” แล้วระบบแยกจังหวัดจากคอลัมน์ Province ให้ เลือกนำเข้าได้ 1 จังหวัด หลายจังหวัด หรือทุกจังหวัด จากนั้นกด “บันทึกเข้าฐานข้อมูล”'
       : `<b>จังหวัด${esc(u.provName)}</b> — ระบบผูกการนำเข้ากับจังหวัดตามสิทธิ์ของท่านโดยอัตโนมัติ และนำเข้าเฉพาะแถวที่ Province = ${esc(u.provName)} แถวของจังหวัดอื่นจะถูกข้าม`;
   }
   function resetImport() {
@@ -400,7 +406,8 @@ const Admin = (() => {
   async function readImportFile() {
     resetImport();
     const file = el('import-file').files?.[0], status = el('import-status');
-    if (!file) return;
+    if (!file) return setMsg(status, 'กรุณาเลือกไฟล์ข้อมูล', 'error');
+    el('btn-import-check').disabled = true;
     if (!window.XLSX) return setMsg(status, 'โหลดไลบรารีอ่าน Excel ไม่สำเร็จ กรุณารีเฟรชหน้า', 'error');
     setMsg(status, 'กำลังอ่านไฟล์และแยกข้อมูลรายจังหวัด…', 'working');
     try {
@@ -435,6 +442,7 @@ const Admin = (() => {
       }
       await processSelected();
     } catch (err) { console.error(err); imp = null; setMsg(status, `อ่านไฟล์ไม่สำเร็จ: ${err.message}`, 'error'); }
+    finally { el('btn-import-check').disabled = !el('import-file').files?.[0]; }
   }
 
   function renderProvincePicker() {
@@ -546,13 +554,15 @@ const Admin = (() => {
     btn.disabled = !valid.length;
     btn.textContent = valid.length > 1 ? `บันทึก ${valid.length} จังหวัด (${fmt(total)} จุด)` : valid.length ? `บันทึกจังหวัด${valid[0].name} (${fmt(total)} จุด)` : 'บันทึกเข้าฐานข้อมูล';
     if (!valid.length) setMsg(el('import-status'), 'ไม่มีจังหวัดที่ผ่านการตรวจสอบ จึงยังบันทึกไม่ได้', 'error');
-    else setMsg(el('import-status'), `แหล่งข้อมูล: ${SRC_LABEL[imp.source]} · ตรวจสอบอัตโนมัติแล้ว พร้อมนำเข้า ${fmt(total)} จุด${blocked.length ? ` · ข้าม ${blocked.length} จังหวัดที่ไม่ผ่าน (${blocked.map(b => b.name).join(', ')})` : ''} ระบบไม่บันทึกจุดที่มีอยู่แล้วซ้ำ`, blocked.length ? 'warn' : 'success');
+    else setMsg(el('import-status'), `แหล่งข้อมูล: ${SRC_LABEL[imp.source]} · ตรวจสอบผ่าน ${fmt(total)} จุด — กด "บันทึกเข้าฐานข้อมูล" เพื่อนำเข้า${blocked.length ? ` · ข้าม ${blocked.length} จังหวัดที่ไม่ผ่าน (${blocked.map(b => b.name).join(', ')})` : ''} ระบบไม่บันทึกจุดที่มีอยู่แล้วซ้ำ`, blocked.length ? 'warn' : 'success');
   }
 
   async function saveImport() {
     if (!imp) return;
     const valid = [...imp.selected].map(c => imp.results[c]).filter(r => r && !r.error);
     if (!valid.length) return;
+    const n = valid.reduce((a, r) => a + r.records.length, 0);
+    if (!await confirmBox(`นำเข้าข้อมูลจุดความร้อน ${fmt(n)} จุด (${SRC_LABEL[imp.source]}) ${valid.length > 1 ? `จาก ${valid.length} จังหวัด` : `จังหวัด${valid[0].name}`} เข้าฐานข้อมูล? จุดที่มีอยู่แล้วจะไม่บันทึกซ้ำ`, { yes: 'นำเข้าข้อมูล' })) return;
     const btn = el('btn-import-save'), bar = el('import-progress'), fill = bar.firstElementChild, status = el('import-status');
     btn.disabled = true; bar.classList.remove('hidden'); fill.style.width = '0%';
     const grand = valid.reduce((a, r) => a + r.records.length, 0), size = 2000, stamp = Date.now();

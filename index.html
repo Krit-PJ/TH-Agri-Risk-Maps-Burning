@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.4.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.5.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -323,12 +323,13 @@
       <section data-pane="import" class="space-y-4">
         <div>
           <h3 class="text-base font-bold">นำเข้าข้อมูลจุดความร้อน (HS) จาก Excel</h3>
-          <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ระบบอ่านคอลัมน์ Province แล้วแยกข้อมูลรายจังหวัดให้อัตโนมัติ คัดเฉพาะ LandType = พื้นที่เกษตร ตัดรายการซ้ำ และตรวจยอดกับชีต hsPlant (ถ้ามี) — ไฟล์จากหน่วยงานต้นสังกัดบันทึกเป็นแหล่ง “ต้นสังกัด” ไฟล์ที่มีคอลัมน์ Source = FIRMS บันทึกเป็นแหล่ง “NASA FIRMS” (เฉพาะผู้ดูแลระดับประเทศ)</p>
+          <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ขั้นตอน: เลือกไฟล์ → กด <b>ตรวจสอบไฟล์</b> → ดูผลตรวจ → กด <b>บันทึกเข้าฐานข้อมูล</b> และยืนยัน ระบบแยกข้อมูลรายจังหวัดจากคอลัมน์ Province คัดเฉพาะ LandType = พื้นที่เกษตร ตัดรายการซ้ำ และตรวจยอดกับชีต hsPlant (ถ้ามี) — ไฟล์จากหน่วยงานต้นสังกัดบันทึกเป็นแหล่ง “ต้นสังกัด” ไฟล์ที่มีคอลัมน์ Source = FIRMS บันทึกเป็นแหล่ง “NASA FIRMS” (เฉพาะผู้ดูแลระดับประเทศ)</p>
         </div>
         <div id="import-scope" class="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800"></div>
         <div><label class="field-label" for="import-file">ไฟล์ข้อมูล</label><input id="import-file" type="file" accept=".xlsx,.xls,.csv" class="field w-full file:mr-3 file:rounded file:border-0 file:bg-brand-50 file:px-2 file:py-1 file:text-brand-800"/></div>
         <div id="import-provinces" class="hidden"></div>
         <div class="flex flex-wrap gap-2">
+          <button id="btn-import-check" type="button" class="btn-ghost" disabled>ตรวจสอบไฟล์</button>
           <button id="btn-import-save" type="button" class="btn-primary" disabled>บันทึกเข้าฐานข้อมูล</button>
         </div>
         <div id="import-progress" class="hidden h-2 overflow-hidden rounded-full bg-line"><div class="h-full w-0 bg-brand-600 transition-all"></div></div>
@@ -491,13 +492,13 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.4.0"></script>
-<script src="js/api.js?v=3.4.0"></script>
-<script src="js/geo.js?v=3.4.0"></script>
-<script src="js/map.js?v=3.4.0"></script>
-<script src="js/dashboard.js?v=3.4.0"></script>
-<script src="js/report.js?v=3.4.0"></script>
-<script src="js/admin.js?v=3.4.0"></script>
-<script src="js/app.js?v=3.4.0"></script>
+<script src="js/config.js?v=3.5.0"></script>
+<script src="js/api.js?v=3.5.0"></script>
+<script src="js/geo.js?v=3.5.0"></script>
+<script src="js/map.js?v=3.5.0"></script>
+<script src="js/dashboard.js?v=3.5.0"></script>
+<script src="js/report.js?v=3.5.0"></script>
+<script src="js/admin.js?v=3.5.0"></script>
+<script src="js/app.js?v=3.5.0"></script>
 </body>
 </html>
