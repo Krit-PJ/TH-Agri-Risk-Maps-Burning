@@ -178,3 +178,26 @@ function migrateHsSource_() {
   return n;
 }
 function satelliteFromId_(id) { const m = String(id || '').match(/^VI(\d)/); return m ? ({ '1': 'Suomi-NPP', '2': 'NOAA-20', '3': 'NOAA-21' }[m[1]] || '') : ''; }
+
+/** เรียกจาก Editor ครั้งเดียว: ระบุแหล่งข้อมูล FIRMS ให้ชุดข้อมูลที่นำเข้าจากไฟล์ FIRMS ก่อนหน้าเว็บรองรับคอลัมน์ Source
+ *  (เงื่อนไข: ชื่อไฟล์ของชุดข้อมูลมีคำว่า FIRMS และ hsID รูปแบบ VIn + เวลา UTC + _lat_lon ที่ระบบสร้างจาก NASA FIRMS) */
+function retagFirmsBatches() {
+  const batches = readAll_('Batches').filter(b => /FIRMS/i.test(String(b.fileName || '')));
+  const ids = {}; batches.forEach(b => { ids[String(b.batchId)] = 1; });
+  let n = 0;
+  db_().getSheets().filter(sh => /^HS_\d{2}$/.test(sh.getName())).forEach(sh => {
+    const last = sh.getLastRow(); if (last < 2) return;
+    const data = sh.getRange(2, 1, last - 1, HS_HEADERS.length).getValues();
+    const rng = sh.getRange(2, 14, last - 1, 2), vals = rng.getValues();
+    let changed = 0;
+    data.forEach((r, i) => {
+      if (ids[String(r[11])] && /^VI\d\d{12}_\d+_\d+$/.test(String(r[0])) && vals[i][0] !== 'FIRMS') { vals[i] = ['FIRMS', vals[i][1] || satelliteFromId_(r[0])]; changed++; }
+    });
+    if (changed) { rng.setValues(vals); n += changed; refreshSummary_(sh.getName().slice(3)); bumpCache_(sh.getName().slice(3)); }
+  });
+  batches.forEach(b => { if (String(b.source || '') !== 'FIRMS') updateRow_('Batches', b._row, { source: 'FIRMS' }); });
+  bumpCache_('all');
+  audit_({ sub: 'EDITOR', role: 'system', prov: '' }, 'hs_retag', 'FIRMS ' + n + ' จุด จาก ' + batches.length + ' ชุดข้อมูล');
+  Logger.log('retagged ' + n + ' rows in ' + batches.length + ' batches');
+  return n;
+}
