@@ -32,7 +32,7 @@ const SHEETS = {
   Accounts: ['accountId', 'phone', 'fullName', 'position', 'affiliation', 'provinceCode', 'provinceName', 'role', 'status', 'createdAt', 'approvedAt', 'approvedBy', 'lastLoginAt'],
   Requests: ['requestId', 'phone', 'fullName', 'position', 'affiliation', 'provinceCode', 'provinceName', 'note', 'status', 'createdAt', 'decidedAt', 'decidedBy', 'reason'],
   ProvinceSummary: ['provinceCode', 'provinceName', 'hsCount', 'firstDate', 'lastDate', 'updatedAt'],
-  Batches: ['batchId', 'provinceCode', 'fileName', 'accepted', 'duplicates', 'firstDate', 'lastDate', 'importedBy', 'importedAt', 'note'],
+  Batches: ['batchId', 'provinceCode', 'fileName', 'accepted', 'duplicates', 'firstDate', 'lastDate', 'importedBy', 'importedAt', 'note', 'source'],
   Counter: ['date', 'hits'],
   Settings: ['key', 'value'],
   AuditLog: ['time', 'actor', 'role', 'provinceCode', 'action', 'detail'],
@@ -50,11 +50,13 @@ const TEXT_COLUMNS = {
   LoginAttempts: ['identifier', 'accountId', 'provinceCode'],
   Team: ['memberId', 'provinceCode', 'photo', 'links']
 };
-const SETUP_VERSION = '3.3';
+const SETUP_VERSION = '3.4';
 const TEAM_ROLES = ['ผู้พัฒนาระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];
 const ACCOUNT_ROLES = { admin: 'Admin', minisuper: 'Mini Super Admin' };
 const LOGIN_RESULTS = { success: 'สำเร็จ', not_found: 'ไม่มีหมายเลขในระบบ', pending: 'รออนุมัติ', disabled: 'บัญชีถูกระงับ', invalid: 'รูปแบบไม่ถูกต้อง', wrong_credentials: 'ชื่อผู้ใช้/รหัสผ่านไม่ถูกต้อง' };
-const HS_HEADERS = ['hotspotId', 'date', 'time', 'districtCode', 'subdistrictCode', 'districtName', 'subdistrictName', 'village', 'plantType', 'lat', 'lng', 'batchId', 'importedAt'];
+// source = แหล่งข้อมูล (AGENCY = หน่วยงานต้นสังกัด, FIRMS = NASA FIRMS ที่ระบบจำแนกพื้นที่เกษตร) · satellite = ดาวเทียมที่ตรวจพบ
+const HS_HEADERS = ['hotspotId', 'date', 'time', 'districtCode', 'subdistrictCode', 'districtName', 'subdistrictName', 'village', 'plantType', 'lat', 'lng', 'batchId', 'importedAt', 'source', 'satellite'];
+const HS_SOURCES = ['AGENCY', 'FIRMS'];
 const HS_TEXT = ['hotspotId', 'date', 'time', 'districtCode', 'subdistrictCode', 'batchId'];
 
 /* ============================== SETUP ============================== */
@@ -80,9 +82,13 @@ function setup() {
   }
   if (!findRow_('Settings', r => r.key === 'counter_total')) appendObj_('Settings', { key: 'counter_total', value: '0' });
   if (!findRow_('Settings', r => r.key === 'guide_url')) appendObj_('Settings', { key: 'guide_url', value: '' });
+  if (!findRow_('Settings', r => r.key === 'hs_source')) appendObj_('Settings', { key: 'hs_source', value: 'AGENCY' });
+  if (!findRow_('Settings', r => r.key === 'risk_ref_seasons')) appendObj_('Settings', { key: 'risk_ref_seasons', value: '2567,2568' });
   const fixed = migrateHsText_();
+  const tagged = migrateHsSource_();
   props.setProperty('SETUP_VERSION', SETUP_VERSION);
-  audit_({ sub: 'SETUP', role: 'system', prov: '' }, 'setup', 'initialized v' + SETUP_VERSION + (fixed ? ' (แก้รูปแบบเวลา/วันที่ HS ' + fixed + ' ค่า)' : ''));
+  bumpCache_('all');
+  audit_({ sub: 'SETUP', role: 'system', prov: '' }, 'setup', 'initialized v' + SETUP_VERSION + (fixed ? ' (แก้รูปแบบเวลา/วันที่ HS ' + fixed + ' ค่า)' : '') + (tagged ? ' (ระบุแหล่งข้อมูล HS ' + tagged + ' แถว)' : ''));
   Logger.log('Setup complete');
 }
 
@@ -111,7 +117,8 @@ function doGet(e) {
       case 'hotspots': return json_(publicHotspots_(String(p.province || '')));
       case 'hit': return json_({ ok: true, counter: counter_(true) });
       case 'counter': return json_({ ok: true, counter: counter_(false) });
-      case 'settings': return json_({ ok: true, settings: { guideUrl: setting_('guide_url') } });
+      case 'settings': return json_({ ok: true, settings: { guideUrl: setting_('guide_url'), hsSource: hsSource_(), refSeasons: refSeasons_().slice().sort().join(',') } });
+      case 'risk': return json_(riskForProvince_(p.province, p.end, false));
       case 'team': return json_({ ok: true, members: teamList_() });
       case 'ping': return json_({ ok: true, time: now_() });
       default: return json_({ ok: false, error: 'unknown action' });
@@ -142,6 +149,8 @@ function doPost(e) {
       case 'hs_batches': return json_(hsBatches_(user, body));
       case 'hs_delete_batch': return json_(hsDeleteBatch_(user, body));
       case 'hs_clear': return json_(hsClear_(user, body));
+      case 'hs_compare': return json_(hsCompare_(user, body));
+      case 'risk_detail': requireProvince_(user, body.province); return json_(riskForProvince_(body.province, body.end, true));
       case 'settings_save': return json_(settingsSave_(user, body));
       case 'audit_list': return json_(auditList_(user, body));
       case 'login_report': return json_(loginReport_(user, body));
@@ -349,6 +358,9 @@ function hsImport_(user, b) {
   const prov = requireProvince_(user, b.provinceCode);
   const rows = Array.isArray(b.rows) ? b.rows : [];
   if (rows.length > 5000) throw new Error('ส่งข้อมูลได้ไม่เกิน 5,000 แถวต่อครั้ง');
+  const source = String(b.source || 'AGENCY').toUpperCase();
+  if (HS_SOURCES.indexOf(source) < 0) throw new Error('แหล่งข้อมูลไม่ถูกต้อง');
+  if (source === 'FIRMS') requireNational_(user);   // ข้อมูล FIRMS นำเข้าโดยผู้ดูแลระดับประเทศเท่านั้น
   const batchId = String(b.batchId || '').replace(/[^\w-]/g, '') || ('B-' + prov + '-' + Date.now());
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
@@ -365,7 +377,7 @@ function hsImport_(user, b) {
       if (existing.has(id)) { dup++; return; }
       existing.add(id);
       out.push([id, String(r.date), normalizeTime_(r.time), String(r.dCode || ''), String(r.sCode || ''), clean_(r.dName), clean_(r.sName),
-        clean_(r.village), PLANT_TYPES.indexOf(r.plant) >= 0 ? r.plant : 'อื่น ๆ', lat, lng, batchId, at]);
+        clean_(r.village), PLANT_TYPES.indexOf(r.plant) >= 0 ? r.plant : 'อื่น ๆ', lat, lng, batchId, at, source, clean_(r.sat) || satelliteFromId_(id)]);
     });
     if (out.length) {
       const start = sh.getLastRow() + 1;
@@ -382,9 +394,9 @@ function hsImport_(user, b) {
       });
     } else {
       appendObj_('Batches', { batchId: batchId, provinceCode: prov, fileName: clean_(b.fileName), accepted: out.length, duplicates: dup,
-        firstDate: dates[0] || '', lastDate: dates[dates.length - 1] || '', importedBy: user.name, importedAt: at, note: clean_(b.note) });
+        firstDate: dates[0] || '', lastDate: dates[dates.length - 1] || '', importedBy: user.name, importedAt: at, note: clean_(b.note), source: source });
     }
-    if (b.final !== false) { refreshSummary_(prov); bumpCache_(prov); audit_(user, 'hs_import', batchId + ' ' + (b.fileName || ''), prov); }
+    if (b.final !== false) { refreshSummary_(prov); bumpCache_(prov); audit_(user, 'hs_import', batchId + ' [' + source + '] ' + (b.fileName || ''), prov); }
     return { ok: true, batchId: batchId, accepted: out.length, duplicates: dup };
   } finally { lock.releaseLock(); }
 }
@@ -436,7 +448,9 @@ function refreshSummary_(prov) {
   const sh = hsSheet_(prov, false);
   let count = 0, first = '', last = '';
   if (sh && sh.getLastRow() > 1) {
-    const dates = sh.getRange(2, 2, sh.getLastRow() - 1, 1).getValues().map(r => String(r[0])).filter(Boolean).sort();
+    const src = hsSource_();   // นับเฉพาะแหล่งข้อมูลหลักที่ใช้แสดงผล
+    const dates = sh.getRange(2, 1, sh.getLastRow() - 1, HS_HEADERS.length).getValues()
+      .filter(r => r[0] && rowSource_(r[13]) === src).map(r => normalizeDate_(r[1])).filter(Boolean).sort();
     count = dates.length; first = dates[0] || ''; last = dates[dates.length - 1] || '';
   }
   const row = findRow_('ProvinceSummary', r => String(r.provinceCode) === prov);
@@ -457,13 +471,14 @@ function publicHotspots_(prov) {
   if (!PROVINCES[prov]) return { ok: false, error: 'invalid province' };
   const cache = CacheService.getScriptCache();
   const ver = cache.get('ver:' + prov) || '0';
-  const key = 'hs3:' + prov + ':' + ver;
+  const src = hsSource_();
+  const key = 'hs4:' + prov + ':' + src + ':' + ver;
   const cached = cacheGet_(cache, key);
   if (cached) return JSON.parse(cached);
   const sh = hsSheet_(prov, false);
-  const rows = (sh && sh.getLastRow() > 1) ? sh.getRange(2, 1, sh.getLastRow() - 1, 11).getValues() : [];
-  const out = { ok: true, province: prov, cols: ['date', 'time', 'dCode', 'sCode', 'dName', 'sName', 'village', 'plant', 'lat', 'lng', 'tsrc'],
-    rows: rows.filter(r => r[0]).map(r => {
+  const rows = (sh && sh.getLastRow() > 1) ? sh.getRange(2, 1, sh.getLastRow() - 1, HS_HEADERS.length).getValues() : [];
+  const out = { ok: true, province: prov, source: src, cols: ['date', 'time', 'dCode', 'sCode', 'dName', 'sName', 'village', 'plant', 'lat', 'lng', 'tsrc'],
+    rows: rows.filter(r => r[0] && rowSource_(r[13]) === src).map(r => {
       const date = normalizeDate_(r[1]);
       let time = normalizeTime_(r[2]), tsrc = '';
       if (!time) { time = timeFromHsId_(r[0], date); if (time) tsrc = 'hsid'; }
@@ -539,7 +554,7 @@ function migrateHsText_() {
   return fixed;
 }
 
-function bumpCache_(prov) { CacheService.getScriptCache().put('ver:' + prov, String(Date.now()), 21600); }
+function bumpCache_(prov) { const c = CacheService.getScriptCache(), v = String(Date.now()); c.put('ver:' + prov, v, 21600); c.put('ver:all', v, 21600); }
 function cachePut_(cache, key, text) {
   const size = 90000, n = Math.ceil(text.length / size);
   if (n > 200) return;
@@ -666,11 +681,28 @@ function teamDelete_(user, b) {
 function setting_(key) { const r = findRow_('Settings', x => x.key === key); return r ? String(r.value || '') : ''; }
 function settingsSave_(user, b) {
   requireNational_(user);
-  const url = String(b.guideUrl || '').trim();
-  if (url && !/^https:\/\//.test(url)) throw new Error('ลิงก์ต้องขึ้นต้นด้วย https://');
-  const r = findRow_('Settings', x => x.key === 'guide_url');
-  if (r) updateRow_('Settings', r._row, { value: url }); else appendObj_('Settings', { key: 'guide_url', value: url });
-  audit_(user, 'settings_save', 'guide_url');
+  const put = (key, value) => { const r = findRow_('Settings', x => x.key === key); if (r) updateRow_('Settings', r._row, { value: value }); else appendObj_('Settings', { key: key, value: value }); };
+  const changed = [];
+  if (b.guideUrl !== undefined) {
+    const url = String(b.guideUrl || '').trim();
+    if (url && !/^https:\/\//.test(url)) throw new Error('ลิงก์ต้องขึ้นต้นด้วย https://');
+    put('guide_url', url); changed.push('guide_url');
+  }
+  if (b.hsSource !== undefined) {
+    const src = String(b.hsSource).toUpperCase();
+    if (HS_SOURCES.indexOf(src) < 0) throw new Error('แหล่งข้อมูลไม่ถูกต้อง');
+    if (src !== hsSource_()) {
+      put('hs_source', src); changed.push('hs_source=' + src);
+      Object.keys(PROVINCES).forEach(p => { if (hsSheet_(p, false)) { refreshSummary_(p); bumpCache_(p); } });   // นับยอดใหม่ตามแหล่งข้อมูลหลัก
+    }
+  }
+  if (b.refSeasons !== undefined) {
+    const list = String(b.refSeasons).split(',').map(x => Number(String(x).trim())).filter(x => x > 2500 && x < 2700);
+    if (!list.length) throw new Error('ระบุฤดูอ้างอิงเป็นปี พ.ศ. เช่น 2567,2568');
+    put('risk_ref_seasons', list.sort().join(',')); changed.push('risk_ref_seasons=' + list.join(','));
+    bumpCache_('all');
+  }
+  audit_(user, 'settings_save', changed.join(' ') || '-');
   return { ok: true };
 }
 function auditList_(user, b) {

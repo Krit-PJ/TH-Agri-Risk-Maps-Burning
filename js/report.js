@@ -11,6 +11,11 @@ const Report = (() => {
     return prMap;
   }
 
+  /** คำอธิบายวิธีประเมินระดับความเสี่ยง (BRI) สำหรับรายงาน — ภาษาทั่วไป ไม่แสดงคะแนน */
+  function riskMethodText(r) {
+    const when = r ? (r.early ? `ฤดู ${r.seasons.join(', ')} (ใช้ฤดู ${r.season} ทั้งฤดู เพราะต้นฤดูข้อมูลยังน้อย)` : `ฤดู ${r.seasons.join(', ')} ช่วง 1 ต.ค.–${Geo.thaiDate(r.end)} ของทุกฤดู`) : '3 ฤดูล่าสุด';
+    return `ระดับความเสี่ยงประเมินจาก${when} ด้วยดัชนีความเสี่ยงการเผา (BRI): ความหนาแน่นจุดความร้อนต่อพื้นที่ 60% (ฤดูล่าสุดมีน้ำหนักมากที่สุด) การเกิดซ้ำในแต่ละฤดู 20% และชนิดพืช 20% แล้วจัด 4 ระดับเทียบกับฤดูอ้างอิงของทุกจังหวัดที่มีข้อมูล จำนวนจุดในตารางเป็นของช่วงที่เลือก จึงอาจไม่ตรงกับระดับความเสี่ยงซึ่งประเมินจากหลายฤดู`;
+  }
   function build(ctx) {
     const S = Dashboard.summary();
     if (!S) return null;
@@ -40,7 +45,7 @@ const Report = (() => {
     // ---- notes under the table: risk distribution + method ----
     const totU = S.levels.reduce((a, b) => a + b, 0) || 1;
     notes.innerHTML = `<div><h3>สรุประดับความเสี่ยง</h3><table>${CONFIG.RISK_LEVELS.slice().reverse().map(l => { const v = S.levels[CONFIG.RISK_LEVELS.indexOf(l)]; return `<tr><td><span class="lv"><i style="background:${l.color};width:2.4mm;height:2.4mm;border-radius:50%;display:inline-block;margin-right:1mm"></i>${l.label}</span></td><td class="num">${v} ${S.unitLabel}</td><td class="num">${(v * 100 / totU).toFixed(1)}%</td></tr>`; }).join('')}</table></div>
-      <div><h3>วิธีประเมิน</h3><p>${ctx.seasons.length > 1 ? `ข้อมูล ${ctx.seasons.length} ฤดูกาล (${ctx.seasons.join(', ')}) ใช้ Multi-year Model A: จำนวน HS ถ่วงน้ำหนักฤดูกาล 40% แนวโน้ม 20% ชนิดพืช 20% ขนาดพื้นที่ 20%` : `ข้อมูล 1 ฤดูกาล (${ctx.seasons.join(', ')}) ใช้แบบจำลองหลักฐานรายปี: 1–2 จุด = ต่ำ, 3–5 = ปานกลาง, 6–10 = สูง, มากกว่า 10 = สูงมาก ปรับตามชนิดพืชและขนาดพื้นที่ภายในช่วงระดับ`}</p><p>เปรียบเทียบกับช่วงเดียวกันปีก่อน: ${S.priorText}</p></div>`;
+      <div><h3>วิธีประเมิน</h3><p>${riskMethodText(ctx.risk)}</p><p>เปรียบเทียบกับช่วงเดียวกันปีก่อน: ${S.priorText}</p></div>`;
     let f = fs, p = pad; setSize(f, p); notes.style.display = '';
     const fits = () => right.scrollHeight <= right.clientHeight + 1;
     if (!fits()) notes.style.display = 'none';
@@ -48,7 +53,7 @@ const Report = (() => {
 
     // ---- legend & KPIs (outside the map so nothing covers data) ----
     const seasons = [...new Set(MapModule.filteredHotspots().map(f => f.properties.__season))].sort((a, b) => b - a);
-    el('pr-legend').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span><i style="background:${l.color}"></i>${l.label} (${l.range})</span>`).join('')
+    el('pr-legend').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join('')
       + seasons.map(s => `<span><i class="pt" style="background:${MapModule.seasonColor(s)}"></i>HS ฤดูกาล ${s}</span>`).join('')
       + `<span class="north">▲ ทิศเหนือ</span>`;
     const withHs = rows.filter(r => r.current > 0).length;

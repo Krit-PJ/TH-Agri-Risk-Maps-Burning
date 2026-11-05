@@ -22,8 +22,10 @@ const App = (() => {
     await Admin.init({
       currentProvince: () => current?.code || '',
       onDataChanged: code => refreshAfterDataChange(code),
-      onSettingsChanged: loadSettings
+      onSettingsChanged: () => { loadSettings(); MapModule.clearRiskCache(); refreshAfterDataChange(''); }
     });
+    // เข้าสู่ระบบ/ออกจากระบบ: โหลดระดับความเสี่ยงใหม่ (ผู้ดูแลเห็นรายละเอียดคะแนนและแนวโน้ม)
+    document.addEventListener('agri-risk:auth-changed', () => { if (current) applyCurrent(); });
     initCounter();
     loadSettings();
     provFC = await Geo.provinces();
@@ -42,7 +44,7 @@ const App = (() => {
     document.addEventListener('click', () => el('links-dropdown').classList.add('hidden'));
   }
   function renderRiskCriteria() {
-    el('risk-criteria').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => `<li class="flex items-center gap-2"><span class="risk-dot" style="background:${l.color}"></span><strong class="w-16">${l.label}</strong><span class="text-ink-soft">${l.range} คะแนน</span></li>`).join('');
+    el('risk-criteria').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => `<li class="flex items-center gap-2"><span class="risk-dot" style="background:${l.color}"></span><strong class="w-16 shrink-0">${l.label}</strong><span class="text-ink-soft">${l.desc}</span></li>`).join('');
   }
   async function loadSettings() {
     if (!Api.configured()) return;
@@ -123,7 +125,7 @@ const App = (() => {
       if (token !== loadToken) return;
       const hotspots = Geo.buildHotspots(hs, bundle);
       current = { ...info, bundle };
-      MapModule.setProvince(bundle, hotspots);
+      MapModule.setProvince(bundle, hotspots, code);
       document.body.dataset.mode = 'province';
       el('national-panel').classList.add('hidden'); el('province-panel').classList.remove('hidden');
       el('right-panel').classList.remove('hidden'); el('period-bar').classList.remove('hidden');
@@ -189,14 +191,19 @@ const App = (() => {
   function filterState() {
     return { district: el('filter-district').value, subdistrict: el('filter-subdistrict').value, crop: el('filter-crop').value, ...appliedRange };
   }
-  function applyCurrent() {
+  let applySeq = 0;
+  async function applyCurrent() {
     if (!current) return;
-    const info = MapModule.applyFilter(filterState());
-    current.seasons = info.seasons;
+    const seq = ++applySeq, crop = el('filter-crop').value;
+    el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)} · กำลังประเมินระดับความเสี่ยง…`;
+    const info = await MapModule.applyFilter(filterState());
+    if (seq !== applySeq || info.stale) return;
+    current.seasons = info.seasons; current.risk = info.risk;
     Dashboard.refresh();
     renderCropBar();
-    const crop = el('filter-crop').value;
-    el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)} · ฤดูกาล ${info.seasons.join(', ')}${crop ? ` · ชนิดพืช: ${crop}` : ''}`;
+    const r = info.risk;
+    const riskText = info.error ? ` · ประเมินระดับความเสี่ยงไม่สำเร็จ: ${info.error}` : r ? ` · ระดับความเสี่ยง: ฤดู ${r.seasons.join(', ')}${r.early ? ` (ฤดู ${r.season} ทั้งฤดู)` : ` ถึง ${Geo.thaiDate(r.end)}`}` : '';
+    el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)}${crop ? ` · ชนิดพืช: ${crop}` : ''}${riskText}`;
   }
   function scopeText() {
     const d = el('filter-district'), t = el('filter-subdistrict');
@@ -231,6 +238,7 @@ const App = (() => {
   }
 
   async function refreshAfterDataChange(code) {
+    MapModule.clearRiskCache();
     await loadAvailable();
     if (current && (!code || code === current.code)) {
       if (available.some(p => p.code === current.code)) openProvince(current.code); else go('');
@@ -238,7 +246,7 @@ const App = (() => {
   }
 
   /* ============================ print ============================ */
-  function printCtx() { return { province: current, scopeText: scopeText(), periodText: Geo.periodText(appliedRange), seasons: current.seasons || [] }; }
+  function printCtx() { return { province: current, scopeText: scopeText(), periodText: Geo.periodText(appliedRange), seasons: current.seasons || [], risk: current.risk || null }; }
   function bindPrint() {
     el('btn-print').addEventListener('click', async () => {
       if (!current) return;

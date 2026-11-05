@@ -187,3 +187,9 @@
   #print-report { position: static !important; left: auto !important; display: flex !important; page-break-inside: avoid; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
+
+/* วงกลมกลุ่มจุดความร้อน: สีกลาง ไม่ซ้ำกับสีระดับความเสี่ยง */
+.hs-cluster { background: transparent; }
+.hs-cluster span { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 9999px; background: rgba(30, 41, 59, .88); color: #fff; font: 600 12px/1 "IBM Plex Sans Thai", sans-serif; box-shadow: 0 0 0 4px rgba(30, 41, 59, .22); }
+.hs-cluster-mini { display: inline-grid; place-items: center; min-width: 1.35rem; height: 1.35rem; padding: 0 .2rem; border-radius: 9999px; background: rgba(30, 41, 59, .88); color: #fff; font-size: 10px; font-weight: 600; flex-shrink: 0; }
+.tip-admin { margin-top: .35rem; padding-top: .35rem; border-top: 1px dashed #cbd5e1; color: #334155; font-size: 11px; line-height: 1.45; }

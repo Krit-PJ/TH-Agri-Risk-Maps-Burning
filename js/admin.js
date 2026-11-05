@@ -43,7 +43,8 @@ const Admin = (() => {
     const fc = await Geo.provinces();
     provinces = fc.features.map(f => ({ code: f.properties.pro_code, name: f.properties.pro_th })).sort((a, b) => a.name.localeCompare(b.name, 'th'));
     const opts = '<option value="">เลือกจังหวัด</option>' + provinces.map(p => `<option value="${p.code}">${p.name}</option>`).join('');
-    ['reg-province', 'acc-province', 'batches-province'].forEach(id => { el(id).innerHTML = opts; });
+    ['reg-province', 'acc-province', 'batches-province', 'compare-province'].forEach(id => { el(id).innerHTML = opts; });
+    el('btn-compare').addEventListener('click', loadCompare);
     el('batches-province').addEventListener('change', loadBatches);
 
     el('btn-login').addEventListener('click', openLogin);
@@ -157,6 +158,7 @@ const Admin = (() => {
     document.querySelectorAll('#console-tabs [data-tab]').forEach(b => b.classList.toggle('is-active', b.dataset.tab === tab));
     document.querySelectorAll('#console [data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== tab));
     setMsg(el('console-status'), '');
+    if (tab === 'compare' && isNational() && !el('compare-province').value && hooks.currentProvince?.()) el('compare-province').value = hooks.currentProvince();
     ({ batches: loadBatches, requests: loadRequests, accounts: loadAccounts, audit: loadAudit, logins: loadLogins, settings: loadSettings }[tab])?.();
   }
   async function refreshBadge() {
@@ -241,7 +243,7 @@ const Admin = (() => {
     const r = await run(() => Api.post('hs_batches', isNational() && bp.value ? { provinceCode: bp.value } : {}));
     if (!r) { box.innerHTML = ''; return; }
     box.innerHTML = r.batches.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>ไฟล์</th><th>จังหวัด</th><th class="num">นำเข้า</th><th class="num">ซ้ำ</th><th>ช่วงวันที่</th><th>ผู้นำเข้า</th><th></th></tr></thead><tbody>${r.batches.map(b => `<tr>
-      <td><p class="font-semibold">${esc(b.fileName || b.batchId)}</p><p class="text-xs text-ink-mute">${dt(b.importedAt)}</p></td><td>${esc(provName(String(b.provinceCode)))}</td>
+      <td><p class="font-semibold">${esc(b.fileName || b.batchId)}</p><p class="text-xs text-ink-mute">${dt(b.importedAt)} · ${SRC_LABEL[String(b.source || 'AGENCY').toUpperCase()] || 'ต้นสังกัด'}</p></td><td>${esc(provName(String(b.provinceCode)))}</td>
       <td class="num">${fmt(b.accepted)}</td><td class="num">${fmt(b.duplicates)}</td><td class="text-xs">${Geo.thaiDate(b.firstDate)} – ${Geo.thaiDate(b.lastDate)}</td><td class="text-xs">${esc(b.importedBy)}</td>
       <td class="text-right"><button class="btn-ghost btn-sm text-red-700" data-batch-del="${esc(b.batchId)}" data-n="${b.accepted}">ลบชุดนี้</button></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีชุดข้อมูลที่นำเข้า');
     box.querySelectorAll('[data-batch-del]').forEach(b => b.addEventListener('click', async () => {
@@ -267,8 +269,61 @@ const Admin = (() => {
     const label = { login: 'เข้าสู่ระบบ', register: 'ยื่นคำขอ', request_approve: 'อนุมัติคำขอ', request_reject: 'ไม่อนุมัติคำขอ', account_create: 'เพิ่มผู้ดูแล', account_update: 'แก้ไขผู้ดูแล', account_disabled: 'ระงับสิทธิ์', account_approved: 'เปิดสิทธิ์', account_delete: 'ลบสิทธิ์', hs_import: 'นำเข้า HS', hs_delete_batch: 'ลบชุดข้อมูล', hs_clear: 'ล้างข้อมูล HS', settings_save: 'ตั้งค่าระบบ', setup: 'ติดตั้งระบบ' };
     box.innerHTML = r.logs.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>เวลา</th><th>ผู้ดำเนินการ</th><th>รายการ</th><th>จังหวัด</th><th>รายละเอียด</th></tr></thead><tbody>${r.logs.map(l => `<tr><td class="whitespace-nowrap text-xs">${dt(l.time)}</td><td>${esc(l.actor)}</td><td>${esc(label[l.action] || l.action)}</td><td>${esc(l.provinceCode ? provName(String(l.provinceCode).padStart(2, '0')) : '-')}</td><td class="text-xs text-ink-soft">${esc(l.detail)}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีประวัติ');
   }
-  async function loadSettings() { try { const r = await Api.get('settings'); el('set-guide').value = r.settings.guideUrl || ''; } catch (err) { setMsg(el('console-status'), err.message, 'error'); } }
-  async function saveSettings(e) { e.preventDefault(); if (await run(() => Api.post('settings_save', { guideUrl: el('set-guide').value.trim() }), 'บันทึกการตั้งค่าแล้ว')) hooks.onSettingsChanged?.(); }
+  async function loadSettings() {
+    try {
+      const r = await Api.get('settings');
+      el('set-guide').value = r.settings.guideUrl || '';
+      document.querySelectorAll('input[name="set-source"]').forEach(x => { x.checked = x.value === (r.settings.hsSource || 'AGENCY'); });
+      el('set-ref').value = r.settings.refSeasons || '2567,2568';
+    } catch (err) { setMsg(el('console-status'), err.message, 'error'); }
+  }
+  async function saveSettings(e) {
+    e.preventDefault();
+    const hsSource = document.querySelector('input[name="set-source"]:checked')?.value || 'AGENCY';
+    if (await run(() => Api.post('settings_save', { guideUrl: el('set-guide').value.trim(), hsSource, refSeasons: el('set-ref').value.trim() || '2567,2568' }), 'บันทึกการตั้งค่าแล้ว — แผนที่และระดับความเสี่ยงใช้ค่าใหม่แล้ว')) hooks.onSettingsChanged?.();
+  }
+
+  /* ======================= เปรียบเทียบแหล่งข้อมูล (ต้นสังกัด vs NASA FIRMS) ======================= */
+  const SRC_LABEL = { AGENCY: 'ต้นสังกัด', FIRMS: 'NASA FIRMS' };
+  async function loadCompare() {
+    const box = el('compare-result'), code = isNational() ? el('compare-province').value : user()?.prov;
+    if (!code) return setMsg(el('console-status'), 'เลือกจังหวัดก่อน', 'warn');
+    box.innerHTML = '<p class="text-sm text-ink-soft">กำลังโหลดข้อมูลทั้งสองแหล่ง…</p>';
+    try {
+      const [r, bundle] = await Promise.all([Api.post('hs_compare', { provinceCode: code }), Geo.provinceBundle(code)]);
+      const ix = Object.fromEntries(r.cols.map((c, i) => [c, i]));
+      const pts = { AGENCY: [], FIRMS: [] };
+      r.rows.forEach(x => pts[x[ix.source]]?.push({ date: x[ix.date], d: x[ix.dCode], lat: x[ix.lat], lng: x[ix.lng], sat: x[ix.satellite] }));
+      // จุดตรงกัน: วันเดียวกัน ห่างไม่เกิน 1 กม.
+      const km = (a, b) => { const p = Math.PI / 180, dl = (b.lat - a.lat) * p, dn = (b.lng - a.lng) * p; return 2 * 6371 * Math.asin(Math.sqrt(Math.sin(dl / 2) ** 2 + Math.cos(a.lat * p) * Math.cos(b.lat * p) * Math.sin(dn / 2) ** 2)); };
+      const byDate = {}; pts.FIRMS.forEach(f => { (byDate[f.date] = byDate[f.date] || []).push(f); });
+      const agDates = new Set(pts.AGENCY.map(a => a.date));
+      const overlap = [...agDates].filter(d => byDate[d]).sort();
+      const inRange = p => overlap.length && p.date >= overlap[0] && p.date <= overlap[overlap.length - 1];
+      let matched = 0; const agIn = pts.AGENCY.filter(inRange), fiIn = pts.FIRMS.filter(inRange);
+      agIn.forEach(a => { if ((byDate[a.date] || []).some(f => km(a, f) <= 1)) matched++; });
+      const month = d => d.slice(0, 7), dname = c => bundle.district.features.find(f => f.properties.amp_code === c)?.properties.amp_th || c || 'ไม่ระบุ';
+      const tally = (list, keyFn) => list.reduce((o, p) => { const k = keyFn(p); o[k] = (o[k] || 0) + 1; return o; }, {});
+      const mA = tally(pts.AGENCY, p => month(p.date)), mF = tally(pts.FIRMS, p => month(p.date));
+      const dA = tally(agIn, p => p.d), dF = tally(fiIn, p => p.d);
+      const months = [...new Set([...Object.keys(mA), ...Object.keys(mF)])].sort();
+      const dists = [...new Set([...Object.keys(dA), ...Object.keys(dF)])].sort((a, b) => (dF[b] || 0) + (dA[b] || 0) - (dF[a] || 0) - (dA[a] || 0));
+      const ym = k => `${CONFIG.MONTH_SHORT[+k.slice(5)]} ${+k.slice(0, 4) + 543}`;
+      const range = l => { const d = l.map(p => p.date).sort(); return d.length ? `${Geo.thaiDate(d[0])} – ${Geo.thaiDate(d[d.length - 1])}` : '-'; };
+      const kpi = (v, l) => `<div class="rounded-lg bg-paper p-2.5"><div class="text-lg font-bold">${v}</div><div class="text-xs text-ink-soft">${l}</div></div>`;
+      box.innerHTML = `
+        <p class="text-sm">แหล่งข้อมูลหลักปัจจุบัน: <b>${SRC_LABEL[r.active]}</b>${isNational() ? ' (เปลี่ยนได้ที่แท็บ “ตั้งค่าระบบ”)' : ''}</p>
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          ${kpi(fmt(pts.AGENCY.length), `ต้นสังกัด · ${range(pts.AGENCY)}`)}${kpi(fmt(pts.FIRMS.length), `NASA FIRMS · ${range(pts.FIRMS)}`)}
+          ${kpi(agIn.length ? `${Math.round(matched * 100 / agIn.length)}%` : '-', 'จุดต้นสังกัดที่ FIRMS พบตรงกัน (ช่วงที่มีทั้งสองแหล่ง)')}${kpi(fmt(Math.max(0, fiIn.length - matched)), 'จุด FIRMS ที่ไม่มีในข้อมูลต้นสังกัด (โดยประมาณ)')}
+        </div>
+        ${overlap.length ? `<p class="text-xs text-ink-soft">ช่วงที่มีข้อมูลทั้งสองแหล่ง: ${Geo.thaiDate(overlap[0])} – ${Geo.thaiDate(overlap[overlap.length - 1])} · FIRMS รวมดาวเทียม 2 ดวงจึงมักพบจุดมากกว่าข้อมูลที่มาจากดวงเดียว</p>` : '<p class="text-xs text-amber-700">ยังไม่มีช่วงเวลาที่มีข้อมูลทั้งสองแหล่ง</p>'}
+        <div class="grid gap-4 lg:grid-cols-2">
+          <div class="overflow-x-auto rounded-xl border border-line"><table class="data-table"><thead><tr><th>เดือน</th><th class="num">ต้นสังกัด</th><th class="num">NASA FIRMS</th></tr></thead><tbody>${months.map(k => `<tr><td>${ym(k)}</td><td class="num">${mA[k] ? fmt(mA[k]) : '<span class="text-ink-mute">ไม่มีข้อมูล</span>'}</td><td class="num">${mF[k] ? fmt(mF[k]) : '<span class="text-ink-mute">ไม่มีข้อมูล</span>'}</td></tr>`).join('')}</tbody></table></div>
+          <div class="overflow-x-auto rounded-xl border border-line"><table class="data-table"><thead><tr><th>อำเภอ (ช่วงที่มีทั้งสองแหล่ง)</th><th class="num">ต้นสังกัด</th><th class="num">NASA FIRMS</th></tr></thead><tbody>${dists.map(c => `<tr><td>${esc(dname(c))}</td><td class="num">${fmt(dA[c] || 0)}</td><td class="num">${fmt(dF[c] || 0)}</td></tr>`).join('') || '<tr><td colspan="3" class="text-ink-mute">-</td></tr>'}</tbody></table></div>
+        </div>`;
+    } catch (err) { box.innerHTML = ''; setMsg(el('console-status'), err.message, 'error'); }
+  }
 
   /* ======================= Excel import (ต้นแบบ: hsID/Date/Province/LandType/PlantType) ======================= */
   const ALLOWED = new Set(CONFIG.PLANT_TYPES);
@@ -353,6 +408,10 @@ const Admin = (() => {
       const detail = findDetailTable(wb);
       if (!detail) throw new Error('ไม่พบตารางที่มีคอลัมน์ hsID, Date (หรือ YYYY-MM-DD), Province, LandType และ PlantType');
       const idx = Object.fromEntries(detail.headers.map((h, i) => [h, i]));
+      // แหล่งข้อมูล: คอลัมน์ Source = FIRMS → NASA FIRMS (เฉพาะผู้ดูแลระดับประเทศ) ไม่เช่นนั้นเป็นข้อมูลต้นสังกัด
+      const srcCol = idx.Source, firstSrc = srcCol === undefined ? '' : String(detail.rows.find(r => r && r[srcCol])?.[srcCol] || '').trim().toUpperCase();
+      const source = firstSrc === 'FIRMS' ? 'FIRMS' : 'AGENCY';
+      if (source === 'FIRMS' && !isNational()) throw new Error('ไฟล์นี้เป็นข้อมูล NASA FIRMS (Source = FIRMS) ซึ่งนำเข้าได้เฉพาะ Super Admin / Mini Super Admin');
       const counts = {}, unknown = {};
       detail.rows.forEach(row => {
         if (!row || row.every(v => v === null || v === '')) return;
@@ -362,7 +421,7 @@ const Admin = (() => {
         c.rows++; if (String(row[idx.LandType] ?? '').trim() === 'พื้นที่เกษตร') c.ag++;
       });
       const found = Object.values(counts).sort((a, b) => b.ag - a.ag || a.name.localeCompare(b.name, 'th'));
-      imp = { fileName: file.name, wb, detail, idx, found, unknown, selected: new Set(), results: {} };
+      imp = { fileName: file.name, wb, detail, idx, found, unknown, selected: new Set(), results: {}, source };
       if (!found.length) throw new Error('ไม่พบชื่อจังหวัดที่ระบบรู้จักในคอลัมน์ Province');
       if (!isNational()) {
         const mine = counts[user().prov];
@@ -439,7 +498,7 @@ const Admin = (() => {
       const dName = String(get('Amphoe') ?? '').trim(), sName = String(get('Tambon') ?? '').trim();
       const codes = Geo.resolveCodes(bundle, c[0], c[1], dName, sName);
       const date = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`, time = Geo.normalizeTime(get('Time'));
-      records.push({ id: id || `${date}_${time}_${c[1].toFixed(5)}_${c[0].toFixed(5)}`, date, time, dCode: codes.dCode, sCode: codes.sCode, dName, sName, village: String(get('BaanN') ?? '').trim(), plant, lat: +c[1].toFixed(6), lng: +c[0].toFixed(6) });
+      records.push({ id: id || `${date}_${time}_${c[1].toFixed(5)}_${c[0].toFixed(5)}`, date, time, dCode: codes.dCode, sCode: codes.sCode, dName, sName, village: String(get('BaanN') ?? '').trim(), plant, lat: +c[1].toFixed(6), lng: +c[0].toFixed(6), sat: String(get('Satellite') ?? '').trim() });
       byPlant[plant] = (byPlant[plant] || 0) + 1;
       const ym = `${d.y}-${String(d.m).padStart(2, '0')}`; byMonth[ym] = (byMonth[ym] || 0) + 1;
       const dn = bundle.district.features.find(f => f.properties.amp_code === codes.dCode)?.properties.amp_th || dName || 'ไม่ระบุ';
@@ -487,7 +546,7 @@ const Admin = (() => {
     btn.disabled = !valid.length;
     btn.textContent = valid.length > 1 ? `บันทึก ${valid.length} จังหวัด (${fmt(total)} จุด)` : valid.length ? `บันทึกจังหวัด${valid[0].name} (${fmt(total)} จุด)` : 'บันทึกเข้าฐานข้อมูล';
     if (!valid.length) setMsg(el('import-status'), 'ไม่มีจังหวัดที่ผ่านการตรวจสอบ จึงยังบันทึกไม่ได้', 'error');
-    else setMsg(el('import-status'), `ตรวจสอบอัตโนมัติแล้ว พร้อมนำเข้า ${fmt(total)} จุด${blocked.length ? ` · ข้าม ${blocked.length} จังหวัดที่ไม่ผ่าน (${blocked.map(b => b.name).join(', ')})` : ''} ระบบไม่บันทึกจุดที่มีอยู่แล้วซ้ำ`, blocked.length ? 'warn' : 'success');
+    else setMsg(el('import-status'), `แหล่งข้อมูล: ${SRC_LABEL[imp.source]} · ตรวจสอบอัตโนมัติแล้ว พร้อมนำเข้า ${fmt(total)} จุด${blocked.length ? ` · ข้าม ${blocked.length} จังหวัดที่ไม่ผ่าน (${blocked.map(b => b.name).join(', ')})` : ''} ระบบไม่บันทึกจุดที่มีอยู่แล้วซ้ำ`, blocked.length ? 'warn' : 'success');
   }
 
   async function saveImport() {
@@ -500,11 +559,11 @@ const Admin = (() => {
     let sent = 0; const done = [];
     try {
       for (const r of valid) {
-        const batchId = `B-${r.code}-${stamp}`; let accepted = 0, duplicates = 0;
+        const batchId = `${imp.source === 'FIRMS' ? 'F' : 'B'}-${r.code}-${stamp}`; let accepted = 0, duplicates = 0;
         for (let i = 0; i < r.records.length; i += size) {
           const chunk = r.records.slice(i, i + size);
           setMsg(status, `กำลังบันทึกจังหวัด${r.name} ${fmt(Math.min(i + size, r.records.length))}/${fmt(r.records.length)} จุด (${done.length + 1}/${valid.length} จังหวัด)…`, 'working');
-          const res = await Api.post('hs_import', { provinceCode: r.code, batchId, fileName: imp.fileName, rows: chunk, final: i + size >= r.records.length });
+          const res = await Api.post('hs_import', { provinceCode: r.code, batchId, fileName: imp.fileName, rows: chunk, final: i + size >= r.records.length, source: imp.source });
           accepted += res.accepted; duplicates += res.duplicates; sent += chunk.length;
           fill.style.width = `${Math.round(sent * 100 / grand)}%`;
         }

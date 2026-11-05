@@ -144,7 +144,7 @@
       <section class="panel-sec" id="risk-methodology">
         <h3 class="panel-h">เกณฑ์ระดับความเสี่ยง</h3>
         <ul class="space-y-1.5 text-sm" id="risk-criteria"></ul>
-        <p class="mt-2 text-xs leading-relaxed text-ink-soft">ช่วงข้อมูล 1 ฤดูกาล (ต.ค.–ก.ย.) ใช้แบบจำลองหลักฐานรายปี; มากกว่า 1 ฤดูกาลใช้ Multi-year Model A (HS 40% · แนวโน้ม 20% · ชนิดพืช 20% · ขนาดพื้นที่ 20%)</p>
+        <p class="mt-2 text-xs leading-relaxed text-ink-soft">ประเมินด้วยดัชนีความเสี่ยงการเผา (BRI) จากจุดความร้อน 3 ฤดูล่าสุด (ต.ค.–ก.ย.) ช่วงวันเดียวกันของทุกฤดู: ความหนาแน่นจุดต่อพื้นที่ 60% · การเกิดซ้ำ 20% · ชนิดพืช 20% แล้วเทียบกับฤดูอ้างอิงของทุกจังหวัดที่มีข้อมูล ระดับความเสี่ยงคือ “โอกาสเผา” จึงอาจไม่ตรงกับจำนวนจุดของช่วงที่เลือก</p>
         <a id="risk-guide-link" class="btn-ghost btn-sm mt-3 hidden w-full justify-center" target="_blank" rel="noopener noreferrer">คู่มือการประเมินความเสี่ยง</a>
       </section>
     </div>
@@ -309,6 +309,7 @@
       <div class="tabs-line" role="tablist" id="console-tabs">
         <button type="button" class="tab-line is-active" data-tab="import">นำเข้า HS</button>
         <button type="button" class="tab-line" data-tab="batches">ชุดข้อมูล</button>
+        <button type="button" class="tab-line" data-tab="compare">เปรียบเทียบแหล่งข้อมูล</button>
         <button type="button" class="tab-line" data-tab="requests">คำขอใช้งาน <span id="badge-requests" class="badge hidden">0</span></button>
         <button type="button" class="tab-line" data-tab="accounts">ผู้ดูแลระบบ</button>
         <button type="button" class="tab-line" data-tab="logins">รายงานการเข้าใช้</button>
@@ -322,7 +323,7 @@
       <section data-pane="import" class="space-y-4">
         <div>
           <h3 class="text-base font-bold">นำเข้าข้อมูลจุดความร้อน (HS) จาก Excel</h3>
-          <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ระบบอ่านคอลัมน์ Province แล้วแยกข้อมูลรายจังหวัดให้อัตโนมัติ คัดเฉพาะ LandType = พื้นที่เกษตร ตัดรายการซ้ำ และตรวจยอดกับชีต hsPlant (ถ้ามี)</p>
+          <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ระบบอ่านคอลัมน์ Province แล้วแยกข้อมูลรายจังหวัดให้อัตโนมัติ คัดเฉพาะ LandType = พื้นที่เกษตร ตัดรายการซ้ำ และตรวจยอดกับชีต hsPlant (ถ้ามี) — ไฟล์จากหน่วยงานต้นสังกัดบันทึกเป็นแหล่ง “ต้นสังกัด” ไฟล์ที่มีคอลัมน์ Source = FIRMS บันทึกเป็นแหล่ง “NASA FIRMS” (เฉพาะผู้ดูแลระดับประเทศ)</p>
         </div>
         <div id="import-scope" class="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800"></div>
         <div><label class="field-label" for="import-file">ไฟล์ข้อมูล</label><input id="import-file" type="file" accept=".xlsx,.xls,.csv" class="field w-full file:mr-3 file:rounded file:border-0 file:bg-brand-50 file:px-2 file:py-1 file:text-brand-800"/></div>
@@ -345,6 +346,18 @@
           </div>
         </div>
         <div id="batches-list"></div>
+      </section>
+
+      <!-- Compare data sources -->
+      <section data-pane="compare" class="hidden space-y-4">
+        <div class="flex flex-wrap items-end justify-between gap-2">
+          <div><h3 class="text-base font-bold">เปรียบเทียบแหล่งข้อมูลจุดความร้อน</h3><p class="text-sm text-ink-soft">เทียบข้อมูลจากหน่วยงานต้นสังกัดกับ NASA FIRMS ที่ระบบจำแนกพื้นที่เกษตร — จุดตรงกัน = วันเดียวกัน ห่างไม่เกิน 1 กม.</p></div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="compare-province" class="field-sm national-only hidden" aria-label="จังหวัด"></select>
+            <button id="btn-compare" type="button" class="btn-primary btn-sm">เปรียบเทียบ</button>
+          </div>
+        </div>
+        <div id="compare-result" class="space-y-4"></div>
       </section>
 
       <!-- Requests -->
@@ -398,9 +411,22 @@
       <!-- Settings (super only) -->
       <section data-pane="settings" class="hidden space-y-3">
         <h3 class="text-base font-bold">ตั้งค่าระบบ</h3>
-        <form id="form-settings" class="space-y-2">
-          <label class="field-label" for="set-guide">ลิงก์คู่มือการประเมินความเสี่ยง (เว้นว่างเพื่อซ่อนปุ่ม)</label>
-          <input id="set-guide" class="field w-full" type="url" placeholder="https://drive.google.com/…"/>
+        <form id="form-settings" class="space-y-4">
+          <div>
+            <label class="field-label" for="set-guide">ลิงก์คู่มือการประเมินความเสี่ยง (เว้นว่างเพื่อซ่อนปุ่ม)</label>
+            <input id="set-guide" class="field w-full" type="url" placeholder="https://drive.google.com/…"/>
+          </div>
+          <fieldset class="rounded-xl border border-line p-3">
+            <legend class="px-1 text-sm font-semibold">แหล่งข้อมูลหลักที่ใช้แสดงผลและประเมินความเสี่ยง</legend>
+            <label class="chip mb-1.5"><input type="radio" name="set-source" value="AGENCY"/> ข้อมูลจากหน่วยงานต้นสังกัด</label>
+            <label class="chip"><input type="radio" name="set-source" value="FIRMS"/> NASA FIRMS (Suomi-NPP + NOAA-20 ตัดจุดซ้ำ จำแนกพื้นที่เกษตรโดยระบบ)</label>
+            <p class="mt-2 text-xs text-ink-soft">ใช้แหล่งเดียวทุกปีเพื่อให้เทียบข้ามปีได้ ข้อมูลอีกแหล่งยังเก็บไว้และดูได้ที่แท็บ “เปรียบเทียบแหล่งข้อมูล”</p>
+          </fieldset>
+          <div>
+            <label class="field-label" for="set-ref">ฤดูอ้างอิงสำหรับจุดตัด 4 ระดับ (ปี พ.ศ. คั่นด้วย ,)</label>
+            <input id="set-ref" class="field w-full" placeholder="2567,2568" pattern="^\s*25\d\d(\s*,\s*25\d\d)*\s*$"/>
+            <p class="mt-1 text-xs text-ink-soft">จุดตัด = เปอร์เซ็นไทล์ 50/75/90 ของดัชนีในฤดูอ้างอิง ควรทบทวนทุก 3 ปี</p>
+          </div>
           <button type="submit" class="btn-primary">บันทึกการตั้งค่า</button>
         </form>
       </section>

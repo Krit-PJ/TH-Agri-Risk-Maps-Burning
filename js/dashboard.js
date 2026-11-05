@@ -3,6 +3,7 @@ const Dashboard = (() => {
   const charts = {};
   const el = id => document.getElementById(id);
   const fmt = n => Number(n || 0).toLocaleString('th-TH');
+  const NO_LEVEL = { label: 'ยังไม่ประเมิน', color: '#cbd5e1', key: 'none' };
 
   function pctChange(current, previous) {
     if (previous === 0) return current === 0 ? { text: '0%', cls: 'chg-flat' } : { text: 'ใหม่', cls: 'chg-up' };
@@ -22,12 +23,18 @@ const Dashboard = (() => {
       return (!st.crop || p.__crop === st.crop) && (!st.district || p.__dCode === st.district) && (!st.subdistrict || p.__sCode === st.subdistrict);
     });
     const s = Number(st.startYM), e = Number(st.endYM);
-    const current = base.filter(f => f.properties.__ym >= s && f.properties.__ym <= e);
-    const prior = base.filter(f => f.properties.__ym >= s - 12 && f.properties.__ym <= e - 12);
+    // เทียบรายวัน: ช่วงที่เลือกตัดที่วันล่าสุดของข้อมูล แล้วเทียบกับวันเดียวกันของปีก่อน (ไม่เอาเดือนที่ยังไม่ครบไปเทียบกับเดือนเต็ม)
+    const iso = (i, last) => { const m = Geo.ymFromIndex(i), y = m.year - 543, d = last ? new Date(Date.UTC(y, m.month, 0)).getUTCDate() : 1; return `${y}-${String(m.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`; };
+    const latest = (raw.hotspot?.features || []).reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
+    const startD = iso(s, false); let endD = iso(e, true); if (latest && endD > latest) endD = latest;
+    const shift = d => { const y = +d.slice(0, 4) - 1, m = +d.slice(5, 7), dd = Math.min(+d.slice(8, 10), new Date(Date.UTC(y, m, 0)).getUTCDate()); return `${y}-${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}`; };
+    const pStart = shift(startD), pEnd = shift(endD);
+    const current = base.filter(f => f.properties.__date >= startD && f.properties.__date <= endD);
+    const prior = base.filter(f => f.properties.__date >= pStart && f.properties.__date <= pEnd);
     const countBy = fs => fs.reduce((o, f) => { const k = f.properties[unitKey] || '-'; o[k] = (o[k] || 0) + 1; return o; }, {});
     const cur = countBy(current), prev = countBy(prior);
     const rows = risk.map(f => {
-      const p = f.properties, lv = MapModule.getRiskLevel(p.risk_score);
+      const p = f.properties, lv = MapModule.riskInfo() ? MapModule.getRiskLevel(p.risk_score) : NO_LEVEL;
       return { code: p.code, name: p.name, current: cur[p.code] || 0, previous: prev[p.code] || 0, score: p.risk_score, level: lv, change: pctChange(cur[p.code] || 0, prev[p.code] || 0) };
     });
     const unassigned = (cur['-'] || 0);
@@ -37,7 +44,7 @@ const Dashboard = (() => {
     const byMonth = months.map(i => current.filter(f => f.properties.__ym === i).length);
     return { level, unitLabel: level === 'district' ? 'อำเภอ' : 'ตำบล', rows, current, prior, unassigned, levels, months, byMonth,
       totalCur: current.length, totalPrev: prior.length, change: pctChange(current.length, prior.length),
-      priorText: Geo.periodText({ startYear: Geo.ymFromIndex(s - 12).year, startMonth: Geo.ymFromIndex(s - 12).month, endYear: Geo.ymFromIndex(e - 12).year, endMonth: Geo.ymFromIndex(e - 12).month, startYM: s - 12, endYM: e - 12 }) };
+      currentText: `${Geo.thaiDate(startD)} – ${Geo.thaiDate(endD)}`, priorText: `${Geo.thaiDate(pStart)} – ${Geo.thaiDate(pEnd)}` };
   }
 
   function chartBase() {
@@ -72,7 +79,7 @@ const Dashboard = (() => {
     const cmp = S.rows.slice().sort((a, b) => b.current - a.current || a.name.localeCompare(b.name, 'th'));
     el('comparison-area-header').textContent = u;
     el('title-comparison').textContent = `เปรียบเทียบ HS ราย${u}`;
-    el('comparison-period').textContent = `${Geo.periodText(MapModule.getState().startYM ? currentRange() : null)} เทียบ ${S.priorText}${MapModule.getState().crop ? ` · ${MapModule.getState().crop}` : ''}`;
+    el('comparison-period').textContent = `${S.currentText} เทียบ ${S.priorText}${MapModule.getState().crop ? ` · ${MapModule.getState().crop}` : ''}`;
     document.querySelector('#tbl-hotspot-comparison tbody').innerHTML = cmp.map(r => `<tr><td>${r.name}</td><td class="num">${fmt(r.previous)}</td><td class="num">${fmt(r.current)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`).join('');
     el('comparison-previous-total').textContent = fmt(S.totalPrev);
     el('comparison-current-total').textContent = fmt(S.totalCur);
@@ -102,10 +109,9 @@ const Dashboard = (() => {
     // all units ranked (template "ทุกอำเภอ")
     el('rank-area-header').textContent = u;
     el('title-top10').textContent = `ทุก${u} เรียงตามจำนวน HS`;
-    document.querySelector('#tbl-top-district tbody').innerHTML = cmp.map((r, i) => `<tr><td class="num text-ink-mute">${i + 1}</td><td>${r.name}</td><td class="num">${fmt(r.current)}</td><td><span class="risk-pill" title="คะแนน ${r.score.toFixed(1)}"><span class="risk-dot" style="background:${r.level.color}"></span>${r.level.label}</span></td></tr>`).join('');
+    document.querySelector('#tbl-top-district tbody').innerHTML = cmp.map((r, i) => `<tr><td class="num text-ink-mute">${i + 1}</td><td>${r.name}</td><td class="num">${fmt(r.current)}</td><td><span class="risk-pill"${MapModule.viewerDetailed() ? ` title="คะแนน ${r.score.toFixed(1)}"` : ''}><span class="risk-dot" style="background:${r.level.color}"></span>${r.level.label}</span></td></tr>`).join('');
     return S;
   }
-  function currentRange() { const s = MapModule.getState(); return { startYear: s.startYear, startMonth: s.startMonth, endYear: s.endYear, endMonth: s.endMonth, startYM: s.startYM, endYM: s.endYM }; }
 
   return { init, refresh, summary, pctChange };
 })();

@@ -3,7 +3,8 @@ const MapModule = (() => {
   let map, basemapKey = 'voyager';
   const base = {};
   const shown = { national: null, province: null, district: null, subdistrict: null, risk: null, hotspot: null };
-  const raw = { bundle: null, hotspot: null, riskDistrict: null, riskSubdistrict: null, seasons: [] };
+  const raw = { bundle: null, hotspot: null, riskDistrict: null, riskSubdistrict: null, seasons: [], risk: null, code: '' };
+  const riskCache = new Map();
   let state = { district: '', subdistrict: '', crop: '', startYM: null, endYM: null };
   let nationalLayers = new Map();
 
@@ -66,13 +67,13 @@ const MapModule = (() => {
   function hideNational() { remove(shown.national); shown.national = null; }
 
   /* ---------------- Province mode ---------------- */
-  function setProvince(bundle, hotspotFC) {
+  function setProvince(bundle, hotspotFC, code) {
     hideNational();
-    raw.bundle = bundle; raw.hotspot = hotspotFC;
+    raw.bundle = bundle; raw.hotspot = hotspotFC; raw.code = code || ''; raw.risk = null;
   }
   function clearProvince() {
     ['province', 'district', 'subdistrict', 'risk', 'hotspot'].forEach(k => { remove(shown[k]); shown[k] = null; });
-    raw.bundle = null; raw.hotspot = null; raw.riskDistrict = null; raw.riskSubdistrict = null;
+    raw.bundle = null; raw.hotspot = null; raw.riskDistrict = null; raw.riskSubdistrict = null; raw.risk = null; raw.code = '';
   }
 
   const districtCodeOf = f => f.properties.amp_code;
@@ -86,6 +87,11 @@ const MapModule = (() => {
     return inRange(p) && (!state.crop || p.__crop === state.crop) && (!state.district || p.__dCode === state.district) && (!state.subdistrict || p.__sCode === state.subdistrict);
   }
   function filteredHotspots() { return (raw.hotspot?.features || []).filter(matchesFeature); }
+  function scopeUnits(level) {
+    if (!raw.bundle) return [];
+    if (level === 'district') return raw.bundle.district.features.filter(f => !state.district || districtCodeOf(f) === state.district);
+    return raw.bundle.subdistrict.features.filter(f => (!state.district || f.properties.amp_code === state.district) && (!state.subdistrict || subdistrictCodeOf(f) === state.subdistrict));
+  }
 
   /** ฤดูกาลที่อยู่ในช่วงข้อมูลที่เลือก (ใช้แทน "ปีที่เลือก" ของต้นแบบ) */
   function activeSeasons() {
@@ -99,82 +105,61 @@ const MapModule = (() => {
     const idx = seasons.length - 1 - seasons.indexOf(season);
     return CONFIG.SEASON_COLORS[Math.max(0, idx) % CONFIG.SEASON_COLORS.length];
   }
-  function seasonWeights(seasons) {
-    const cfg = CONFIG.RISK_MODEL.seasonWeights;
-    const vals = seasons.map((s, i) => cfg[seasons.length - 1 - i] ?? cfg[cfg.length - 1]);
-    const total = vals.reduce((a, b) => a + b, 0) || 1;
-    return Object.fromEntries(seasons.map((s, i) => [s, vals[i] / total]));
-  }
 
-  /* ---- ต้นแบบ: annual evidence-gate model ---- */
-  function annualEvidenceScore(count, cropScore, areaScore) {
-    const exposure = Math.max(0, Math.min(100, (Number(cropScore || 0) + Number(areaScore || 0)) / 2));
-    let score = 0;
-    if (count <= 0) score = 0;
-    else if (count <= 2) score = 5 + (count - 1) * 10 + exposure * 0.09;
-    else if (count <= 5) score = 25 + ((count - 3) / 2) * 15 + exposure * 0.09;
-    else if (count <= 10) score = 50 + ((count - 6) / 4) * 15 + exposure * 0.09;
-    else score = 75 + Math.min(20, Math.log1p(count - 10) * 7) + exposure * 0.05;
-    const cap = count <= 2 ? 24.99 : count <= 5 ? 49.99 : count <= 10 ? 74.99 : 100;
-    const floor = count <= 0 ? 0 : count <= 2 ? 0 : count <= 5 ? 25 : count <= 10 ? 50 : 75;
-    return Math.max(floor, Math.min(cap, score));
+  /* ---------------- ระดับความเสี่ยง (BRI) — คำนวณที่ Backend จากทุกจังหวัดที่มีข้อมูล ---------------- */
+  /** ผู้ดูแลระบบในขอบเขตสิทธิ์จะเห็นคะแนน องค์ประกอบ และแนวโน้มเพิ่ม (ประชาชนเห็นเฉพาะระดับ 4 สี) */
+  function viewerDetailed() {
+    const u = Api.session()?.user;
+    return !!u && (u.role === 'superadmin' || u.role === 'minisuper' || u.prov === raw.code);
   }
-
-  function scopeUnits(level) {
-    if (!raw.bundle) return [];
-    if (level === 'district') return raw.bundle.district.features.filter(f => !state.district || districtCodeOf(f) === state.district);
-    return raw.bundle.subdistrict.features.filter(f => (!state.district || f.properties.amp_code === state.district) && (!state.subdistrict || subdistrictCodeOf(f) === state.subdistrict));
+  function endDateOfRange() {
+    if (!state.endYM) return '';
+    const e = Geo.ymFromIndex(state.endYM), y = e.year - 543, last = new Date(Date.UTC(y, e.month, 0)).getUTCDate();
+    return `${y}-${String(e.month).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
   }
-
-  function buildRiskCollection(level, seasons) {
-    const w = seasonWeights(seasons), factors = CONFIG.RISK_MODEL.weights;
-    const units = scopeUnits(level);
-    const key = level === 'district' ? '__dCode' : '__sCode';
-    const pool = (raw.hotspot?.features || []).filter(f => inRange(f.properties) && (!state.crop || f.properties.__crop === state.crop));
-    const rows = units.map(feature => {
-      const code = level === 'district' ? districtCodeOf(feature) : subdistrictCodeOf(feature);
-      const fs = pool.filter(h => h.properties[key] === code);
-      const counts = {}; let cropSum = 0;
-      seasons.forEach(s => { counts[s] = 0; });
-      fs.forEach(h => { counts[h.properties.__season] = (counts[h.properties.__season] || 0) + 1; cropSum += CONFIG.CROP_RISK[h.properties.__crop] ?? 50; });
-      const weighted = seasons.reduce((sum, s) => sum + (counts[s] || 0) * (w[s] || 0), 0);
-      let trend = 0;
-      if (seasons.length >= 2) {
-        const prev = counts[seasons[seasons.length - 2]] || 0, cur = counts[seasons[seasons.length - 1]] || 0;
-        trend = prev === 0 ? (cur > 0 ? 100 : 0) : Math.max(0, Math.min(100, 50 + ((cur - prev) / prev) * 100));
-      }
-      return { feature, code, counts, weighted, trend, total: fs.length, crop: fs.length ? cropSum / fs.length : 0, area: Number(feature.properties.area_sqkm || 0) * 625 };
-    });
-    const referenceMax = Math.max(1, ...rows.flatMap(r => seasons.map(s => r.counts[s] || 0)));
-    const logs = rows.map(r => Math.log1p(r.area));
-    const minL = logs.length ? Math.min(...logs) : 0, maxL = logs.length ? Math.max(...logs) : 0;
+  async function loadRisk() {
+    if (!raw.code || !Api.configured()) return null;
+    const detailed = viewerDetailed(), end = endDateOfRange();
+    const key = `${raw.code}|${end}|${detailed ? 'd' : 'p'}`;
+    if (!riskCache.has(key)) {
+      const req = detailed ? Api.post('risk_detail', { province: raw.code, end }) : Api.get('risk', { province: raw.code, end });
+      riskCache.set(key, req.catch(err => { riskCache.delete(key); throw err; }));
+    }
+    return riskCache.get(key);
+  }
+  const LEVEL_MID = [12.5, 37.5, 62.5, 87.5];
+  function buildRiskCollection(level) {
+    const units = scopeUnits(level), api = raw.risk, key = level === 'district' ? '__dCode' : '__sCode';
+    const counts = {};
+    filteredHotspots().forEach(h => { const c = h.properties[key]; counts[c] = (counts[c] || 0) + 1; });
+    const table = api?.[level] || {}, cols = api?.cols || [];
+    const at = (row, name) => row ? row[cols.indexOf(name)] : undefined;
     return {
       type: 'FeatureCollection',
-      features: rows.map((r, i) => {
-        const hs = seasons.length ? Math.max(0, Math.min(100, r.weighted / referenceMax * 100)) : 0;
-        const area = maxL === minL ? (rows.length === 1 ? 50 : 0) : (logs[i] - minL) / (maxL - minL) * 100;
-        let score = 0, method = '-';
-        if (seasons.length === 1) { score = annualEvidenceScore(r.total, r.crop, area); method = 'Unified annual evidence-gate model'; }
-        else if (seasons.length >= 2) { score = hs * factors.hotspot + r.trend * factors.trend + r.crop * factors.crop + area * factors.area; method = 'Multi-year Model A'; }
-        const p = r.feature.properties;
+      features: units.map(feature => {
+        const p = feature.properties, code = level === 'district' ? districtCodeOf(feature) : subdistrictCodeOf(feature);
+        const row = table[code], lvl = row ? Number(at(row, 'level')) : 0;
+        const detail = api?.detailed && row ? { bri: at(row, 'bri'), D: at(row, 'D'), P: at(row, 'P'), C: at(row, 'C'), hs0: at(row, 'hs0'), hs1: at(row, 'hs1'), hs2: at(row, 'hs2'), base: at(row, 'base'), trend: at(row, 'trend') } : null;
         return {
-          type: 'Feature', geometry: r.feature.geometry,
+          type: 'Feature', geometry: feature.geometry,
           properties: {
-            code: r.code, name: level === 'district' ? p.amp_th : p.tam_th, district_code: p.amp_code, level,
-            risk_score: +score.toFixed(2), hotspot_score: +hs.toFixed(2), trend_score: +r.trend.toFixed(2), crop_score: +r.crop.toFixed(2), area_score: +area.toFixed(2),
-            selected_hotspot_count: r.total, risk_method: method, seasons: seasons.join(',')
+            code, name: level === 'district' ? p.amp_th : p.tam_th, district_code: p.amp_code, level,
+            risk_level: lvl, risk_score: detail ? Number(at(row, 'score')) : LEVEL_MID[lvl],
+            selected_hotspot_count: counts[code] || 0, season_hotspot_count: row ? Number(at(row, 'hs0')) : 0, detail
           }
         };
       })
     };
   }
-
-  function computeDynamicRisk() {
-    const seasons = activeSeasons();
+  function computeRiskLayers() {
     raw.seasons = [...new Set([...(raw.hotspot?.features || []).map(f => f.properties.__season)])].sort((a, b) => a - b);
-    raw.riskDistrict = buildRiskCollection('district', seasons);
-    raw.riskSubdistrict = buildRiskCollection('subdistrict', seasons);
-    return { seasons };
+    raw.riskDistrict = buildRiskCollection('district');
+    raw.riskSubdistrict = buildRiskCollection('subdistrict');
+  }
+  /** คำอธิบายช่วงประเมินความเสี่ยงสำหรับแสดงผล */
+  function riskInfo() {
+    const r = raw.risk; if (!r || r.empty) return null;
+    return { season: r.season, early: r.early, start: r.window?.start, end: r.window?.end, latest: r.latest, seasons: r.seasons || [], detailed: !!r.detailed, cuts: r.cuts, refSeasons: r.refSeasons, source: r.source };
   }
 
   /* ---------------- render ---------------- */
@@ -198,24 +183,39 @@ const MapModule = (() => {
 
   function renderRisk() {
     remove(shown.risk); shown.risk = null;
-    if (!raw.bundle || !document.getElementById('lyr-risk')?.checked) return;
+    if (!raw.bundle || !raw.risk || raw.risk.empty || !document.getElementById('lyr-risk')?.checked) return;   // ไม่มีผลประเมิน = ไม่ระบายสี (ไม่แสดงเป็น "ต่ำ")
     const level = state.district ? 'subdistrict' : 'district';
     const fc = level === 'district' ? raw.riskDistrict : raw.riskSubdistrict;
     shown.risk = L.geoJSON(fc, {
-      style: f => { const l = getRiskLevel(f.properties.risk_score); return { color: '#ffffff', weight: 0.8, fillColor: l.color, fillOpacity: 0.5 }; },
+      style: f => { const l = CONFIG.RISK_LEVELS[f.properties.risk_level] || CONFIG.RISK_LEVELS[0]; return { color: '#ffffff', weight: 0.8, fillColor: l.color, fillOpacity: 0.5 }; },
       onEachFeature: (f, l) => {
-        const p = f.properties, lv = getRiskLevel(p.risk_score);
-        l.bindTooltip(`<strong>${level === 'district' ? 'อ.' : 'ต.'}${p.name}</strong><br>HS ${p.selected_hotspot_count.toLocaleString('th-TH')} จุด<br>ความเสี่ยง: ${lv.label} (${p.risk_score.toFixed(1)})`, { sticky: true, className: 'prov-tip' });
+        const p = f.properties;
+        l.bindTooltip(riskTooltip(p, level), { sticky: true, className: 'prov-tip' });
         l.on('click', () => document.dispatchEvent(new CustomEvent('agri-risk:area-click', { detail: { level, code: p.code, district: p.district_code } })));
       }
     }).addTo(map);
     [shown.subdistrict, shown.district, shown.province].forEach(x => x?.bringToFront());
   }
 
+  const TREND_TEXT = { up: '↑ เพิ่มขึ้นจากค่าฐาน', down: '↓ ลดลงจากค่าฐาน', flat: '→ ใกล้เคียงค่าฐาน' };
+  /** ประชาชน: ระดับ + จำนวนจุดในช่วงที่เลือก · ผู้ดูแล: คะแนน องค์ประกอบ และแนวโน้มเพิ่ม */
+  function riskTooltip(p, level) {
+    const lv = CONFIG.RISK_LEVELS[p.risk_level] || CONFIG.RISK_LEVELS[0], fmt = n => Number(n || 0).toLocaleString('th-TH');
+    let html = `<strong>${level === 'district' ? 'อ.' : 'ต.'}${p.name}</strong><br><span class="risk-pill"><span class="risk-dot" style="background:${lv.color}"></span>ความเสี่ยง${lv.label}</span><br>จุดความร้อนในช่วงที่เลือก ${fmt(p.selected_hotspot_count)} จุด`;
+    if (p.detail) {
+      const d = p.detail;
+      html += `<div class="tip-admin">ผู้ดูแล · BRI ${Number(d.bri).toFixed(1)} (D ${Number(d.D).toFixed(0)} · P ${Number(d.P).toFixed(0)} · C ${Number(d.C).toFixed(0)})<br>HS ช่วงประเมิน ${fmt(d.hs0)} · ค่าฐาน ${Number(d.base).toFixed(1)}${d.trend ? ` · ${TREND_TEXT[d.trend]}` : ''}</div>`;
+    }
+    return html;
+  }
+
   function renderHotspots() {
     remove(shown.hotspot); shown.hotspot = null;
     if (!raw.bundle || !document.getElementById('lyr-hotspot')?.checked) return;
-    const group = L.markerClusterGroup({ disableClusteringAtZoom: 11, chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 50 });
+    // วงกลมกลุ่มจุดใช้สีกลาง (ไม่ใช้เขียว/เหลือง/ส้มค่าเริ่มต้นที่ซ้ำกับสีระดับความเสี่ยง) ตัวเลข = จำนวนจุดความร้อนในกลุ่ม
+    const group = L.markerClusterGroup({ disableClusteringAtZoom: 11, chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 50,
+      iconCreateFunction: c => { const n = c.getChildCount(), size = n < 10 ? 30 : n < 100 ? 36 : 44;
+        return L.divIcon({ html: `<span>${n.toLocaleString('th-TH')}</span>`, className: 'hs-cluster', iconSize: [size, size] }); } });
     L.geoJSON({ type: 'FeatureCollection', features: filteredHotspots() }, {
       pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5.5, fillColor: seasonColor(f.properties.__season), color: '#ffffff', weight: 1.4, fillOpacity: 0.95 }),
       onEachFeature: (f, l) => {
@@ -233,19 +233,28 @@ const MapModule = (() => {
   function renderLegend() {
     const el = document.getElementById('map-legend'); if (!el) return;
     const seasons = [...new Set(filteredHotspots().map(f => f.properties.__season))].sort((a, b) => b - a);
-    el.innerHTML = `<div class="p-3 text-xs">
-      <p class="mb-1.5 font-bold text-ink">ระดับความเสี่ยง</p>
+    const info = riskInfo();
+    const basis = info ? (info.early ? `ประเมินจากฤดู ${info.seasons.join(', ')} (ฤดู ${info.season} ทั้งฤดู เนื่องจากต้นฤดูข้อมูลยังน้อย)` : `ประเมินจากฤดู ${info.seasons.join(', ')} ช่วง 1 ต.ค.–${Geo.thaiDate(info.end)} ของทุกฤดู`) : 'กำลังประเมิน…';
+    el.innerHTML = `<div class="max-w-[17rem] p-3 text-xs">
+      <p class="mb-1.5 font-bold text-ink">ระดับความเสี่ยงการเผา (พื้นที่)</p>
       <div class="grid grid-cols-2 gap-x-3 gap-y-1">${CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span class="risk-pill text-xs"><span class="risk-dot" style="background:${l.color}"></span>${l.label}</span>`).join('')}</div>
-      ${seasons.length ? `<p class="mb-1.5 mt-2.5 font-bold text-ink">จุดความร้อน (ฤดูกาล ต.ค.–ก.ย.)</p><div class="flex flex-wrap gap-x-3 gap-y-1">${seasons.map(s => `<span class="risk-pill text-xs"><span class="risk-dot ring-1 ring-white" style="background:${seasonColor(s)}"></span>${s}</span>`).join('')}</div>` : ''}
+      <p class="mt-1 leading-snug text-ink-soft">${basis}</p>
+      ${seasons.length ? `<p class="mb-1.5 mt-2.5 font-bold text-ink">จุดความร้อน (ตำแหน่ง) ตามฤดูกาล ต.ค.–ก.ย.</p><div class="flex flex-wrap gap-x-3 gap-y-1">${seasons.map(s => `<span class="risk-pill text-xs"><span class="risk-dot ring-1 ring-white" style="background:${seasonColor(s)}"></span>${s}</span>`).join('')}</div>
+      <p class="mt-1.5 flex items-center gap-1.5 leading-snug text-ink-soft"><span class="hs-cluster-mini">12</span>ตัวเลขในวงกลม = จำนวนจุดความร้อนที่อยู่รวมกัน</p>` : ''}
     </div>`;
     el.classList.remove('hidden');
   }
 
-  function applyFilter(next) {
+  /** แสดงจุด/ขอบเขตทันที แล้วโหลดระดับความเสี่ยงจาก Backend (แคชตามจังหวัด+วันสิ้นสุดช่วง) */
+  async function applyFilter(next) {
     state = { district: next.district || '', subdistrict: next.subdistrict || '', crop: next.crop || '', startYM: Number(next.startYM) || null, endYM: Number(next.endYM) || null, startYear: next.startYear, startMonth: next.startMonth, endYear: next.endYear, endMonth: next.endMonth };
-    const info = computeDynamicRisk();
-    renderRisk(); renderBoundaries(); renderHotspots(); renderLegend(); focusSelection();
-    return info;
+    const code = raw.code;
+    computeRiskLayers(); renderBoundaries(); renderHotspots(); renderLegend(); focusSelection();
+    let error = '';
+    try { const r = await loadRisk(); if (code !== raw.code) return { stale: true }; raw.risk = r; }
+    catch (err) { error = err.message; raw.risk = null; }
+    computeRiskLayers(); renderRisk(); renderLegend();
+    return { seasons: activeSeasons(), risk: riskInfo(), error };
   }
 
   function selectionFeatures() {
@@ -266,7 +275,8 @@ const MapModule = (() => {
   function getRiskLevel(score) { return CONFIG.RISK_LEVELS.find(x => score >= x.min && score < x.max) || CONFIG.RISK_LEVELS[0]; }
 
   return {
-    init, showNational, highlightProvince, setProvince, clearProvince, applyFilter, focusSelection, getRiskLevel, seasonColor,
+    init, showNational, highlightProvince, setProvince, clearProvince, applyFilter, focusSelection, getRiskLevel, seasonColor, riskInfo, viewerDetailed,
+    clearRiskCache: () => riskCache.clear(),
     map: () => map, getData: () => raw, getState: () => ({ ...state }), filteredHotspots, inRange, selectionFeatures,
     getRiskForScope: level => level === 'district' ? raw.riskDistrict : raw.riskSubdistrict,
     invalidate: () => map?.invalidateSize({ pan: false })
