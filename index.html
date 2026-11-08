@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.5.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.6.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -124,6 +124,8 @@
         <select id="filter-district" class="field w-full"><option value="">ทุกอำเภอ</option></select>
         <label class="field-label mt-2" for="filter-subdistrict">ตำบล</label>
         <select id="filter-subdistrict" class="field w-full" disabled><option value="">เลือกอำเภอก่อน</option></select>
+        <label class="field-label mt-2" for="filter-land">ประเภทพื้นที่ (LandType)</label>
+        <select id="filter-land" class="field w-full"></select>
         <label class="field-label mt-2" for="filter-crop">ชนิดพืช (PlantType)</label>
         <select id="filter-crop" class="field w-full"><option value="">ทุกชนิดพืช</option></select>
         <div class="mt-3 flex gap-2">
@@ -144,8 +146,8 @@
       <section class="panel-sec" id="risk-methodology">
         <h3 class="panel-h">เกณฑ์ระดับความเสี่ยง</h3>
         <ul class="space-y-1.5 text-sm" id="risk-criteria"></ul>
-        <p class="mt-2 text-xs leading-relaxed text-ink-soft">ประเมินด้วยดัชนีความเสี่ยงการเผา (BRI) จากจุดความร้อน 3 ฤดูล่าสุด (ต.ค.–ก.ย.) ช่วงวันเดียวกันของทุกฤดู: ความหนาแน่นจุดต่อพื้นที่ 60% · การเกิดซ้ำ 20% · ชนิดพืช 20% แล้วเทียบกับฤดูอ้างอิงของทุกจังหวัดที่มีข้อมูล ระดับความเสี่ยงคือ “โอกาสเผา” จึงอาจไม่ตรงกับจำนวนจุดของช่วงที่เลือก</p>
-        <a id="risk-guide-link" class="btn-ghost btn-sm mt-3 hidden w-full justify-center" target="_blank" rel="noopener noreferrer">คู่มือการประเมินความเสี่ยง</a>
+        <p class="mt-2 text-xs leading-relaxed text-ink-soft">ประเมินด้วยดัชนีความเสี่ยงการเผา (BRI) จากจุดความร้อนของฤดูที่ครบแล้ว (1 ต.ค.–30 ก.ย.) ล่าสุดไม่เกิน 3 ฤดู: ความหนาแน่นจุดต่อพื้นที่ 60% · การเกิดซ้ำ 20% · ชนิดพืช 20% (เมื่อมีข้อมูลฤดูเดียว: ความหนาแน่น 80% · ชนิดพืช 20%) แล้วจัด 4 ระดับเทียบทุกพื้นที่ของทุกจังหวัดที่มีข้อมูล ระดับความเสี่ยงคือ “โอกาสเกิดการเผา” ในฤดูนี้ จึงอาจไม่ตรงกับจำนวนจุดของช่วงที่เลือก</p>
+        <a id="risk-guide-link" href="docs/Agri-Risk-Manual.pdf" class="btn-ghost btn-sm mt-3 w-full justify-center" target="_blank" rel="noopener noreferrer">คู่มือการใช้งานและการประเมินความเสี่ยง (PDF)</a>
       </section>
     </div>
   </aside>
@@ -323,10 +325,18 @@
       <section data-pane="import" class="space-y-4">
         <div>
           <h3 class="text-base font-bold">นำเข้าข้อมูลจุดความร้อน (HS) จาก Excel</h3>
-          <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ขั้นตอน: เลือกไฟล์ → กด <b>ตรวจสอบไฟล์</b> → ดูผลตรวจ → กด <b>บันทึกเข้าฐานข้อมูล</b> และยืนยัน ระบบแยกข้อมูลรายจังหวัดจากคอลัมน์ Province คัดเฉพาะ LandType = พื้นที่เกษตร ตัดรายการซ้ำ และตรวจยอดกับชีต hsPlant (ถ้ามี) — ไฟล์จากหน่วยงานต้นสังกัดบันทึกเป็นแหล่ง “ต้นสังกัด” ไฟล์ที่มีคอลัมน์ Source = FIRMS บันทึกเป็นแหล่ง “NASA FIRMS” (เฉพาะผู้ดูแลระดับประเทศ)</p>
+          <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ขั้นตอน: เลือกไฟล์ → กด <b>ตรวจสอบไฟล์</b> → ดูผลตรวจ → กด <b>บันทึกเข้าฐานข้อมูล</b> และยืนยัน ระบบแยกข้อมูลรายจังหวัดจากคอลัมน์ Province นำเข้าทุกประเภทพื้นที่ (LandType) ตัดรายการซ้ำ และตรวจยอดกับชีตสรุป Land/hsPlant ในไฟล์ (ถ้ามี) — ไฟล์จากหน่วยงานต้นสังกัดบันทึกเป็นแหล่ง “ต้นสังกัด” ไฟล์ที่มีคอลัมน์ Source = FIRMS บันทึกเป็นแหล่ง “NASA FIRMS” (เฉพาะผู้ดูแลระดับประเทศ)</p>
         </div>
         <div id="import-scope" class="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800"></div>
         <div><label class="field-label" for="import-file">ไฟล์ข้อมูล</label><input id="import-file" type="file" accept=".xlsx,.xls,.csv" class="field w-full file:mr-3 file:rounded file:border-0 file:bg-brand-50 file:px-2 file:py-1 file:text-brand-800"/></div>
+        <div class="grid gap-3 rounded-xl border border-line p-3 sm:grid-cols-3">
+          <div><label class="field-label" for="import-from">นำเข้าเฉพาะวันที่ตั้งแต่ (ไม่บังคับ)</label><input id="import-from" type="date" class="field w-full"/></div>
+          <div><label class="field-label" for="import-to">ถึงวันที่ (ไม่บังคับ)</label><input id="import-to" type="date" class="field w-full"/></div>
+          <div><span class="field-label">จุดที่มี hsID อยู่แล้ว</span>
+            <label class="chip mb-1"><input type="radio" name="import-mode" value="skip" checked/> ข้าม (ไม่บันทึกซ้ำ)</label>
+            <label class="chip"><input type="radio" name="import-mode" value="upsert"/> ปรับปรุงด้วยไฟล์นี้ (upsert)</label></div>
+          <p class="text-xs text-ink-soft sm:col-span-3">ใช้ช่วงวันที่เมื่อต้องการนำเข้าเพียงบางช่วงของไฟล์ (เช่น ไฟล์ดาวเทียม Suomi-NPP ถึง 31 ธ.ค. 2568 และไฟล์ NOAA-20 ตั้งแต่ 1 ม.ค. 2569) · upsert: จุดเดิมจะถูกปรับปรุงค่าและย้ายมาอยู่ในชุดข้อมูลนี้</p>
+        </div>
         <div id="import-provinces" class="hidden"></div>
         <div class="flex flex-wrap gap-2">
           <button id="btn-import-check" type="button" class="btn-ghost" disabled>ตรวจสอบไฟล์</button>
@@ -340,8 +350,10 @@
       <!-- Batches -->
       <section data-pane="batches" class="hidden space-y-3">
         <div class="flex flex-wrap items-end justify-between gap-2">
-          <div><h3 class="text-base font-bold">ชุดข้อมูลที่นำเข้า</h3><p class="text-sm text-ink-soft">ลบชุดข้อมูลที่นำเข้าผิดพลาดได้ทีละชุด</p></div>
+          <div><h3 class="text-base font-bold">ชุดข้อมูลที่นำเข้า</h3><p class="text-sm text-ink-soft">เปิด/ปิดการใช้งานชุดข้อมูลได้ (ปิด = เก็บไว้แต่ไม่นำมาแสดงผลและประเมินความเสี่ยง) หรือลบชุดที่นำเข้าผิดพลาด</p></div>
           <div class="flex flex-wrap items-center gap-2">
+            <button id="btn-batch-on" type="button" class="btn-ghost btn-sm" disabled>เปิดใช้งานที่เลือก</button>
+            <button id="btn-batch-off" type="button" class="btn-ghost btn-sm" disabled>ปิดใช้งานที่เลือก</button>
             <select id="batches-province" class="field-sm national-only hidden" aria-label="จังหวัด"></select>
             <button id="btn-clear-province" type="button" class="btn-danger btn-sm">ล้างข้อมูล HS ทั้งจังหวัด</button>
           </div>
@@ -424,9 +436,9 @@
             <p class="mt-2 text-xs text-ink-soft">ใช้แหล่งเดียวทุกปีเพื่อให้เทียบข้ามปีได้ ข้อมูลอีกแหล่งยังเก็บไว้และดูได้ที่แท็บ “เปรียบเทียบแหล่งข้อมูล”</p>
           </fieldset>
           <div>
-            <label class="field-label" for="set-ref">ฤดูอ้างอิงสำหรับจุดตัด 4 ระดับ (ปี พ.ศ. คั่นด้วย ,)</label>
-            <input id="set-ref" class="field w-full" placeholder="2567,2568" pattern="^\s*25\d\d(\s*,\s*25\d\d)*\s*$"/>
-            <p class="mt-1 text-xs text-ink-soft">จุดตัด = เปอร์เซ็นไทล์ 50/75/90 ของดัชนีในฤดูอ้างอิง ควรทบทวนทุก 3 ปี</p>
+            <label class="field-label" for="set-ref">ฤดูอ้างอิงสำหรับจุดตัด 4 ระดับ (auto หรือปี พ.ศ. คั่นด้วย ,)</label>
+            <input id="set-ref" class="field w-full" placeholder="auto" pattern="^\s*(auto|25\d\d(\s*,\s*25\d\d)*)\s*$"/>
+            <p class="mt-1 text-xs text-ink-soft">auto (แนะนำ) = ใช้ฤดูที่ครบแล้วซึ่งเป็นฐานการประเมิน · จุดตัด = เปอร์เซ็นไทล์ 50/75/90 ของดัชนี · ฤดูที่ระบุจะใช้เมื่อมีข้อมูลครบทั้งฤดู</p>
           </div>
           <button type="submit" class="btn-primary">บันทึกการตั้งค่า</button>
         </form>
@@ -492,13 +504,13 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.5.0"></script>
-<script src="js/api.js?v=3.5.0"></script>
-<script src="js/geo.js?v=3.5.0"></script>
-<script src="js/map.js?v=3.5.0"></script>
-<script src="js/dashboard.js?v=3.5.0"></script>
-<script src="js/report.js?v=3.5.0"></script>
-<script src="js/admin.js?v=3.5.0"></script>
-<script src="js/app.js?v=3.5.0"></script>
+<script src="js/config.js?v=3.6.0"></script>
+<script src="js/api.js?v=3.6.0"></script>
+<script src="js/geo.js?v=3.6.0"></script>
+<script src="js/map.js?v=3.6.0"></script>
+<script src="js/dashboard.js?v=3.6.0"></script>
+<script src="js/report.js?v=3.6.0"></script>
+<script src="js/admin.js?v=3.6.0"></script>
+<script src="js/app.js?v=3.6.0"></script>
 </body>
 </html>

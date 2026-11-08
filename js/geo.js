@@ -28,6 +28,7 @@ const Geo = (() => {
     if (s.includes('อ้อย')) return 'อ้อย';
     if (s.replace(/\s/g, '') === 'เกษตรอื่นๆ') return 'เกษตรอื่น ๆ';
     if (['อื่น ๆ', 'อื่นๆ', 'อื่น'].includes(s)) return 'อื่น ๆ';
+    if (s.replace(/\s/g, '') === 'พื้นที่ป่า' || s === 'ป่า') return 'พื้นที่ป่า';
     return s;
   }
 
@@ -47,7 +48,7 @@ const Geo = (() => {
     if (v === undefined || v === null || v === '') return '';
     let mins = NaN;
     if (v instanceof Date && !Number.isNaN(v.getTime())) mins = Math.round(v.getHours() * 60 + v.getMinutes() + v.getSeconds() / 60); // ปัดวินาทีที่คลาดจาก LMT ปี 1899
-    else if (typeof v === 'number') mins = v >= 0 && v < 1 ? Math.round(v * 1440) : Number.isInteger(v) && v <= 2359 ? Math.floor(v / 100) * 60 + (v % 100 < 60 ? v % 100 : NaN) : NaN;
+    else if (typeof v === 'number') mins = v >= 0 && v < 1 ? Math.round(v * 1440) : v > 1 && !Number.isInteger(v) ? Math.round((v % 1) * 1440) : Number.isInteger(v) && v <= 2359 ? Math.floor(v / 100) * 60 + (v % 100 < 60 ? v % 100 : NaN) : NaN;
     else {
       const s = String(v).trim(); let x;
       if ((x = s.match(/(\d{1,2}):(\d{2})/))) mins = +x[1] * 60 + +x[2];
@@ -102,7 +103,7 @@ const Geo = (() => {
         __dCode: dCode, __sCode: sCode,
         __district: dByCode.get(dCode)?.properties.amp_th || clean(r[idx.dName]) || 'ไม่ระบุ',
         __subdistrict: sByCode.get(sCode)?.properties.tam_th || clean(r[idx.sName]) || 'ไม่ระบุ',
-        __village: String(r[idx.village] || ''), __crop: normalizeCrop(r[idx.plant])
+        __village: String(r[idx.village] || ''), __crop: normalizeCrop(r[idx.plant]), __land: idx.land !== undefined ? String(r[idx.land] || '') : ''
       });
       features.push(pt);
     });

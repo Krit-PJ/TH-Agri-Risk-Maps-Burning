@@ -17,6 +17,7 @@ const App = (() => {
     el('footer-year').textContent = new Date().getFullYear() + 543;
     initPanels();
     initSidebarToggle();
+    populateLands();
     bindProvinceControls();
     bindPrint();
     await Admin.init({
@@ -50,7 +51,7 @@ const App = (() => {
     if (!Api.configured()) return;
     try {
       const r = await Api.get('settings'); const a = el('risk-guide-link');
-      a.classList.toggle('hidden', !r.settings.guideUrl); if (r.settings.guideUrl) a.href = r.settings.guideUrl;
+      a.href = r.settings.guideUrl || CONFIG.GUIDE_PDF; a.classList.remove('hidden');
     } catch { }
   }
 
@@ -121,7 +122,7 @@ const App = (() => {
     const info = available.find(p => p.code === code);
     setLoading(true, `กำลังโหลดข้อมูลจังหวัด${info.name}…`);
     try {
-      const [bundle, hs] = await Promise.all([Geo.provinceBundle(code), Api.get('hotspots', { province: code })]);
+      const [bundle, hs] = await Promise.all([Geo.provinceBundle(code), Api.get('hotspots', { province: code, land: currentLand() })]);
       if (token !== loadToken) return;
       const hotspots = Geo.buildHotspots(hs, bundle);
       current = { ...info, bundle };
@@ -142,6 +143,29 @@ const App = (() => {
       console.error(err); Admin.toast('โหลดข้อมูลจังหวัดไม่สำเร็จ: ' + err.message, 'error');
       if (token === loadToken) { location.hash = ''; }
     } finally { if (token === loadToken) setLoading(false); }
+  }
+  function currentLand() { return el('filter-land')?.value || CONFIG.DEFAULT_LAND; }
+  /** เปลี่ยนประเภทพื้นที่: โหลดจุดความร้อนของประเภทที่เลือกใหม่ (คงช่วงเวลา/อำเภอที่เลือกไว้) แล้วประเมินใหม่ */
+  async function changeLand() {
+    if (!current) return;
+    const token = ++loadToken, code = current.code;
+    setLoading(true, `กำลังโหลดจุดความร้อน${landLabel(currentLand())}…`);
+    try {
+      const hs = await Api.get('hotspots', { province: code, land: currentLand() });
+      if (token !== loadToken) return;
+      const hotspots = Geo.buildHotspots(hs, current.bundle);
+      MapModule.setProvince(current.bundle, hotspots, code);
+      const crop = el('filter-crop').value; populateCrops(hotspots);
+      if (crop && el('filter-crop').querySelector(`option[value="${crop}"]`)) el('filter-crop').value = crop;
+      await applyCurrent();
+    } catch (err) { Admin.toast('โหลดข้อมูลไม่สำเร็จ: ' + err.message, 'error'); }
+    finally { if (token === loadToken) setLoading(false); }
+  }
+  const landLabel = l => l === 'ALL' ? 'ทุกประเภทพื้นที่' : l;
+  function populateLands() {
+    const sel = el('filter-land'); if (!sel || sel.options.length) return;
+    sel.innerHTML = CONFIG.LAND_TYPES.map(l => `<option value="${l}">${l}${l === CONFIG.DEFAULT_LAND ? ' (ค่าเริ่มต้น)' : ''}</option>`).join('') + '<option value="ALL">ทุกประเภทพื้นที่</option>';
+    sel.value = CONFIG.DEFAULT_LAND;
   }
   function setLoading(on, text) { el('map-loading').classList.toggle('hidden', !on); el('map-loading').classList.toggle('grid', on); if (text) el('map-loading-text').textContent = text; }
 
@@ -189,7 +213,7 @@ const App = (() => {
   }
 
   function filterState() {
-    return { district: el('filter-district').value, subdistrict: el('filter-subdistrict').value, crop: el('filter-crop').value, ...appliedRange };
+    return { district: el('filter-district').value, subdistrict: el('filter-subdistrict').value, crop: el('filter-crop').value, land: currentLand(), ...appliedRange };
   }
   let applySeq = 0;
   async function applyCurrent() {
@@ -201,9 +225,8 @@ const App = (() => {
     current.seasons = info.seasons; current.risk = info.risk;
     Dashboard.refresh();
     renderCropBar();
-    const r = info.risk;
-    const riskText = info.error ? ` · ประเมินระดับความเสี่ยงไม่สำเร็จ: ${info.error}` : r ? ` · ระดับความเสี่ยง: ฤดู ${r.seasons.join(', ')}${r.early ? ` (ฤดู ${r.season} ทั้งฤดู)` : ` ถึง ${Geo.thaiDate(r.end)}`}` : '';
-    el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)}${crop ? ` · ชนิดพืช: ${crop}` : ''}${riskText}`;
+    const riskText = info.error ? ` · ประเมินระดับความเสี่ยงไม่สำเร็จ: ${info.error}` : info.basis ? ` · ระดับความเสี่ยง: ${info.basis}` : '';
+    el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)} · ${landLabel(currentLand())}${crop ? ` · ชนิดพืช: ${crop}` : ''}${riskText}`;
   }
   function scopeText() {
     const d = el('filter-district'), t = el('filter-subdistrict');
@@ -218,10 +241,11 @@ const App = (() => {
     el('filter-district').addEventListener('change', () => { populateSubdistricts(); applyCurrent(); });
     el('filter-subdistrict').addEventListener('change', applyCurrent);
     el('filter-crop').addEventListener('change', applyCurrent);
+    el('filter-land').addEventListener('change', changeLand);
     el('btn-reset-filter').addEventListener('click', () => {
       el('filter-district').value = ''; populateSubdistricts(); el('filter-crop').value = '';
       if (current?.defaultRange) { const r = current.defaultRange; setRangeUI(r.startYear, r.startMonth, r.endYear, r.endMonth); appliedRange = { ...r }; }
-      applyCurrent();
+      if (currentLand() !== CONFIG.DEFAULT_LAND) { el('filter-land').value = CONFIG.DEFAULT_LAND; changeLand(); } else applyCurrent();
     });
     ['range-start-month', 'range-start-year', 'range-end-month', 'range-end-year'].forEach(id => el(id).addEventListener('change', () => {
       el('btn-apply-period').classList.add('ring-2', 'ring-amber-400');
@@ -246,7 +270,7 @@ const App = (() => {
   }
 
   /* ============================ print ============================ */
-  function printCtx() { return { province: current, scopeText: scopeText(), periodText: Geo.periodText(appliedRange), seasons: current.seasons || [], risk: current.risk || null }; }
+  function printCtx() { return { province: current, scopeText: scopeText(), periodText: Geo.periodText(appliedRange), seasons: current.seasons || [], risk: current.risk || null, land: landLabel(currentLand()), basis: MapModule.riskBasisText(false) }; }
   function bindPrint() {
     el('btn-print').addEventListener('click', async () => {
       if (!current) return;

@@ -12,9 +12,14 @@ const Report = (() => {
   }
 
   /** คำอธิบายวิธีประเมินระดับความเสี่ยง (BRI) สำหรับรายงาน — ภาษาทั่วไป ไม่แสดงคะแนน */
-  function riskMethodText(r) {
-    const when = r ? (r.early ? `ฤดู ${r.seasons.join(', ')} (ใช้ฤดู ${r.season} ทั้งฤดู เพราะต้นฤดูข้อมูลยังน้อย)` : `ฤดู ${r.seasons.join(', ')} ช่วง 1 ต.ค.–${Geo.thaiDate(r.end)} ของทุกฤดู`) : '3 ฤดูล่าสุด';
-    return `ระดับความเสี่ยงประเมินจาก${when} ด้วยดัชนีความเสี่ยงการเผา (BRI): ความหนาแน่นจุดความร้อนต่อพื้นที่ 60% (ฤดูล่าสุดมีน้ำหนักมากที่สุด) การเกิดซ้ำในแต่ละฤดู 20% และชนิดพืช 20% แล้วจัด 4 ระดับเทียบกับฤดูอ้างอิงของทุกจังหวัดที่มีข้อมูล จำนวนจุดในตารางเป็นของช่วงที่เลือก จึงอาจไม่ตรงกับระดับความเสี่ยงซึ่งประเมินจากหลายฤดู`;
+  function riskMethodText(ctx) {
+    const r = ctx.risk;
+    if (!r) return `${ctx.basis || 'ยังไม่มีผลประเมินระดับความเสี่ยง'} จำนวนจุดในตารางเป็นของช่วงที่เลือก`;
+    const w = r.weights || {}, pct = x => Math.round((x || 0) * 100) + '%';
+    const parts = [`ความหนาแน่นจุดความร้อนต่อพื้นที่ ${pct(w.D)}${(r.history || []).length > 1 ? ' (ฤดูล่าสุดมีน้ำหนักมากที่สุด)' : ''}`];
+    if (w.P) parts.push(`การเกิดซ้ำในแต่ละฤดู ${pct(w.P)}`);
+    if (w.C) parts.push(`ชนิดพืช ${pct(w.C)}`);
+    return `${ctx.basis} ด้วยดัชนีความเสี่ยงการเผา (BRI): ${parts.join(' ')} แล้วจัด 4 ระดับเทียบกับทุกพื้นที่ของทุกจังหวัดที่มีข้อมูล (จุดตัดเปอร์เซ็นไทล์ 50/75/90) ระดับความเสี่ยงคือ “โอกาสเกิดการเผา” จึงอาจไม่ตรงกับจำนวนจุดของช่วงที่เลือกในตาราง`;
   }
   function build(ctx) {
     const S = Dashboard.summary();
@@ -24,7 +29,7 @@ const Report = (() => {
     // ---- header/meta ----
     el('pr-province').textContent = `จังหวัด${prov.name}`;
     el('pr-scope').textContent = ctx.scopeText;
-    el('pr-period').textContent = ctx.periodText + (st.crop ? ` (${st.crop})` : '');
+    el('pr-period').textContent = ctx.periodText + ` · ${ctx.land || 'พื้นที่เกษตร'}` + (st.crop ? ` (${st.crop})` : '');
     el('pr-updated').textContent = Geo.thaiDate(prov.last);
     el('pr-date').textContent = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -45,7 +50,7 @@ const Report = (() => {
     // ---- notes under the table: risk distribution + method ----
     const totU = S.levels.reduce((a, b) => a + b, 0) || 1;
     notes.innerHTML = `<div><h3>สรุประดับความเสี่ยง</h3><table>${CONFIG.RISK_LEVELS.slice().reverse().map(l => { const v = S.levels[CONFIG.RISK_LEVELS.indexOf(l)]; return `<tr><td><span class="lv"><i style="background:${l.color};width:2.4mm;height:2.4mm;border-radius:50%;display:inline-block;margin-right:1mm"></i>${l.label}</span></td><td class="num">${v} ${S.unitLabel}</td><td class="num">${(v * 100 / totU).toFixed(1)}%</td></tr>`; }).join('')}</table></div>
-      <div><h3>วิธีประเมิน</h3><p>${riskMethodText(ctx.risk)}</p><p>เปรียบเทียบกับช่วงเดียวกันปีก่อน: ${S.priorText}</p></div>`;
+      <div><h3>วิธีประเมิน</h3><p>${riskMethodText(ctx)}</p><p>เปรียบเทียบกับช่วงเดียวกันปีก่อน: ${S.priorText}</p></div>`;
     let f = fs, p = pad; setSize(f, p); notes.style.display = '';
     const fits = () => right.scrollHeight <= right.clientHeight + 1;
     if (!fits()) notes.style.display = 'none';
@@ -68,7 +73,7 @@ const Report = (() => {
     const m = ensureMap();
     layers.forEach(l => m.removeLayer(l)); layers = [];
     const riskFC = MapModule.getRiskForScope(S.level);
-    const riskLayer = L.geoJSON(riskFC, { style: f => ({ color: '#ffffff', weight: 0.6, fillColor: MapModule.getRiskLevel(f.properties.risk_score).color, fillOpacity: 0.55 }), interactive: false }).addTo(m);
+    const riskLayer = L.geoJSON(riskFC, { style: f => ({ color: '#ffffff', weight: 0.6, fillColor: MapModule.getRiskLevel(f.properties.risk_score).color, fillOpacity: ctx.risk ? 0.55 : 0 }), interactive: false }).addTo(m);
     layers.push(riskLayer);
     const outline = S.level === 'district'
       ? L.geoJSON(raw.bundle.district, { style: { color: '#334155', weight: 1.1, fill: false }, interactive: false })

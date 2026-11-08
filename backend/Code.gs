@@ -24,7 +24,11 @@ function initSecrets_() {
     superPassword: typeof INIT_SUPER_PASSWORD !== 'undefined' ? String(INIT_SUPER_PASSWORD) : ''
   };
 }
-const PLANT_TYPES = ['นาข้าว', 'อ้อย', 'ข้าวโพดและไร่หมุนเวียน', 'เกษตรอื่น ๆ', 'อื่น ๆ'];
+const PLANT_TYPES = ['นาข้าว', 'อ้อย', 'ข้าวโพดและไร่หมุนเวียน', 'เกษตรอื่น ๆ', 'พื้นที่ป่า', 'อื่น ๆ'];
+// ประเภทพื้นที่รับผิดชอบ (LandType) ตามไฟล์ต้นสังกัด — ค่าเริ่มต้นที่แสดงผลคือพื้นที่เกษตร · ALL = ทุกประเภท
+const LAND_TYPES = ['พื้นที่เกษตร', 'เขต สปก.', 'ป่าอนุรักษ์', 'ป่าสงวนแห่งชาติ', 'ชุมชนและอื่น ๆ', 'พื้นที่ริมทางหลวง'];
+const DEFAULT_LAND = 'พื้นที่เกษตร';
+const AGRI_LANDS = ['พื้นที่เกษตร', 'เขต สปก.'];   // ใช้คะแนนชนิดพืช (C) เฉพาะพื้นที่ที่มีการเพาะปลูก
 
 const PROVINCES = {"10":"กรุงเทพมหานคร","11":"สมุทรปราการ","12":"นนทบุรี","13":"ปทุมธานี","14":"พระนครศรีอยุธยา","15":"อ่างทอง","16":"ลพบุรี","17":"สิงห์บุรี","18":"ชัยนาท","19":"สระบุรี","20":"ชลบุรี","21":"ระยอง","22":"จันทบุรี","23":"ตราด","24":"ฉะเชิงเทรา","25":"ปราจีนบุรี","26":"นครนายก","27":"สระแก้ว","30":"นครราชสีมา","31":"บุรีรัมย์","32":"สุรินทร์","33":"ศรีสะเกษ","34":"อุบลราชธานี","35":"ยโสธร","36":"ชัยภูมิ","37":"อำนาจเจริญ","38":"บึงกาฬ","39":"หนองบัวลำภู","40":"ขอนแก่น","41":"อุดรธานี","42":"เลย","43":"หนองคาย","44":"มหาสารคาม","45":"ร้อยเอ็ด","46":"กาฬสินธุ์","47":"สกลนคร","48":"นครพนม","49":"มุกดาหาร","50":"เชียงใหม่","51":"ลำพูน","52":"ลำปาง","53":"อุตรดิตถ์","54":"แพร่","55":"น่าน","56":"พะเยา","57":"เชียงราย","58":"แม่ฮ่องสอน","60":"นครสวรรค์","61":"อุทัยธานี","62":"กำแพงเพชร","63":"ตาก","64":"สุโขทัย","65":"พิษณุโลก","66":"พิจิตร","67":"เพชรบูรณ์","70":"ราชบุรี","71":"กาญจนบุรี","72":"สุพรรณบุรี","73":"นครปฐม","74":"สมุทรสาคร","75":"สมุทรสงคราม","76":"เพชรบุรี","77":"ประจวบคีรีขันธ์","80":"นครศรีธรรมราช","81":"กระบี่","82":"พังงา","83":"ภูเก็ต","84":"สุราษฎร์ธานี","85":"ระนอง","86":"ชุมพร","90":"สงขลา","91":"สตูล","92":"ตรัง","93":"พัทลุง","94":"ปัตตานี","95":"ยะลา","96":"นราธิวาส"};
 
@@ -32,7 +36,7 @@ const SHEETS = {
   Accounts: ['accountId', 'phone', 'fullName', 'position', 'affiliation', 'provinceCode', 'provinceName', 'role', 'status', 'createdAt', 'approvedAt', 'approvedBy', 'lastLoginAt'],
   Requests: ['requestId', 'phone', 'fullName', 'position', 'affiliation', 'provinceCode', 'provinceName', 'note', 'status', 'createdAt', 'decidedAt', 'decidedBy', 'reason'],
   ProvinceSummary: ['provinceCode', 'provinceName', 'hsCount', 'firstDate', 'lastDate', 'updatedAt'],
-  Batches: ['batchId', 'provinceCode', 'fileName', 'accepted', 'duplicates', 'firstDate', 'lastDate', 'importedBy', 'importedAt', 'note', 'source'],
+  Batches: ['batchId', 'provinceCode', 'fileName', 'accepted', 'duplicates', 'firstDate', 'lastDate', 'importedBy', 'importedAt', 'note', 'source', 'active'],
   Counter: ['date', 'hits'],
   Settings: ['key', 'value'],
   AuditLog: ['time', 'actor', 'role', 'provinceCode', 'action', 'detail'],
@@ -50,12 +54,12 @@ const TEXT_COLUMNS = {
   LoginAttempts: ['identifier', 'accountId', 'provinceCode'],
   Team: ['memberId', 'provinceCode', 'photo', 'links']
 };
-const SETUP_VERSION = '3.4';
+const SETUP_VERSION = '3.5';
 const TEAM_ROLES = ['ผู้พัฒนาระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];
 const ACCOUNT_ROLES = { admin: 'Admin', minisuper: 'Mini Super Admin' };
 const LOGIN_RESULTS = { success: 'สำเร็จ', not_found: 'ไม่มีหมายเลขในระบบ', pending: 'รออนุมัติ', disabled: 'บัญชีถูกระงับ', invalid: 'รูปแบบไม่ถูกต้อง', wrong_credentials: 'ชื่อผู้ใช้/รหัสผ่านไม่ถูกต้อง' };
 // source = แหล่งข้อมูล (AGENCY = หน่วยงานต้นสังกัด, FIRMS = NASA FIRMS ที่ระบบจำแนกพื้นที่เกษตร) · satellite = ดาวเทียมที่ตรวจพบ
-const HS_HEADERS = ['hotspotId', 'date', 'time', 'districtCode', 'subdistrictCode', 'districtName', 'subdistrictName', 'village', 'plantType', 'lat', 'lng', 'batchId', 'importedAt', 'source', 'satellite'];
+const HS_HEADERS = ['hotspotId', 'date', 'time', 'districtCode', 'subdistrictCode', 'districtName', 'subdistrictName', 'village', 'plantType', 'lat', 'lng', 'batchId', 'importedAt', 'source', 'satellite', 'landType'];
 const HS_SOURCES = ['AGENCY', 'FIRMS'];
 const HS_TEXT = ['hotspotId', 'date', 'time', 'districtCode', 'subdistrictCode', 'batchId'];
 
@@ -83,12 +87,13 @@ function setup() {
   if (!findRow_('Settings', r => r.key === 'counter_total')) appendObj_('Settings', { key: 'counter_total', value: '0' });
   if (!findRow_('Settings', r => r.key === 'guide_url')) appendObj_('Settings', { key: 'guide_url', value: '' });
   if (!findRow_('Settings', r => r.key === 'hs_source')) appendObj_('Settings', { key: 'hs_source', value: 'AGENCY' });
-  if (!findRow_('Settings', r => r.key === 'risk_ref_seasons')) appendObj_('Settings', { key: 'risk_ref_seasons', value: '2567,2568' });
+  if (!findRow_('Settings', r => r.key === 'risk_ref_seasons')) appendObj_('Settings', { key: 'risk_ref_seasons', value: 'auto' });
   const fixed = migrateHsText_();
   const tagged = migrateHsSource_();
+  const v35 = migrateV35_();
   props.setProperty('SETUP_VERSION', SETUP_VERSION);
   bumpCache_('all');
-  audit_({ sub: 'SETUP', role: 'system', prov: '' }, 'setup', 'initialized v' + SETUP_VERSION + (fixed ? ' (แก้รูปแบบเวลา/วันที่ HS ' + fixed + ' ค่า)' : '') + (tagged ? ' (ระบุแหล่งข้อมูล HS ' + tagged + ' แถว)' : ''));
+  audit_({ sub: 'SETUP', role: 'system', prov: '' }, 'setup', 'initialized v' + SETUP_VERSION + (fixed ? ' (แก้รูปแบบเวลา/วันที่ HS ' + fixed + ' ค่า)' : '') + (tagged ? ' (ระบุแหล่งข้อมูล HS ' + tagged + ' แถว)' : '') + (v35 ? ' (' + v35 + ')' : ''));
   Logger.log('Setup complete');
 }
 
@@ -110,15 +115,16 @@ function ensureSetup_() {
 /* ============================== ROUTER ============================== */
 function doGet(e) {
   const p = (e && e.parameter) || {};
+  INACTIVE_MEMO_ = null;
   try {
     ensureSetup_();
     switch (p.action) {
       case 'provinces': return json_({ ok: true, provinces: publicProvinces_() });
-      case 'hotspots': return json_(publicHotspots_(String(p.province || '')));
+      case 'hotspots': return json_(publicHotspots_(String(p.province || ''), p.land));
       case 'hit': return json_({ ok: true, counter: counter_(true) });
       case 'counter': return json_({ ok: true, counter: counter_(false) });
-      case 'settings': return json_({ ok: true, settings: { guideUrl: setting_('guide_url'), hsSource: hsSource_(), refSeasons: refSeasons_().slice().sort().join(',') } });
-      case 'risk': return json_(riskForProvince_(p.province, p.end, false));
+      case 'settings': return json_({ ok: true, settings: { guideUrl: setting_('guide_url'), hsSource: hsSource_(), refSeasons: refSeasonsText_(), landTypes: LAND_TYPES, defaultLand: DEFAULT_LAND } });
+      case 'risk': return json_(riskForProvince_(p.province, p.end, false, p.land));
       case 'team': return json_({ ok: true, members: teamList_() });
       case 'ping': return json_({ ok: true, time: now_() });
       default: return json_({ ok: false, error: 'unknown action' });
@@ -130,6 +136,7 @@ function doPost(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (_) { return json_({ ok: false, error: 'invalid JSON' }); }
   try {
+    INACTIVE_MEMO_ = null;
     ensureSetup_();
     const a = body.action;
     if (a === 'login_admin') return json_(loginAdmin_(body));
@@ -149,8 +156,10 @@ function doPost(e) {
       case 'hs_batches': return json_(hsBatches_(user, body));
       case 'hs_delete_batch': return json_(hsDeleteBatch_(user, body));
       case 'hs_clear': return json_(hsClear_(user, body));
+      case 'hs_batch_active': return json_(hsBatchActive_(user, body));
+      case 'risk_warm': return json_(riskWarm_(user, body));
       case 'hs_compare': return json_(hsCompare_(user, body));
-      case 'risk_detail': requireProvince_(user, body.province); return json_(riskForProvince_(body.province, body.end, true));
+      case 'risk_detail': requireProvince_(user, body.province); return json_(riskForProvince_(body.province, body.end, true, body.land));
       case 'settings_save': return json_(settingsSave_(user, body));
       case 'audit_list': return json_(auditList_(user, body));
       case 'login_report': return json_(loginReport_(user, body));
@@ -354,6 +363,29 @@ function hsSheet_(prov, create) {
   return sh;
 }
 
+/** ชุดข้อมูลที่ปิดใช้งาน (ไม่นำมาแสดงผล/ประเมินความเสี่ยง แต่ยังเก็บไว้) — ค่าว่าง = เปิดใช้งาน */
+function batchInactive_(v) { return v === false || String(v).toUpperCase() === 'FALSE'; }
+let INACTIVE_MEMO_ = null;
+function inactiveBatches_() {
+  if (INACTIVE_MEMO_) return INACTIVE_MEMO_;
+  const set = {};
+  readAll_('Batches').forEach(r => { if (batchInactive_(r.active)) set[String(r.batchId)] = 1; });
+  INACTIVE_MEMO_ = set;
+  return set;
+}
+/** ประเภทพื้นที่ที่ขอดู: หนึ่งใน LAND_TYPES หรือ ALL (ค่าอื่น/ว่าง = พื้นที่เกษตร) */
+function landParam_(v) { const s = String(v || '').trim(); return s.toUpperCase() === 'ALL' ? 'ALL' : (LAND_TYPES.indexOf(s) >= 0 ? s : DEFAULT_LAND); }
+function rowLand_(v) { const s = String(v || '').trim(); return s || DEFAULT_LAND; }
+function landMatch_(land, v) { return land === 'ALL' || rowLand_(v) === land; }
+
+function hsRowFrom_(r, batchId, at, source) {
+  const id = String(r.id || '').trim() || [r.date, r.time, r.lat, r.lng].join('_');
+  const land = LAND_TYPES.indexOf(String(r.land || '').trim()) >= 0 ? String(r.land).trim() : (String(r.land || '').trim() ? 'ชุมชนและอื่น ๆ' : DEFAULT_LAND);
+  return [id, String(r.date), normalizeTime_(r.time), String(r.dCode || ''), String(r.sCode || ''), clean_(r.dName), clean_(r.sName),
+    clean_(r.village), PLANT_TYPES.indexOf(r.plant) >= 0 ? r.plant : 'อื่น ๆ', Number(r.lat), Number(r.lng), batchId, at, source, clean_(r.sat) || satelliteFromId_(id), land];
+}
+
+/** นำเข้า HS: mode = 'skip' (ค่าเริ่มต้น: จุดที่มี hsID อยู่แล้วไม่บันทึกซ้ำ) | 'upsert' (ปรับปรุงจุดเดิมด้วยข้อมูลไฟล์ใหม่ และย้ายเข้าชุดข้อมูลนี้) */
 function hsImport_(user, b) {
   const prov = requireProvince_(user, b.provinceCode);
   const rows = Array.isArray(b.rows) ? b.rows : [];
@@ -361,50 +393,103 @@ function hsImport_(user, b) {
   const source = String(b.source || 'AGENCY').toUpperCase();
   if (HS_SOURCES.indexOf(source) < 0) throw new Error('แหล่งข้อมูลไม่ถูกต้อง');
   if (source === 'FIRMS') requireNational_(user);   // ข้อมูล FIRMS นำเข้าโดยผู้ดูแลระดับประเทศเท่านั้น
+  const upsert = b.mode === 'upsert';
   const batchId = String(b.batchId || '').replace(/[^\w-]/g, '') || ('B-' + prov + '-' + Date.now());
   const lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
     const sh = hsSheet_(prov, true);
-    const last = sh.getLastRow();
-    const existing = new Set(last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(r => String(r[0])) : []);
+    const last = sh.getLastRow(), W = HS_HEADERS.length;
+    const data = last > 1 ? (upsert ? sh.getRange(2, 1, last - 1, W).getValues() : sh.getRange(2, 1, last - 1, 1).getValues()) : [];
+    const pos = {}; data.forEach((r, i) => { pos[String(r[0])] = i; });
     const at = now_();
-    let dup = 0;
-    const out = [];
+    let dup = 0, updated = 0, lo = Infinity, hi = -1;
+    const out = [], seen = {};
     rows.forEach(r => {
-      const id = String(r.id || '').trim() || [r.date, r.time, r.lat, r.lng].join('_');
-      const lat = Number(r.lat), lng = Number(r.lng);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) || !isFinite(lat) || !isFinite(lng)) return;
-      if (existing.has(id)) { dup++; return; }
-      existing.add(id);
-      out.push([id, String(r.date), normalizeTime_(r.time), String(r.dCode || ''), String(r.sCode || ''), clean_(r.dName), clean_(r.sName),
-        clean_(r.village), PLANT_TYPES.indexOf(r.plant) >= 0 ? r.plant : 'อื่น ๆ', lat, lng, batchId, at, source, clean_(r.sat) || satelliteFromId_(id)]);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) || !isFinite(Number(r.lat)) || !isFinite(Number(r.lng))) return;
+      const row = hsRowFrom_(r, batchId, at, source), id = row[0];
+      if (seen[id]) { dup++; return; }
+      seen[id] = 1;
+      if (pos[id] !== undefined) {
+        if (!upsert) { dup++; return; }
+        const i = pos[id]; data[i] = row; updated++; lo = Math.min(lo, i); hi = Math.max(hi, i);
+        return;
+      }
+      out.push(row);
     });
+    if (updated) {
+      hsTextFormat_(sh, lo + 2, hi - lo + 1);
+      sh.getRange(lo + 2, 1, hi - lo + 1, W).setValues(data.slice(lo, hi + 1));
+    }
     if (out.length) {
       const start = sh.getLastRow() + 1;
       hsTextFormat_(sh, start, out.length); // กัน Google Sheet แปลง "13:22" / "2026-01-02" เป็นเวลา/วันที่เอง
-      sh.getRange(start, 1, out.length, HS_HEADERS.length).setValues(out);
+      sh.getRange(start, 1, out.length, W).setValues(out);
     }
 
-    const dates = out.map(r => r[1]).sort();
+    const dates = out.concat(updated ? data.slice(lo, hi + 1).filter(r => String(r[11]) === batchId && String(r[12]) === at) : []).map(r => String(r[1])).sort();
     const bt = findRow_('Batches', r => r.batchId === batchId);
     if (bt) {
       updateRow_('Batches', bt._row, {
-        accepted: Number(bt.accepted || 0) + out.length, duplicates: Number(bt.duplicates || 0) + dup,
+        accepted: Number(bt.accepted || 0) + out.length + updated, duplicates: Number(bt.duplicates || 0) + dup,
         firstDate: [bt.firstDate, dates[0]].filter(Boolean).sort()[0] || '', lastDate: [bt.lastDate, dates[dates.length - 1]].filter(Boolean).sort().pop() || ''
       });
     } else {
-      appendObj_('Batches', { batchId: batchId, provinceCode: prov, fileName: clean_(b.fileName), accepted: out.length, duplicates: dup,
-        firstDate: dates[0] || '', lastDate: dates[dates.length - 1] || '', importedBy: user.name, importedAt: at, note: clean_(b.note), source: source });
+      appendObj_('Batches', { batchId: batchId, provinceCode: prov, fileName: clean_(b.fileName), accepted: out.length + updated, duplicates: dup,
+        firstDate: dates[0] || '', lastDate: dates[dates.length - 1] || '', importedBy: user.name, importedAt: at, note: clean_(b.note) || (upsert ? 'upsert' : ''), source: source, active: true });
     }
-    if (b.final !== false) { refreshSummary_(prov); bumpCache_(prov); audit_(user, 'hs_import', batchId + ' [' + source + '] ' + (b.fileName || ''), prov); }
-    return { ok: true, batchId: batchId, accepted: out.length, duplicates: dup };
+    const res = { ok: true, batchId: batchId, accepted: out.length, updated: updated, duplicates: dup };
+    if (b.final !== false) {
+      refreshSummary_(prov); bumpCache_(prov);
+      audit_(user, 'hs_import', batchId + ' [' + source + (upsert ? ', upsert' : '') + '] ' + (b.fileName || ''), prov);
+      res.reconcile = batchCounts_(prov, batchId);   // ตรวจยอดหลังนำเข้า: จำนวนจุดของชุดนี้ในฐานข้อมูลจริง แยกตามประเภทพื้นที่
+    }
+    return res;
   } finally { lock.releaseLock(); }
 }
 
+/** จำนวนจุดของชุดข้อมูลในฐานข้อมูล (อ่านจากชีตจริง) แยกตามประเภทพื้นที่ */
+function batchCounts_(prov, batchId) {
+  const sh = hsSheet_(prov, false), out = { total: 0, byLand: {}, first: '', last: '' };
+  if (!sh || sh.getLastRow() < 2) return out;
+  const dates = [];
+  sh.getRange(2, 1, sh.getLastRow() - 1, HS_HEADERS.length).getValues().forEach(r => {
+    if (!r[0] || String(r[11]) !== String(batchId)) return;
+    const l = rowLand_(r[15]); out.byLand[l] = (out.byLand[l] || 0) + 1; out.total++; dates.push(normalizeDate_(r[1]));
+  });
+  dates.sort(); out.first = dates[0] || ''; out.last = dates[dates.length - 1] || '';
+  return out;
+}
+
+/** รายการชุดข้อมูล + จำนวนจุดคงเหลือจริงในฐานข้อมูล (rows) — จุดที่ถูกปรับปรุงโดยชุดใหม่ (upsert) จะย้ายไปอยู่กับชุดใหม่ */
 function hsBatches_(user, b) {
   const rows = readAll_('Batches').filter(r => inScope_(user, r.provinceCode) && (!b.provinceCode || String(r.provinceCode) === String(b.provinceCode)));
+  const provs = {}; rows.forEach(r => { provs[String(r.provinceCode)] = 1; });
+  const live = {};
+  Object.keys(provs).forEach(p => {
+    const sh = hsSheet_(p, false); if (!sh || sh.getLastRow() < 2) return;
+    sh.getRange(2, 12, sh.getLastRow() - 1, 1).getValues().forEach(r => { const k = String(r[0]); if (k) live[k] = (live[k] || 0) + 1; });
+  });
   rows.sort((a, c) => String(c.importedAt).localeCompare(String(a.importedAt)));
-  return { ok: true, batches: rows.map(stripRow_) };
+  return { ok: true, batches: rows.map(stripRow_).map(r => Object.assign(r, { active: !batchInactive_(r.active), rows: live[String(r.batchId)] || 0 })) };
+}
+
+/** เปิด/ปิดการใช้งานชุดข้อมูล (หลายชุดพร้อมกันได้) — ข้อมูลไม่ถูกลบ เปิดกลับได้ทุกเมื่อ */
+function hsBatchActive_(user, b) {
+  const ids = (Array.isArray(b.batchIds) ? b.batchIds : [b.batchId]).map(String).filter(Boolean);
+  if (!ids.length) throw new Error('ไม่ได้เลือกชุดข้อมูล');
+  const active = b.active !== false && String(b.active).toLowerCase() !== 'false';
+  const lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const sh = sheet_('Batches'), col = SHEETS.Batches.indexOf('active') + 1, provs = {};
+    const list = readAll_('Batches').filter(r => ids.indexOf(String(r.batchId)) >= 0);
+    if (!list.length) throw new Error('ไม่พบชุดข้อมูล');
+    list.forEach(r => { requireProvince_(user, String(r.provinceCode)); });
+    list.forEach(r => { sh.getRange(r._row, col).setValue(active); provs[String(r.provinceCode)] = 1; });
+    INACTIVE_MEMO_ = null;
+    Object.keys(provs).forEach(p => { refreshSummary_(p); bumpCache_(p); });
+    audit_(user, active ? 'hs_batch_on' : 'hs_batch_off', list.map(r => r.batchId).join(', ').slice(0, 450), Object.keys(provs).length === 1 ? Object.keys(provs)[0] : '');
+    return { ok: true, changed: list.length, active: active };
+  } finally { lock.releaseLock(); }
 }
 
 function hsDeleteBatch_(user, b) {
@@ -413,6 +498,7 @@ function hsDeleteBatch_(user, b) {
   const prov = requireProvince_(user, bt.provinceCode);
   const removed = rewriteHs_(prov, r => String(r[11]) !== String(b.batchId));
   sheet_('Batches').deleteRow(bt._row);
+  INACTIVE_MEMO_ = null;
   refreshSummary_(prov); bumpCache_(prov);
   audit_(user, 'hs_delete_batch', b.batchId + ' (' + removed + ' จุด)', prov);
   return { ok: true, removed: removed };
@@ -426,6 +512,7 @@ function hsClear_(user, b) {
   if (!from && !to) {
     readAll_('Batches').filter(r => String(r.provinceCode) === prov).reverse().forEach(r => sheet_('Batches').deleteRow(r._row));
   }
+  INACTIVE_MEMO_ = null;
   refreshSummary_(prov); bumpCache_(prov);
   audit_(user, 'hs_clear', prov + ' ' + (from || '*') + '..' + (to || '*') + ' (' + removed + ' จุด)', prov);
   return { ok: true, removed: removed };
@@ -444,13 +531,14 @@ function rewriteHs_(prov, keepFn) {
   } finally { lock.releaseLock(); }
 }
 
+/** ยอดสรุปรายจังหวัด (หน้าแรก): นับเฉพาะแหล่งข้อมูลหลัก · พื้นที่เกษตร · ชุดข้อมูลที่เปิดใช้งาน */
 function refreshSummary_(prov) {
   const sh = hsSheet_(prov, false);
   let count = 0, first = '', last = '';
   if (sh && sh.getLastRow() > 1) {
-    const src = hsSource_();   // นับเฉพาะแหล่งข้อมูลหลักที่ใช้แสดงผล
+    const src = hsSource_(), off = inactiveBatches_();
     const dates = sh.getRange(2, 1, sh.getLastRow() - 1, HS_HEADERS.length).getValues()
-      .filter(r => r[0] && rowSource_(r[13]) === src).map(r => normalizeDate_(r[1])).filter(Boolean).sort();
+      .filter(r => r[0] && rowSource_(r[13]) === src && !off[String(r[11])] && rowLand_(r[15]) === DEFAULT_LAND).map(r => normalizeDate_(r[1])).filter(Boolean).sort();
     count = dates.length; first = dates[0] || ''; last = dates[dates.length - 1] || '';
   }
   const row = findRow_('ProvinceSummary', r => String(r.provinceCode) === prov);
@@ -464,25 +552,27 @@ function publicProvinces_() {
   }));
 }
 
-/** คืนข้อมูลแบบกระชับ: [date,time,dCode,sCode,dName,sName,village,plant,lat,lng,tsrc]
+/** คืนข้อมูลแบบกระชับ: [date,time,dCode,sCode,dName,sName,village,plant,lat,lng,tsrc,land]
+ *  เฉพาะแหล่งข้อมูลหลัก · ชุดข้อมูลที่เปิดใช้งาน · ประเภทพื้นที่ที่เลือก (ค่าเริ่มต้นพื้นที่เกษตร)
  *  time = HH:MM เวลาไทย; tsrc = '' (จากไฟล์ต้นทาง) | 'hsid' (คำนวณจากเวลา UTC ใน hsID เมื่อไฟล์ไม่มีเวลา) */
-function publicHotspots_(prov) {
+function publicHotspots_(prov, landIn) {
   prov = String(prov).padStart(2, '0');
   if (!PROVINCES[prov]) return { ok: false, error: 'invalid province' };
+  const land = landParam_(landIn);
   const cache = CacheService.getScriptCache();
   const ver = cache.get('ver:' + prov) || '0';
   const src = hsSource_();
-  const key = 'hs4:' + prov + ':' + src + ':' + ver;
+  const key = 'hs5:' + prov + ':' + src + ':' + land + ':' + ver;
   const cached = cacheGet_(cache, key);
   if (cached) return JSON.parse(cached);
-  const sh = hsSheet_(prov, false);
+  const sh = hsSheet_(prov, false), off = inactiveBatches_();
   const rows = (sh && sh.getLastRow() > 1) ? sh.getRange(2, 1, sh.getLastRow() - 1, HS_HEADERS.length).getValues() : [];
-  const out = { ok: true, province: prov, source: src, cols: ['date', 'time', 'dCode', 'sCode', 'dName', 'sName', 'village', 'plant', 'lat', 'lng', 'tsrc'],
-    rows: rows.filter(r => r[0] && rowSource_(r[13]) === src).map(r => {
+  const out = { ok: true, province: prov, source: src, land: land, cols: ['date', 'time', 'dCode', 'sCode', 'dName', 'sName', 'village', 'plant', 'lat', 'lng', 'tsrc', 'land'],
+    rows: rows.filter(r => r[0] && rowSource_(r[13]) === src && !off[String(r[11])] && landMatch_(land, r[15])).map(r => {
       const date = normalizeDate_(r[1]);
       let time = normalizeTime_(r[2]), tsrc = '';
       if (!time) { time = timeFromHsId_(r[0], date); if (time) tsrc = 'hsid'; }
-      return [date, time, String(r[3]), String(r[4]), r[5], r[6], r[7], r[8], Number(r[9]), Number(r[10]), tsrc];
+      return [date, time, String(r[3]), String(r[4]), r[5], r[6], r[7], r[8], Number(r[9]), Number(r[10]), tsrc, rowLand_(r[15])];
     }) };
   cachePut_(cache, key, JSON.stringify(out));
   return out;
@@ -697,9 +787,14 @@ function settingsSave_(user, b) {
     }
   }
   if (b.refSeasons !== undefined) {
-    const list = String(b.refSeasons).split(',').map(x => Number(String(x).trim())).filter(x => x > 2500 && x < 2700);
-    if (!list.length) throw new Error('ระบุฤดูอ้างอิงเป็นปี พ.ศ. เช่น 2567,2568');
-    put('risk_ref_seasons', list.sort().join(',')); changed.push('risk_ref_seasons=' + list.join(','));
+    const raw = String(b.refSeasons || '').trim();
+    let val = 'auto';
+    if (raw && raw.toLowerCase() !== 'auto') {
+      const list = raw.split(',').map(x => Number(String(x).trim())).filter(x => x > 2500 && x < 2700);
+      if (!list.length) throw new Error('ระบุฤดูอ้างอิงเป็นปี พ.ศ. เช่น 2568,2569 หรือ auto');
+      val = list.sort().join(',');
+    }
+    put('risk_ref_seasons', val); changed.push('risk_ref_seasons=' + val);
     bumpCache_('all');
   }
   audit_(user, 'settings_save', changed.join(' ') || '-');
