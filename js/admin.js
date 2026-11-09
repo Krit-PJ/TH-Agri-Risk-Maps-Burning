@@ -304,12 +304,13 @@ const Admin = (() => {
       el('set-guide').value = r.settings.guideUrl || '';
       document.querySelectorAll('input[name="set-source"]').forEach(x => { x.checked = x.value === (r.settings.hsSource || 'AGENCY'); });
       el('set-ref').value = r.settings.refSeasons || 'auto';
+      document.querySelectorAll('input[name="set-model"]').forEach(x => { x.checked = x.value === (r.settings.riskModel || 'BRI2'); });
     } catch (err) { setMsg(el('console-status'), err.message, 'error'); }
   }
   async function saveSettings(e) {
     e.preventDefault();
     const hsSource = document.querySelector('input[name="set-source"]:checked')?.value || 'AGENCY';
-    if (await run(() => Api.post('settings_save', { guideUrl: el('set-guide').value.trim(), hsSource, refSeasons: el('set-ref').value.trim() || 'auto' }), 'บันทึกการตั้งค่าแล้ว — แผนที่และระดับความเสี่ยงใช้ค่าใหม่แล้ว')) hooks.onSettingsChanged?.();
+    if (await run(() => Api.post('settings_save', { guideUrl: el('set-guide').value.trim(), hsSource, refSeasons: el('set-ref').value.trim() || 'auto', riskModel: document.querySelector('input[name="set-model"]:checked')?.value || 'BRI2' }), 'บันทึกการตั้งค่าแล้ว — แผนที่และระดับความเสี่ยงใช้ค่าใหม่แล้ว')) hooks.onSettingsChanged?.();
   }
 
   /* ======================= เปรียบเทียบแหล่งข้อมูล (ต้นสังกัด vs NASA FIRMS) ======================= */

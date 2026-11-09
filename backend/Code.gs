@@ -88,6 +88,7 @@ function setup() {
   if (!findRow_('Settings', r => r.key === 'guide_url')) appendObj_('Settings', { key: 'guide_url', value: '' });
   if (!findRow_('Settings', r => r.key === 'hs_source')) appendObj_('Settings', { key: 'hs_source', value: 'AGENCY' });
   if (!findRow_('Settings', r => r.key === 'risk_ref_seasons')) appendObj_('Settings', { key: 'risk_ref_seasons', value: 'auto' });
+  if (!findRow_('Settings', r => r.key === 'risk_model')) appendObj_('Settings', { key: 'risk_model', value: 'BRI2' });
   const fixed = migrateHsText_();
   const tagged = migrateHsSource_();
   const v35 = migrateV35_();
@@ -123,7 +124,7 @@ function doGet(e) {
       case 'hotspots': return json_(publicHotspots_(String(p.province || ''), p.land));
       case 'hit': return json_({ ok: true, counter: counter_(true) });
       case 'counter': return json_({ ok: true, counter: counter_(false) });
-      case 'settings': return json_({ ok: true, settings: { guideUrl: setting_('guide_url'), hsSource: hsSource_(), refSeasons: refSeasonsText_(), landTypes: LAND_TYPES, defaultLand: DEFAULT_LAND } });
+      case 'settings': return json_({ ok: true, settings: { guideUrl: setting_('guide_url'), hsSource: hsSource_(), refSeasons: refSeasonsText_(), riskModel: riskModel_(), dataFirst: dataRange_().first, landTypes: LAND_TYPES, defaultLand: DEFAULT_LAND } });
       case 'risk': return json_(riskForProvince_(p.province, p.end, false, p.land));
       case 'team': return json_({ ok: true, members: teamList_() });
       case 'ping': return json_({ ok: true, time: now_() });
@@ -796,6 +797,11 @@ function settingsSave_(user, b) {
     }
     put('risk_ref_seasons', val); changed.push('risk_ref_seasons=' + val);
     bumpCache_('all');
+  }
+  if (b.riskModel !== undefined) {
+    const m = String(b.riskModel || '').toUpperCase();
+    if (RISK_MODELS.indexOf(m) < 0) throw new Error('สูตรประเมินไม่ถูกต้อง');
+    if (m !== riskModel_()) { put('risk_model', m); changed.push('risk_model=' + m); bumpCache_('all'); }
   }
   audit_(user, 'settings_save', changed.join(' ') || '-');
   return { ok: true };

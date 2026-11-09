@@ -201,6 +201,7 @@
 .ap-line { padding: .2rem 0; }
 .ap-now { border-bottom: 1px solid #eef2ef; }
 .ap-prev { color: #4a5a51; }
+.ap-note { font-size: 11.5px; color: #92400e; }
 .ap-more { margin-top: .3rem; color: #4a5a51; font-size: 12px; }
 .ap-drill { margin-top: .55rem; width: 100%; border-radius: .5rem; border: 1px solid #cfe3d6; background: #f1f8f3; padding: .35rem .5rem; font-weight: 600; color: #14532d; }
 .ap-drill:hover { background: #e2f1e7; }

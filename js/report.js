@@ -15,6 +15,7 @@ const Report = (() => {
   function riskMethodText(ctx) {
     const r = ctx.risk;
     if (!r) return `${ctx.basis || 'ยังไม่มีผลประเมินระดับความเสี่ยง'} จำนวนจุดในตารางเป็นของช่วงที่เลือก`;
+    if (r.model === 'PROTO') return `${ctx.basis} ระดับเป็นการเทียบภายในจังหวัดและขึ้นกับช่วงเวลาที่เลือก (สูตรต้นแบบ ไม่ได้ปรับด้วยขนาดพื้นที่แบบความหนาแน่น)`;
     const w = r.weights || {}, pct = x => Math.round((x || 0) * 100) + '%';
     const parts = [`ความหนาแน่นจุดความร้อนต่อพื้นที่ ${pct(w.D)}${(r.history || []).length > 1 ? ' (ฤดูล่าสุดมีน้ำหนักมากที่สุด)' : ''}`];
     if (w.P) parts.push(`การเกิดซ้ำในแต่ละฤดู ${pct(w.P)}`);
@@ -64,7 +65,7 @@ const Report = (() => {
     const withHs = rows.filter(r => r.current > 0).length;
     el('pr-kpis').innerHTML = [
       [fmt(S.totalCur), 'จุดความร้อนในช่วงที่เลือก'],
-      [S.change.text, `เทียบช่วงเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด)`],
+      [S.change.text, S.compareMode === 'month' ? `เทียบเดือนเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด) · ${S.compareNote}` : `เทียบช่วงเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด)`],
       [`${withHs}/${rows.length}`, `${S.unitLabel}ที่พบจุดความร้อน`],
       [String(S.levels[2] + S.levels[3]), `${S.unitLabel}เสี่ยงสูง–สูงมาก`]
     ].map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');

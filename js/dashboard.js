@@ -23,12 +23,11 @@ const Dashboard = (() => {
       return (!st.crop || p.__crop === st.crop) && (!st.district || p.__dCode === st.district) && (!st.subdistrict || p.__sCode === st.subdistrict);
     });
     const s = Number(st.startYM), e = Number(st.endYM);
-    // เทียบรายวัน: ช่วงที่เลือกตัดที่วันล่าสุดของข้อมูล แล้วเทียบกับวันเดียวกันของปีก่อน (ไม่เอาเดือนที่ยังไม่ครบไปเทียบกับเดือนเต็ม)
+    // เทียบช่วงเดียวกันปีก่อน: วันต่อวัน (ตัดที่วันล่าสุดของข้อมูล) — ถ้าปีก่อนเริ่มก่อนวันแรกของฐานข้อมูล เทียบผลรวมระดับเดือนแทน
     const iso = (i, last) => { const m = Geo.ymFromIndex(i), y = m.year - 543, d = last ? new Date(Date.UTC(y, m.month, 0)).getUTCDate() : 1; return `${y}-${String(m.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`; };
     const latest = (raw.hotspot?.features || []).reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
-    const startD = iso(s, false); let endD = iso(e, true); if (latest && endD > latest) endD = latest;
-    const shift = d => { const y = +d.slice(0, 4) - 1, m = +d.slice(5, 7), dd = Math.min(+d.slice(8, 10), new Date(Date.UTC(y, m, 0)).getUTCDate()); return `${y}-${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}`; };
-    const pStart = shift(startD), pEnd = shift(endD);
+    const W = Geo.compareWindow(iso(s, false), iso(e, true), latest, raw.dataFirst);
+    const [startD, endD] = W.cur, [pStart, pEnd] = W.prev;
     const current = base.filter(f => f.properties.__date >= startD && f.properties.__date <= endD);
     const prior = base.filter(f => f.properties.__date >= pStart && f.properties.__date <= pEnd);
     const countBy = fs => fs.reduce((o, f) => { const k = f.properties[unitKey] || '-'; o[k] = (o[k] || 0) + 1; return o; }, {});
@@ -44,7 +43,9 @@ const Dashboard = (() => {
     const byMonth = months.map(i => current.filter(f => f.properties.__ym === i).length);
     return { level, unitLabel: level === 'district' ? 'อำเภอ' : 'ตำบล', rows, current, prior, unassigned, levels, months, byMonth,
       totalCur: current.length, totalPrev: prior.length, change: pctChange(current.length, prior.length),
-      currentText: `${Geo.thaiDate(startD)} – ${Geo.thaiDate(endD)}`, priorText: `${Geo.thaiDate(pStart)} – ${Geo.thaiDate(pEnd)}` };
+      compareMode: W.mode, compareNote: W.note,
+      currentText: W.mode === 'month' ? `${Geo.monthSpan(startD, endD)} (ผลรวมรายเดือน${latest && endD > latest ? ` · ข้อมูลถึง ${Geo.thaiDate(latest)}` : ''})` : `${Geo.thaiDate(startD)} – ${Geo.thaiDate(endD > latest && latest ? latest : endD)}`,
+      priorText: W.mode === 'month' ? `${Geo.monthSpan(pStart, pEnd)} (ผลรวมรายเดือน · ${W.note})` : `${Geo.thaiDate(pStart)} – ${Geo.thaiDate(pEnd)}` };
   }
 
   function chartBase() {
@@ -70,7 +71,7 @@ const Dashboard = (() => {
     const highCount = S.levels[2] + S.levels[3];
     el('summary-cards').innerHTML = [
       [fmt(S.totalCur), 'จุดความร้อนในช่วงที่เลือก'],
-      [`<span class="chg ${S.change.cls} align-middle text-base">${S.change.text}</span>`, `เทียบช่วงเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด)`],
+      [`<span class="chg ${S.change.cls} align-middle text-base">${S.change.text}</span>`, S.compareMode === 'month' ? `เทียบเดือนเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด) · ${S.compareNote}` : `เทียบช่วงเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด)`],
       [`${fmt(withHs)}<span class="text-base font-semibold text-ink-soft">/${fmt(S.rows.length)}</span>`, `${u}ที่พบจุดความร้อน`],
       [fmt(highCount), `${u}เสี่ยงสูง–สูงมาก`]
     ].map(([v, l]) => `<div class="kpi"><div class="kpi-v">${v}</div><div class="kpi-l">${l}</div></div>`).join('');

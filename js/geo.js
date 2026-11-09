@@ -125,5 +125,19 @@ const Geo = (() => {
     const ic = CONFIG.CROP_ICONS[crop] || CONFIG.CROP_ICONS['อื่น ๆ'];
     return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic.svg}</svg>`;
   }
-  return { provinces, provinceBundle, clean, normalizeCrop, ymIndex, ymFromIndex, seasonOf, periodText, thaiDate, thaiDateTime, normalizeTime, cropIcon, buildHotspots, resolveCodes, insideProvince };
+  /** ช่วงเทียบ "ช่วงเดียวกันปีก่อน": ปกติเทียบวันต่อวัน (ตัดที่วันล่าสุดของข้อมูล)
+   *  ถ้าช่วงปีก่อนเริ่มก่อนวันแรกของฐานข้อมูล → เทียบผลรวมระดับเดือน (เดือนเต็มของทั้งสองปี) และแจ้ง "ข้อมูลตั้งแต่ …" */
+  function compareWindow(start, end, latest, dataFirst) {
+    const pad = n => String(n).padStart(2, '0');
+    const dim = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const minus1 = d => { const y = +d.slice(0, 4) - 1, m = +d.slice(5, 7); return `${y}-${pad(m)}-${pad(Math.min(+d.slice(8, 10), dim(y, m)))}`; };
+    let e = end; if (latest && e > latest) e = latest;
+    const day = { mode: 'day', cur: [start, e], prev: [minus1(start), minus1(e)], note: '' };
+    if (!dataFirst || day.prev[0] >= dataFirst) return day;
+    const ms = `${start.slice(0, 7)}-01`, ey = +end.slice(0, 4), em = +end.slice(5, 7), me = `${ey}-${pad(em)}-${pad(dim(ey, em))}`;
+    const prevEnd = `${ey - 1}-${pad(em)}-${pad(dim(ey - 1, em))}`;
+    return { mode: 'month', cur: [ms, me], prev: [`${+ms.slice(0, 4) - 1}${ms.slice(4)}`, prevEnd], note: `ข้อมูลตั้งแต่ ${thaiDate(dataFirst)}` };
+  }
+  const monthSpan = (a, b) => { const f = d => `${CONFIG.MONTH_SHORT[+d.slice(5, 7)]} ${String(+d.slice(0, 4) + 543).slice(2)}`; return f(a) === f(b) ? f(a) : `${f(a)} – ${f(b)}`; };
+  return { compareWindow, monthSpan, provinces, provinceBundle, clean, normalizeCrop, ymIndex, ymFromIndex, seasonOf, periodText, thaiDate, thaiDateTime, normalizeTime, cropIcon, buildHotspots, resolveCodes, insideProvince };
 })();

@@ -12,7 +12,12 @@
  *                                      พื้นที่อื่น/ทุกประเภท k≥2 → 0.75/0.25/0 · k=1 → 1.00/0/0
  *  3) 4 ระดับ: จุดตัด P50/P75/P90 ของ BRI ในฤดูอ้างอิง (auto = ฤดูฐานการประเมิน) แสดงผลเป็นคะแนน 25/50/75
  *  4) สัญญาณเฝ้าระวัง (ผู้ดูแล): จำนวน HS ฤดูปัจจุบันถึงวันที่เลือก เทียบช่วงเดียวกันของฤดูก่อน → ลูกศรแนวโน้ม
- *  คำนวณจากทุกจังหวัดที่มีข้อมูล (เทียบข้ามจังหวัดได้) ใช้แหล่งข้อมูลหลักเดียว และเฉพาะชุดข้อมูลที่เปิดใช้งาน */
+ *  ฐานการเปรียบเทียบ (μ, s² ของ EB, การแจกแจงอ้างอิง และจุดตัด) คำนวณจากข้อมูลของจังหวัดนั้นเอง (ฐานรายจังหวัด)
+ *  ใช้แหล่งข้อมูลหลักเดียว และเฉพาะชุดข้อมูลที่เปิดใช้งาน
+ *  สูตรที่เลือกใช้ได้ (ตั้งค่าระบบ risk_model): BRI2 = Model 3 BRI เวอร์ชัน 2 (ค่าเริ่มต้น, คำนวณที่นี่)
+ *                                          PROTO = Model 1 ต้นแบบ (คำนวณที่หน้าเว็บจากข้อมูลจังหวัดและช่วงที่เลือก — js/map.js) */
+const RISK_MODELS = ['BRI2', 'PROTO'];
+function riskModel_() { const v = String(setting_('risk_model') || '').toUpperCase(); return RISK_MODELS.indexOf(v) >= 0 ? v : 'BRI2'; }
 const RISK_SEASON_W = [0.40, 0.35, 0.25];
 const RISK_CROP = { 'นาข้าว': 70, 'อ้อย': 80, 'ข้าวโพดและไร่หมุนเวียน': 90, 'เกษตรอื่น ๆ': 55, 'พื้นที่ป่า': 50, 'อื่น ๆ': 45 };
 const RISK_LEVEL_LABELS = ['ต่ำ', 'ปานกลาง', 'สูง', 'สูงมาก'];
@@ -34,10 +39,10 @@ function refSeasons_() {
 function refSeasonsText_() { const l = refSeasons_(); return l.length ? l.slice().sort().join(',') : 'auto'; }
 function rowSource_(v) { return String(v || '').toUpperCase() === 'FIRMS' ? 'FIRMS' : 'AGENCY'; }
 
-/** อ่านจุด HS ของแหล่งข้อมูลหลัก (ชุดที่เปิดใช้งาน, ประเภทพื้นที่ที่เลือก) จากทุกจังหวัด: [{date, d, s, plant}] */
-function riskRows_(source, land) {
+/** อ่านจุด HS ของแหล่งข้อมูลหลัก (ชุดที่เปิดใช้งาน, ประเภทพื้นที่ที่เลือก) ของจังหวัด: [{date, d, s, plant}] */
+function riskRows_(source, land, prov) {
   const out = [], off = inactiveBatches_();
-  db_().getSheets().filter(sh => /^HS_\d{2}$/.test(sh.getName())).forEach(sh => {
+  [hsSheet_(prov, false)].filter(Boolean).forEach(sh => {
     const last = sh.getLastRow(); if (last < 2) return;
     sh.getRange(2, 1, last - 1, HS_HEADERS.length).getValues().forEach(r => {
       if (!r[0] || rowSource_(r[13]) !== source || off[String(r[11])] || !landMatch_(land, r[15])) return;
@@ -46,6 +51,19 @@ function riskRows_(source, land) {
     });
   });
   return out;
+}
+
+/** ช่วงวันที่ของฐานข้อมูล (แหล่งข้อมูลหลัก, ชุดที่เปิดใช้งาน) จากชีต Batches — ใช้ตัดสินว่าฤดู/ช่วงปีก่อนมีข้อมูลครบหรือไม่ */
+function dataRange_(source) {
+  const src = source || hsSource_();
+  let first = '', last = '';
+  readAll_('Batches').forEach(b => {
+    if (batchInactive_(b.active) || rowSource_(b.source) !== src || !(Number(b.accepted) > 0)) return;
+    const f = normalizeDate_(b.firstDate), l = normalizeDate_(b.lastDate);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(f) && (!first || f < first)) first = f;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(l) && (!last || l > last)) last = l;
+  });
+  return { first: first, last: last };
 }
 
 const pad2_ = n => ('0' + n).slice(-2);
@@ -76,20 +94,23 @@ function ebRates_(o, rai) {
 }
 function ecdf_(sortedRef, x) { let lo = 0, hi = sortedRef.length; while (lo < hi) { const m = (lo + hi) >> 1; if (sortedRef[m] <= x) lo = m + 1; else hi = m; } return sortedRef.length ? lo / sortedRef.length * 100 : 0; }
 
-/** คำนวณ BRI ทุกหน่วยของทุกจังหวัดที่มีข้อมูล ณ วันสิ้นสุด endIso (แคชตามแหล่งข้อมูล/ประเภทพื้นที่/วันที่/เวอร์ชันข้อมูล) */
-function riskNational_(endIso, landIn) {
+/** คำนวณ BRI ทุกอำเภอ/ตำบลของจังหวัด ณ วันสิ้นสุด endIso โดยใช้ข้อมูลของจังหวัดนั้นเป็นฐาน (แคชตามจังหวัด/แหล่งข้อมูล/ประเภทพื้นที่/วันที่/เวอร์ชันข้อมูล) */
+function riskProvinceCalc_(prov, endIso, landIn) {
   const source = hsSource_(), land = landParam_(landIn);
   const cache = CacheService.getScriptCache();
-  const ver = cache.get('ver:all') || '0', tag = source + ':' + land + ':' + ver + ':' + refSeasonsText_();
+  const ver = cache.get('ver:all') || '0', tag = prov + ':' + source + ':' + land + ':' + ver + ':' + refSeasonsText_();
   const knownLatest = cache.get('rlatest:' + tag);
   let endKey = /^\d{4}-\d{2}-\d{2}$/.test(String(endIso || '')) ? String(endIso) : 'latest';
   if (knownLatest && endKey !== 'latest' && endKey >= knownLatest) endKey = 'latest';
-  const key = 'risk2:' + tag + ':' + endKey;
+  const key = 'risk3:' + tag + ':' + endKey;
   const hit = cacheGet_(cache, key); if (hit) return JSON.parse(hit);
 
-  const rows = riskRows_(source, land);
+  const rows = riskRows_(source, land, prov);
   if (!rows.length) return { ok: true, empty: true, source: source, land: land };
-  const dates = rows.map(r => r.date).sort(), first = dates[0], latest = dates[dates.length - 1];
+  // ช่วงข้อมูลของทั้งฐานข้อมูล (ไม่ใช่ของจังหวัด) — จังหวัดที่จุดแรกมาช้ายังถือว่าฤดูนั้นมีข้อมูลครบ
+  const dates = rows.map(r => r.date).sort(), range = dataRange_(source);
+  const first = range.first && range.first < dates[0] ? range.first : dates[0];
+  const latest = range.last && range.last > dates[dates.length - 1] ? range.last : dates[dates.length - 1];
   let end = endKey === 'latest' ? latest : endKey;
   if (end > latest) end = latest;
   const S = seasonOfDate_(end), md = { m: +end.slice(5, 7), d: +end.slice(8, 10) };
@@ -102,14 +123,13 @@ function riskNational_(endIso, landIn) {
   const ref = refSet.length ? refSet : H.slice();
   const W = riskWeights_(land, H.length);
   const curWin = seasonWindow_(S, md), prevOk = covered(S - 1), prevWin = seasonWindow_(S - 1, md);
-  const provs = {}; rows.forEach(r => { provs[r.d.slice(0, 2)] = 1; });
   const areas = unitArea_();
   const result = { ok: true, source: source, land: land, season: S, end: end, latest: latest, first: first,
     history: H, seasons: H, refSeasons: ref, refAuto: !refSet.length, weights: W, noHistory: !H.length,
     window: curWin, prevWindow: prevOk ? prevWin : null, cuts: {}, units: {} };
 
   ['district', 'subdistrict'].forEach(level => {
-    const codes = Object.keys(areas[level]).filter(c => provs[c.slice(0, 2)]);
+    const codes = Object.keys(areas[level]).filter(c => c.slice(0, 2) === prov);   // ฐานรายจังหวัด
     const idx = {}; codes.forEach((c, i) => { idx[c] = i; });
     const rai = codes.map(c => areas[level][c]);
     const field = level === 'district' ? 'd' : 's';
@@ -160,7 +180,7 @@ function riskNational_(endIso, landIn) {
   });
   const txt = JSON.stringify(result);
   cachePut_(cache, key, txt);
-  if (end === latest) { if (endKey !== 'latest') cachePut_(cache, 'risk2:' + tag + ':latest', txt); cache.put('rlatest:' + tag, latest, 21600); }
+  if (end === latest) { if (endKey !== 'latest') cachePut_(cache, 'risk3:' + tag + ':latest', txt); cache.put('rlatest:' + tag, latest, 21600); }
   return result;
 }
 /** แนวโน้มฤดูปัจจุบันเทียบช่วงเดียวกันของฤดูก่อน: log2((ปัจจุบัน+3)/(ก่อน+3)) > 0.32 (≈ +25%) และต่างกันอย่างน้อย 3 จุด */
@@ -174,14 +194,18 @@ function trend_(cur, prev) {
 function riskForProvince_(prov, endIso, detailed, land) {
   prov = String(prov || '').padStart(2, '0');
   if (!PROVINCES[prov]) return { ok: false, error: 'invalid province' };
-  const nat = riskNational_(endIso, land);
-  if (nat.empty) return { ok: true, empty: true, source: nat.source, land: nat.land };
+  if (riskModel_() === 'PROTO') {   // Model 1 ต้นแบบ: หน้าเว็บคำนวณจากข้อมูลจังหวัดและช่วงที่เลือก
+    const range = dataRange_();
+    return { ok: true, province: prov, model: 'PROTO', land: landParam_(land), source: hsSource_(), first: range.first, latest: range.last, detailed: !!detailed };
+  }
+  const nat = riskProvinceCalc_(prov, endIso, land);
+  if (nat.empty) return { ok: true, empty: true, model: 'BRI2', source: nat.source, land: nat.land };
   const pick = units => {
     const out = {};
-    Object.keys(units).forEach(c => { if (c.slice(0, 2) !== prov) return; const u = units[c]; out[c] = detailed ? u : [u[0], u[8]]; });
+    Object.keys(units).forEach(c => { const u = units[c]; out[c] = detailed ? u : [u[0], u[8]]; });
     return out;
   };
-  const res = { ok: true, province: prov, source: nat.source, land: nat.land, season: nat.season, end: nat.end, latest: nat.latest,
+  const res = { ok: true, province: prov, model: 'BRI2', basis: 'province', first: nat.first, source: nat.source, land: nat.land, season: nat.season, end: nat.end, latest: nat.latest,
     history: nat.history, seasons: nat.seasons, noHistory: nat.noHistory, window: nat.window, levels: RISK_LEVEL_LABELS, detailed: !!detailed,
     cols: detailed ? ['level', 'bri', 'score', 'D', 'P', 'C', 'hsH0', 'hsH1', 'hs0', 'base', 'trend'] : ['level', 'hs0'],
     district: pick(nat.units.district), subdistrict: pick(nat.units.subdistrict) };
@@ -189,12 +213,19 @@ function riskForProvince_(prov, endIso, detailed, land) {
   return res;
 }
 
-/** คำนวณผลประเมินล่วงหน้าหลังนำเข้า/เปิด-ปิดชุดข้อมูล (ผู้ใช้คนถัดไปไม่ต้องรอ) */
+/** คำนวณผลประเมินล่วงหน้าหลังนำเข้า/เปิด-ปิดชุดข้อมูล (ผู้ใช้คนถัดไปไม่ต้องรอ) — ทุกจังหวัดในขอบเขตสิทธิ์ที่มีข้อมูล */
 function riskWarm_(user, b) {
-  if (!isNational_(user)) requireProvince_(user, user.prov);
-  const t = Date.now(), r = riskNational_('', b.land || DEFAULT_LAND);
-  return { ok: true, ms: Date.now() - t, season: r.season, history: r.history || [], latest: r.latest || '' };
+  if (riskModel_() === 'PROTO') return { ok: true, model: 'PROTO', provinces: 0 };
+  const t = Date.now();
+  const provs = readAll_('ProvinceSummary').filter(r => Number(r.hsCount) > 0).map(r => String(r.provinceCode).padStart(2, '0'))
+    .filter(p => inScope_(user, p) && (!b.provinceCode || p === String(b.provinceCode)));
+  let r = {};
+  provs.forEach(p => { if (Date.now() - t < 280000) r = riskProvinceCalc_(p, '', b.land || DEFAULT_LAND); });
+  return { ok: true, ms: Date.now() - t, provinces: provs.length, season: r.season, history: r.history || [], latest: r.latest || '' };
 }
+
+/** เรียกจาก Editor หรือตัวจับเวลา: คำนวณผลประเมินล่วงหน้าทุกจังหวัด (พื้นที่เกษตร) */
+function warmRiskCache() { return riskWarm_({ role: 'superadmin', prov: '*', name: 'EDITOR' }, {}); }
 
 /** ข้อมูลทั้งสองแหล่งของจังหวัด (พื้นที่เกษตร, ชุดที่เปิดใช้งาน) สำหรับหน้าเปรียบเทียบ */
 function hsCompare_(user, b) {

@@ -28,7 +28,7 @@ const App = (() => {
     // เข้าสู่ระบบ/ออกจากระบบ: โหลดระดับความเสี่ยงใหม่ (ผู้ดูแลเห็นรายละเอียดคะแนนและแนวโน้ม)
     document.addEventListener('agri-risk:auth-changed', () => { if (current) applyCurrent(); });
     initCounter();
-    loadSettings();
+    await loadSettings();
     provFC = await Geo.provinces();
     await loadAvailable();
     window.addEventListener('hashchange', routeFromHash);
@@ -52,6 +52,7 @@ const App = (() => {
     try {
       const r = await Api.get('settings'); const a = el('risk-guide-link');
       a.href = r.settings.guideUrl || CONFIG.GUIDE_PDF; a.classList.remove('hidden');
+      MapModule.setDataStart(r.settings.dataFirst || '');
     } catch { }
   }
 

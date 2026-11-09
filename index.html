@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.6.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.6.1"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -435,6 +435,12 @@
             <label class="chip"><input type="radio" name="set-source" value="FIRMS"/> NASA FIRMS (Suomi-NPP + NOAA-20 ตัดจุดซ้ำ จำแนกพื้นที่เกษตรโดยระบบ)</label>
             <p class="mt-2 text-xs text-ink-soft">ใช้แหล่งเดียวทุกปีเพื่อให้เทียบข้ามปีได้ ข้อมูลอีกแหล่งยังเก็บไว้และดูได้ที่แท็บ “เปรียบเทียบแหล่งข้อมูล”</p>
           </fieldset>
+          <fieldset class="rounded-xl border border-line p-3">
+            <legend class="px-1 text-sm font-semibold">สูตรประเมินความเสี่ยง (เลือกใช้ได้ครั้งละ 1 สูตร มีผลทั้งระบบ)</legend>
+            <label class="chip mb-1.5"><input type="radio" name="set-model" value="BRI2"/> Model 3: BRI เวอร์ชัน 2 (ค่าเริ่มต้น) — ฤดูที่ครบแล้ว · ความหนาแน่นต่อพื้นที่ (Empirical Bayes) · ฐานรายจังหวัด</label>
+            <label class="chip"><input type="radio" name="set-model" value="PROTO"/> Model 1: ต้นแบบ (V3 แรก) — HS ช่วงที่เลือก · เกณฑ์จำนวนจุด / Model A · เทียบภายในจังหวัด</label>
+            <p class="mt-2 text-xs text-ink-soft">ทั้งสองสูตรใช้ข้อมูลของแต่ละจังหวัดเป็นฐานของตนเอง รายละเอียดและผลทดสอบอยู่ในคู่มือหัวข้อ 4–6</p>
+          </fieldset>
           <div>
             <label class="field-label" for="set-ref">ฤดูอ้างอิงสำหรับจุดตัด 4 ระดับ (auto หรือปี พ.ศ. คั่นด้วย ,)</label>
             <input id="set-ref" class="field w-full" placeholder="auto" pattern="^\s*(auto|25\d\d(\s*,\s*25\d\d)*)\s*$"/>
@@ -504,13 +510,13 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.6.0"></script>
-<script src="js/api.js?v=3.6.0"></script>
-<script src="js/geo.js?v=3.6.0"></script>
-<script src="js/map.js?v=3.6.0"></script>
-<script src="js/dashboard.js?v=3.6.0"></script>
-<script src="js/report.js?v=3.6.0"></script>
-<script src="js/admin.js?v=3.6.0"></script>
-<script src="js/app.js?v=3.6.0"></script>
+<script src="js/config.js?v=3.6.1"></script>
+<script src="js/api.js?v=3.6.1"></script>
+<script src="js/geo.js?v=3.6.1"></script>
+<script src="js/map.js?v=3.6.1"></script>
+<script src="js/dashboard.js?v=3.6.1"></script>
+<script src="js/report.js?v=3.6.1"></script>
+<script src="js/admin.js?v=3.6.1"></script>
+<script src="js/app.js?v=3.6.1"></script>
 </body>
 </html>
