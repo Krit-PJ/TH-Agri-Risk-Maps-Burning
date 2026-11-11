@@ -16,8 +16,9 @@
  *  ใช้แหล่งข้อมูลหลักเดียว และเฉพาะชุดข้อมูลที่เปิดใช้งาน
  *  สูตรที่เลือกใช้ได้ (ตั้งค่าระบบ risk_model): BRI2 = Model 3 BRI เวอร์ชัน 2 (ค่าเริ่มต้น, คำนวณที่นี่)
  *                                          PROTO = Model 1 ต้นแบบ (คำนวณที่หน้าเว็บจากข้อมูลจังหวัดและช่วงที่เลือก — js/map.js) */
-const RISK_MODELS = ['BRI2', 'PROTO'];
-function riskModel_() { const v = String(setting_('risk_model') || '').toUpperCase(); return RISK_MODELS.indexOf(v) >= 0 ? v : 'BRI2'; }
+const RISK_MODELS = ['M4', 'BRI2', 'PROTO'];   // M4 = Model 4 (ค่าเริ่มต้น, Model4.gs) · BRI2 = Model 3 · PROTO = Model 1
+const RISK_MODEL_LABELS = { M4: 'Model 4: คะแนนจัดลำดับเฝ้าระวังการเผาเกษตร (ความหนาแน่นต่อพื้นที่เกษตร เกณฑ์กลาง)', BRI2: 'Model 3: BRI เวอร์ชัน 2 (ฐานรายจังหวัด)', PROTO: 'Model 1: ต้นแบบ' };
+function riskModel_() { const v = String(setting_('risk_model') || '').toUpperCase(); return RISK_MODELS.indexOf(v) >= 0 ? v : 'M4'; }
 const RISK_SEASON_W = [0.40, 0.35, 0.25];
 const RISK_CROP = { 'นาข้าว': 70, 'อ้อย': 80, 'ข้าวโพดและไร่หมุนเวียน': 90, 'เกษตรอื่น ๆ': 55, 'พื้นที่ป่า': 50, 'อื่น ๆ': 45 };
 const RISK_LEVEL_LABELS = ['ต่ำ', 'ปานกลาง', 'สูง', 'สูงมาก'];
@@ -191,10 +192,24 @@ function trend_(cur, prev) {
 }
 
 /** ผลการประเมินของจังหวัด — ประชาชนได้เฉพาะระดับและจำนวนจุดฤดูปัจจุบัน ส่วนผู้ดูแลได้รายละเอียดคะแนนและสัญญาณเฝ้าระวัง */
-function riskForProvince_(prov, endIso, detailed, land) {
+function riskForProvince_(prov, endIso, detailed, land, modelIn) {
   prov = String(prov || '').padStart(2, '0');
   if (!PROVINCES[prov]) return { ok: false, error: 'invalid province' };
-  if (riskModel_() === 'PROTO') {   // Model 1 ต้นแบบ: หน้าเว็บคำนวณจากข้อมูลจังหวัดและช่วงที่เลือก
+  const want = RISK_MODELS.indexOf(String(modelIn || '').toUpperCase()) >= 0 ? String(modelIn).toUpperCase() : riskModel_();
+  let fallback = '';
+  if (want === 'M4') {
+    if (m4Applicable_(prov, land)) {
+      const r = riskM4_(prov, endIso, land);
+      if (r.empty) return r;
+      const pickM4 = (units, dist) => { const out = {}; Object.keys(units).forEach(c => { const u = units[c]; out[c] = detailed ? u : dist ? [u[0], u[7], u[11], u[13]] : [u[0], u[7]]; }); return out; };
+      const res = Object.assign({}, r, { detailed: !!detailed, levels: RISK_LEVEL_LABELS, cols: detailed ? r.cols : ['level', 'hs0'], distCols: detailed ? r.distCols : ['level', 'hs0', 'nHigh', 'nTambon'],
+        district: pickM4(r.district, true), subdistrict: pickM4(r.subdistrict, false) });
+      if (!detailed) { delete res.names; delete res.base; }
+      return res;
+    }
+    fallback = 'Model 4 ใช้กับพื้นที่เกษตร/เขต สปก. ของ 17 จังหวัดที่มีข้อมูลพื้นที่เพาะปลูก ประเภทพื้นที่นี้จึงประเมินด้วย Model 3';
+  }
+  if (want === 'PROTO') {   // Model 1 ต้นแบบ: หน้าเว็บคำนวณจากข้อมูลจังหวัดและช่วงที่เลือก
     const range = dataRange_();
     return { ok: true, province: prov, model: 'PROTO', land: landParam_(land), source: hsSource_(), first: range.first, latest: range.last, detailed: !!detailed };
   }
@@ -205,7 +220,7 @@ function riskForProvince_(prov, endIso, detailed, land) {
     Object.keys(units).forEach(c => { const u = units[c]; out[c] = detailed ? u : [u[0], u[8]]; });
     return out;
   };
-  const res = { ok: true, province: prov, model: 'BRI2', basis: 'province', first: nat.first, source: nat.source, land: nat.land, season: nat.season, end: nat.end, latest: nat.latest,
+  const res = { ok: true, province: prov, model: 'BRI2', fallback: fallback, basis: 'province', first: nat.first, source: nat.source, land: nat.land, season: nat.season, end: nat.end, latest: nat.latest,
     history: nat.history, seasons: nat.seasons, noHistory: nat.noHistory, window: nat.window, levels: RISK_LEVEL_LABELS, detailed: !!detailed,
     cols: detailed ? ['level', 'bri', 'score', 'D', 'P', 'C', 'hsH0', 'hsH1', 'hs0', 'base', 'trend'] : ['level', 'hs0'],
     district: pick(nat.units.district), subdistrict: pick(nat.units.subdistrict) };
@@ -215,13 +230,14 @@ function riskForProvince_(prov, endIso, detailed, land) {
 
 /** คำนวณผลประเมินล่วงหน้าหลังนำเข้า/เปิด-ปิดชุดข้อมูล (ผู้ใช้คนถัดไปไม่ต้องรอ) — ทุกจังหวัดในขอบเขตสิทธิ์ที่มีข้อมูล */
 function riskWarm_(user, b) {
-  if (riskModel_() === 'PROTO') return { ok: true, model: 'PROTO', provinces: 0 };
+  const model = riskModel_();
+  if (model === 'PROTO') return { ok: true, model: 'PROTO', provinces: 0 };
   const t = Date.now();
   const provs = readAll_('ProvinceSummary').filter(r => Number(r.hsCount) > 0).map(r => String(r.provinceCode).padStart(2, '0'))
     .filter(p => inScope_(user, p) && (!b.provinceCode || p === String(b.provinceCode)));
   let r = {};
-  provs.forEach(p => { if (Date.now() - t < 280000) r = riskProvinceCalc_(p, '', b.land || DEFAULT_LAND); });
-  return { ok: true, ms: Date.now() - t, provinces: provs.length, season: r.season, history: r.history || [], latest: r.latest || '' };
+  provs.forEach(p => { if (Date.now() - t < 280000) r = (model === 'M4' && m4Applicable_(p, b.land || DEFAULT_LAND)) ? riskM4_(p, '', b.land || DEFAULT_LAND) : riskProvinceCalc_(p, '', b.land || DEFAULT_LAND); });
+  return { ok: true, model: model, ms: Date.now() - t, provinces: provs.length, season: r.season, history: r.history || [], latest: r.latest || '' };
 }
 
 /** เรียกจาก Editor หรือตัวจับเวลา: คำนวณผลประเมินล่วงหน้าทุกจังหวัด (พื้นที่เกษตร) */

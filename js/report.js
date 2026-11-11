@@ -15,6 +15,7 @@ const Report = (() => {
   function riskMethodText(ctx) {
     const r = ctx.risk;
     if (!r) return `${ctx.basis || 'ยังไม่มีผลประเมินระดับความเสี่ยง'} จำนวนจุดในตารางเป็นของช่วงที่เลือก`;
+    if (r.model === 'M4') return `${ctx.basis} ระดับ: ต่ำ < 50 ≤ ปานกลาง < 75 ≤ สูง < 90 ≤ สูงมาก (เปอร์เซ็นไทล์เทียบฐานกลาง) พื้นที่สีเทา = ไม่ประเมินเพราะไม่มีพื้นที่เพาะปลูก จำนวนจุดในตารางเป็นของช่วงที่เลือก`;
     if (r.model === 'PROTO') return `${ctx.basis} ระดับเป็นการเทียบภายในจังหวัดและขึ้นกับช่วงเวลาที่เลือก (สูตรต้นแบบ ไม่ได้ปรับด้วยขนาดพื้นที่แบบความหนาแน่น)`;
     const w = r.weights || {}, pct = x => Math.round((x || 0) * 100) + '%';
     const parts = [`ความหนาแน่นจุดความร้อนต่อพื้นที่ ${pct(w.D)}${(r.history || []).length > 1 ? ' (ฤดูล่าสุดมีน้ำหนักมากที่สุด)' : ''}`];
@@ -74,7 +75,7 @@ const Report = (() => {
     const m = ensureMap();
     layers.forEach(l => m.removeLayer(l)); layers = [];
     const riskFC = MapModule.getRiskForScope(S.level);
-    const riskLayer = L.geoJSON(riskFC, { style: f => ({ color: '#ffffff', weight: 0.6, fillColor: MapModule.getRiskLevel(f.properties.risk_score).color, fillOpacity: ctx.risk ? 0.55 : 0 }), interactive: false }).addTo(m);
+    const riskLayer = L.geoJSON(riskFC, { style: f => ({ color: '#ffffff', weight: 0.6, fillColor: MapModule.getRiskLevel(f.properties.risk_score).color, fillOpacity: ctx.risk ? (f.properties.risk_level < 0 ? 0.3 : 0.55) : 0 }), interactive: false }).addTo(m);
     layers.push(riskLayer);
     const outline = S.level === 'district'
       ? L.geoJSON(raw.bundle.district, { style: { color: '#334155', weight: 1.1, fill: false }, interactive: false })

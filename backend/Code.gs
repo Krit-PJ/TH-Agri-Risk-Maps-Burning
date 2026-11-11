@@ -88,7 +88,7 @@ function setup() {
   if (!findRow_('Settings', r => r.key === 'guide_url')) appendObj_('Settings', { key: 'guide_url', value: '' });
   if (!findRow_('Settings', r => r.key === 'hs_source')) appendObj_('Settings', { key: 'hs_source', value: 'AGENCY' });
   if (!findRow_('Settings', r => r.key === 'risk_ref_seasons')) appendObj_('Settings', { key: 'risk_ref_seasons', value: 'auto' });
-  if (!findRow_('Settings', r => r.key === 'risk_model')) appendObj_('Settings', { key: 'risk_model', value: 'BRI2' });
+  if (!findRow_('Settings', r => r.key === 'risk_model')) appendObj_('Settings', { key: 'risk_model', value: 'M4' });
   const fixed = migrateHsText_();
   const tagged = migrateHsSource_();
   const v35 = migrateV35_();
@@ -120,6 +120,7 @@ function doGet(e) {
   try {
     ensureSetup_();
     switch (p.action) {
+      case 'api': return apiGet_(p);   // Public Data API v1 (Api.gs, docs/API.md)
       case 'provinces': return json_({ ok: true, provinces: publicProvinces_() });
       case 'hotspots': return json_(publicHotspots_(String(p.province || ''), p.land));
       case 'hit': return json_({ ok: true, counter: counter_(true) });

@@ -33,7 +33,7 @@ const Dashboard = (() => {
     const countBy = fs => fs.reduce((o, f) => { const k = f.properties[unitKey] || '-'; o[k] = (o[k] || 0) + 1; return o; }, {});
     const cur = countBy(current), prev = countBy(prior);
     const rows = risk.map(f => {
-      const p = f.properties, lv = MapModule.riskInfo() ? MapModule.getRiskLevel(p.risk_score) : NO_LEVEL;
+      const p = f.properties, lv = MapModule.riskInfo() ? (p.risk_level < 0 ? NO_LEVEL : MapModule.getRiskLevel(p.risk_score)) : NO_LEVEL;
       return { code: p.code, name: p.name, current: cur[p.code] || 0, previous: prev[p.code] || 0, score: p.risk_score, level: lv, change: pctChange(cur[p.code] || 0, prev[p.code] || 0) };
     });
     const unassigned = (cur['-'] || 0);
