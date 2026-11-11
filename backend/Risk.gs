@@ -16,9 +16,9 @@
  *  ใช้แหล่งข้อมูลหลักเดียว และเฉพาะชุดข้อมูลที่เปิดใช้งาน
  *  สูตรที่เลือกใช้ได้ (ตั้งค่าระบบ risk_model): BRI2 = Model 3 BRI เวอร์ชัน 2 (ค่าเริ่มต้น, คำนวณที่นี่)
  *                                          PROTO = Model 1 ต้นแบบ (คำนวณที่หน้าเว็บจากข้อมูลจังหวัดและช่วงที่เลือก — js/map.js) */
-const RISK_MODELS = ['M4', 'BRI2', 'PROTO'];   // M4 = Model 4 (ค่าเริ่มต้น, Model4.gs) · BRI2 = Model 3 · PROTO = Model 1
-const RISK_MODEL_LABELS = { M4: 'Model 4: คะแนนจัดลำดับเฝ้าระวังการเผาเกษตร (ความหนาแน่นต่อพื้นที่เกษตร เกณฑ์กลาง)', BRI2: 'Model 3: BRI เวอร์ชัน 2 (ฐานรายจังหวัด)', PROTO: 'Model 1: ต้นแบบ' };
-function riskModel_() { const v = String(setting_('risk_model') || '').toUpperCase(); return RISK_MODELS.indexOf(v) >= 0 ? v : 'M4'; }
+const RISK_MODELS = ['M5', 'M4', 'BRI2', 'PROTO'];   // M5 = Model 5 (ค่าเริ่มต้น v3.8, Model5.gs) · M4 = Model 4 (Model4.gs) · BRI2 = Model 3 · PROTO = Model 1
+const RISK_MODEL_LABELS = { M5: 'Model 5: ประเมินระดับความเสี่ยงย้อนหลังรายจังหวัด (ความหนาแน่น + การเผาซ้ำ ข้อมูล 2–3 ปีงบประมาณ)', M4: 'Model 4: คะแนนจัดลำดับเฝ้าระวังการเผาเกษตร (ความหนาแน่นต่อพื้นที่เกษตร เกณฑ์กลาง)', BRI2: 'Model 3: BRI เวอร์ชัน 2 (ฐานรายจังหวัด)', PROTO: 'Model 1: ต้นแบบ' };
+function riskModel_() { const v = String(setting_('risk_model') || '').toUpperCase(); return RISK_MODELS.indexOf(v) >= 0 ? v : 'M5'; }
 const RISK_SEASON_W = [0.40, 0.35, 0.25];
 const RISK_CROP = { 'นาข้าว': 70, 'อ้อย': 80, 'ข้าวโพดและไร่หมุนเวียน': 90, 'เกษตรอื่น ๆ': 55, 'พื้นที่ป่า': 50, 'อื่น ๆ': 45 };
 const RISK_LEVEL_LABELS = ['ต่ำ', 'ปานกลาง', 'สูง', 'สูงมาก'];
@@ -42,14 +42,11 @@ function rowSource_(v) { return String(v || '').toUpperCase() === 'FIRMS' ? 'FIR
 
 /** อ่านจุด HS ของแหล่งข้อมูลหลัก (ชุดที่เปิดใช้งาน, ประเภทพื้นที่ที่เลือก) ของจังหวัด: [{date, d, s, plant}] */
 function riskRows_(source, land, prov) {
-  const out = [], off = inactiveBatches_();
-  [hsSheet_(prov, false)].filter(Boolean).forEach(sh => {
-    const last = sh.getLastRow(); if (last < 2) return;
-    sh.getRange(2, 1, last - 1, HS_HEADERS.length).getValues().forEach(r => {
-      if (!r[0] || rowSource_(r[13]) !== source || off[String(r[11])] || !landMatch_(land, r[15])) return;
-      const date = normalizeDate_(r[1]); if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-      out.push({ date: date, d: String(r[3]), s: String(r[4]), plant: String(r[8]) });
-    });
+  const out = [];
+  hsActive_(prov, source).forEach(r => {
+    if (!landMatch_(land, r[15])) return;
+    const date = normalizeDate_(r[1]); if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    out.push({ date: date, d: String(r[3]), s: String(r[4]), plant: String(r[8]) });
   });
   return out;
 }
@@ -197,6 +194,15 @@ function riskForProvince_(prov, endIso, detailed, land, modelIn) {
   if (!PROVINCES[prov]) return { ok: false, error: 'invalid province' };
   const want = RISK_MODELS.indexOf(String(modelIn || '').toUpperCase()) >= 0 ? String(modelIn).toUpperCase() : riskModel_();
   let fallback = '';
+  if (want === 'M5') {
+    const r = riskM5_(prov, endIso || m5DefaultEnd_(), land);   // ไม่ระบุวันสิ้นสุด = ปีงบประมาณล่าสุดที่ครบแล้ว (ค่าเริ่มต้นเดียวกับหน้าเว็บ)
+    if (r.empty) return r;
+    const pick = (units, dist) => { const out = {}; Object.keys(units).forEach(c => { const u = units[c]; out[c] = detailed ? u : dist ? [u[0], u[8], u[12], u[14]] : [u[0], u[8]]; }); return out; };
+    const res = Object.assign({}, r, { detailed: !!detailed, levels: RISK_LEVEL_LABELS, cols: detailed ? r.cols : ['level', 'hs0'], distCols: detailed ? r.distCols : ['level', 'hs0', 'nHigh', 'nTambon'],
+      district: pick(r.district, true), subdistrict: pick(r.subdistrict, false) });
+    if (!detailed) { delete res.names; delete res.ref; }
+    return res;
+  }
   if (want === 'M4') {
     if (m4Applicable_(prov, land)) {
       const r = riskM4_(prov, endIso, land);
@@ -236,7 +242,7 @@ function riskWarm_(user, b) {
   const provs = readAll_('ProvinceSummary').filter(r => Number(r.hsCount) > 0).map(r => String(r.provinceCode).padStart(2, '0'))
     .filter(p => inScope_(user, p) && (!b.provinceCode || p === String(b.provinceCode)));
   let r = {};
-  provs.forEach(p => { if (Date.now() - t < 280000) r = (model === 'M4' && m4Applicable_(p, b.land || DEFAULT_LAND)) ? riskM4_(p, '', b.land || DEFAULT_LAND) : riskProvinceCalc_(p, '', b.land || DEFAULT_LAND); });
+  provs.forEach(p => { if (Date.now() - t < 280000) r = model === 'M5' ? riskM5_(p, b.end || m5DefaultEnd_(), b.land || DEFAULT_LAND) : (model === 'M4' && m4Applicable_(p, b.land || DEFAULT_LAND)) ? riskM4_(p, '', b.land || DEFAULT_LAND) : riskProvinceCalc_(p, '', b.land || DEFAULT_LAND); });
   return { ok: true, model: model, ms: Date.now() - t, provinces: provs.length, season: r.season, history: r.history || [], latest: r.latest || '' };
 }
 

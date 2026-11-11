@@ -2,8 +2,8 @@
 const MapModule = (() => {
   let map, basemapKey = 'voyager';
   const base = {};
-  const shown = { national: null, province: null, district: null, subdistrict: null, risk: null, hotspot: null };
-  const raw = { bundle: null, hotspot: null, riskDistrict: null, riskSubdistrict: null, seasons: [], risk: null, code: '', dataFirst: '' };
+  const shown = { national: null, province: null, district: null, subdistrict: null, risk: null, hotspot: null, hotspotPrev: null };
+  const raw = { bundle: null, hotspot: null, riskDistrict: null, riskSubdistrict: null, seasons: [], risk: null, code: '', dataFirst: '', dataMonths: [] };
   const riskCache = new Map();
   let state = { district: '', subdistrict: '', crop: '', land: CONFIG.DEFAULT_LAND, startYM: null, endYM: null };
   let nationalLayers = new Map();
@@ -15,11 +15,14 @@ const MapModule = (() => {
     L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
     Object.entries(CONFIG.BASEMAPS).forEach(([k, b]) => { if (k !== 'print') base[k] = L.tileLayer(b.url, { maxZoom: 19, attribution: b.attribution, crossOrigin: true }); });
     base[basemapKey].addTo(map);
+    // ลำดับชั้น: ระดับความเสี่ยง (overlayPane 400) < จุดความร้อนปีก่อน (440) < จุดความร้อนปีล่าสุด (450, ชั้นบนสุดของข้อมูล)
+    map.createPane('hsPrev').style.zIndex = 440; map.createPane('hsCur').style.zIndex = 450;
     map.fitBounds(CONFIG.THAILAND_BOUNDS, { animate: false });
 
     document.querySelectorAll('input[name="basemap"]').forEach(el => el.addEventListener('change', () => setBasemap(el.value)));
     ['lyr-province', 'lyr-district', 'lyr-subdistrict'].forEach(id => document.getElementById(id)?.addEventListener('change', renderBoundaries));
     document.getElementById('lyr-hotspot')?.addEventListener('change', renderHotspots);
+    document.getElementById('lyr-hotspot-prev')?.addEventListener('change', () => { renderHotspots(); renderLegend(); });
     document.getElementById('lyr-risk')?.addEventListener('change', renderRisk);
     return map;
   }
@@ -72,7 +75,7 @@ const MapModule = (() => {
     raw.bundle = bundle; raw.hotspot = hotspotFC; raw.code = code || ''; raw.risk = null;
   }
   function clearProvince() {
-    ['province', 'district', 'subdistrict', 'risk', 'hotspot'].forEach(k => { remove(shown[k]); shown[k] = null; });
+    ['province', 'district', 'subdistrict', 'risk', 'hotspot', 'hotspotPrev'].forEach(k => { remove(shown[k]); shown[k] = null; });
     raw.bundle = null; raw.hotspot = null; raw.riskDistrict = null; raw.riskSubdistrict = null; raw.risk = null; raw.code = '';
   }
 
@@ -93,6 +96,19 @@ const MapModule = (() => {
     return raw.seasons[raw.seasons.length - 1] || null;
   }
   function mapHotspots() { const s = displaySeason(); return filteredHotspots().filter(f => f.properties.__season === s); }
+  /** ช่วงที่เลือกเทียบช่วงเดียวกันปีก่อน (Geo.compareWindow) — แหล่งเดียวสำหรับการ์ด ตาราง ป๊อปอัป ชั้นข้อมูลปีก่อน และรายงาน */
+  function compareInfo() {
+    if (!state.endYM) return null;
+    const s = Geo.ymFromIndex(state.startYM || state.endYM), e = Geo.ymFromIndex(state.endYM);
+    const latest = (raw.hotspot?.features || []).reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
+    const end = isoDate(e.year - 543, e.month, new Date(Date.UTC(e.year - 543, e.month, 0)).getUTCDate());
+    return Object.assign(Geo.compareWindow(isoDate(s.year - 543, s.month, 1), end, latest, raw.dataFirst, raw.dataMonths), { latest });
+  }
+  /** จุดความร้อนช่วงเดียวกันปีก่อน (ตามตัวกรองพื้นที่/ชนิดพืช) สำหรับชั้นข้อมูลบนแผนที่ */
+  function prevHotspots() {
+    const W = compareInfo(); if (!W || W.none) return [];
+    return (raw.hotspot?.features || []).filter(f => { const p = f.properties; return W.inPrev(p.__date) && (!state.crop || p.__crop === state.crop) && (!state.district || p.__dCode === state.district) && (!state.subdistrict || p.__sCode === state.subdistrict); });
+  }
   function scopeUnits(level) {
     if (!raw.bundle) return [];
     if (level === 'district') return raw.bundle.district.features.filter(f => !state.district || districtCodeOf(f) === state.district);
@@ -138,14 +154,14 @@ const MapModule = (() => {
     const units = scopeUnits(level), api = raw.risk, key = level === 'district' ? '__dCode' : '__sCode';
     const counts = {};
     filteredHotspots().forEach(h => { const c = h.properties[key]; counts[c] = (counts[c] || 0) + 1; });
-    const table = api?.[level] || {}, cols = (level === 'district' && api?.distCols) ? api.distCols : (api?.cols || []), m4 = api?.model === 'M4';
+    const table = api?.[level] || {}, cols = (level === 'district' && api?.distCols) ? api.distCols : (api?.cols || []), m4 = api?.model === 'M4' || api?.model === 'M5';
     const at = (row, name) => row ? row[cols.indexOf(name)] : undefined;
     return {
       type: 'FeatureCollection',
       features: units.map(feature => {
         const p = feature.properties, code = level === 'district' ? districtCodeOf(feature) : subdistrictCodeOf(feature);
         const row = table[code], raw0 = row ? Number(at(row, 'level')) : 0, lvl = m4 ? (row ? raw0 : -1) : Math.max(0, raw0);   // Model 4: -1 = ไม่ประเมิน (ไม่มีพื้นที่เกษตร)
-        const detail = api?.detailed && row && m4 ? Object.assign({ m4: true }, Object.fromEntries(cols.map((c, i) => [c, row[i]])))
+        const detail = api?.detailed && row && m4 ? Object.assign({ m4: api.model === 'M4', m5: api.model === 'M5' }, Object.fromEntries(cols.map((c, i) => [c, row[i]])))
           : api?.detailed && row ? { bri: at(row, 'bri'), D: at(row, 'D'), P: at(row, 'P'), C: at(row, 'C'), hsH0: at(row, 'hsH0'), hsH1: at(row, 'hsH1'), hs0: at(row, 'hs0'), base: at(row, 'base'), trend: at(row, 'trend') } : null;
         return {
           type: 'Feature', geometry: feature.geometry,
@@ -225,6 +241,7 @@ const MapModule = (() => {
   function riskInfo() {
     const r = raw.risk; if (!r || r.empty || r.noHistory) return null;
     if (r.model === 'PROTO') return { model: 'PROTO', seasons: activeSeasons(), history: activeSeasons(), land: r.land, detailed: !!r.detailed, source: r.source };
+    if (r.model === 'M5') return { model: 'M5', season: r.season, end: r.end, latest: r.latest, history: r.history || [], seasons: r.history || [], land: r.land, detailed: !!r.detailed, cuts: r.cuts, weights: r.weights, months: r.months, monthsText: r.monthsText, fullYear: r.fullYear, note: r.note, minHs: r.minHs, source: r.source, window: r.window, version: r.modelVersion, satellitePolicy: r.satellitePolicy };
     if (r.model === 'M4') return { model: 'M4', season: r.season, end: r.end, latest: r.latest, history: r.history || [], seasons: r.history || [], land: r.land, detailed: !!r.detailed, cuts: r.cuts, source: r.source, window: r.window, version: r.modelVersion };
     return { model: 'BRI2', season: r.season, end: r.end, latest: r.latest, history: r.history || r.seasons || [], seasons: r.history || r.seasons || [], land: r.land, detailed: !!r.detailed, cuts: r.cuts, refSeasons: r.refSeasons, refAuto: r.refAuto, weights: r.weights, source: r.source, window: r.window };
   }
@@ -233,6 +250,13 @@ const MapModule = (() => {
     const r = raw.risk;
     if (!r || r.empty) return '';
     const landTxt = r.land === 'ALL' ? 'ทุกประเภทพื้นที่' : r.land;
+    if (r.model === 'M5') {
+      const H = (r.history || []).slice().sort((a, b) => a - b), hs = H.length > 1 ? `ปีงบ ${H[0]}–${H[H.length - 1]}` : `ปีงบ ${H[0] || '-'}`;
+      if (r.noHistory) return 'Model 5: ยังไม่มีข้อมูลปีฐานสำหรับประเมิน';
+      const mt = r.fullYear ? 'ทั้งปีงบประมาณ' : `เฉพาะ ${r.monthsText}`;
+      return short ? `Model 5 · ข้อมูลย้อนหลัง${hs} (${mt}) · เทียบภายในจังหวัด`
+        : `Model 5: ระดับความเสี่ยงการเผาจากข้อมูลที่เกิดขึ้นแล้ว ${hs} (${H.length} ปี · ${mt}${r.fullYear ? '' : ' ซึ่งเป็นเดือนที่มีข้อมูลครบทุกปี'}) — ความหนาแน่นจุดความร้อนต่อพื้นที่${['พื้นที่เกษตร', 'เขต สปก.'].includes(r.land) ? 'เพาะปลูก' : ''} ${Math.round((r.weights?.D ?? 0.7) * 100)}% + การเผาซ้ำ (กริด 1 กม.) ${Math.round((r.weights?.R ?? 0.3) * 100)}% จัดลำดับเทียบพื้นที่ในจังหวัดเดียวกัน (สูงมาก = 10% บนสุด · สูง = ถัดไป 15% · ปานกลาง = ถัดไป 25%) · จุดรวมน้อยกว่า ${r.minHs ?? 3} จุด = ต่ำ · เป็นการประเมินจากข้อมูลที่ผ่านมา ไม่ใช่การทำนาย`;
+    }
     if (r.model === 'M4') {
       const H = (r.history || []).slice().sort((a, b) => a - b), hs = H.length > 1 ? `ฤดู ${H[0]}–${H[H.length - 1]}` : `ฤดู ${H[0] || '-'}`;
       if (r.noHistory) return 'Model 4: ยังไม่มีฤดูฐานที่ครบสำหรับประเมิน';
@@ -304,30 +328,31 @@ const MapModule = (() => {
     const fmt = n => Number(n || 0).toLocaleString('th-TH'), key = level === 'district' ? '__dCode' : '__sCode';
     const lv = levelOf(p), S = displaySeason();
     const base = (raw.hotspot?.features || []).filter(f => f.properties[key] === p.code && (!state.crop || f.properties.__crop === state.crop)).map(f => f.properties);
-    const latest = (raw.hotspot?.features || []).reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
+    const W = compareInfo(), latest = W?.latest || '';
+    const sel = base.filter(x => inRange(x)), monthly = W?.mode === 'month';
+    const curC = W ? base.filter(x => W.inCur(x.__date)) : [], prev = W ? base.filter(x => W.inPrev(x.__date)) : [], prevAll = base.filter(x => x.__season === S - 1);
+    const chg = !W || W.none ? null : prev.length ? Math.round((curC.length - prev.length) * 100 / prev.length) : null;
+    const crops = Object.entries(sel.reduce((o, x) => { o[x.__crop] = (o[x.__crop] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]);
     const s0 = Geo.ymFromIndex(state.startYM || state.endYM), e0 = Geo.ymFromIndex(state.endYM);
-    const seasonStart = isoDate(S - 544, 10, 1);
-    let start = isoDate(s0.year - 543, s0.month, 1); if (start < seasonStart) start = seasonStart;
-    const W = Geo.compareWindow(start, isoDate(e0.year - 543, e0.month, new Date(Date.UTC(e0.year - 543, e0.month, 0)).getUTCDate()), latest, raw.dataFirst);
-    let end = W.cur[1]; if (latest && end > latest) end = latest;
-    const cur = base.filter(x => x.__date >= W.cur[0] && x.__date <= W.cur[1]);
-    const [pStart, pEnd] = W.prev, monthly = W.mode === 'month';
-    const prev = base.filter(x => x.__date >= pStart && x.__date <= pEnd), prevAll = base.filter(x => x.__season === S - 1);
-    const chg = prev.length ? Math.round((cur.length - prev.length) * 100 / prev.length) : null;
-    const crops = Object.entries(cur.reduce((o, x) => { o[x.__crop] = (o[x.__crop] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]);
+    let selEnd = isoDate(e0.year - 543, e0.month, new Date(Date.UTC(e0.year - 543, e0.month, 0)).getUTCDate()); if (latest && selEnd > latest) selEnd = latest;
     const lines = [
-      `<div class="ap-line ap-now"><b>ฤดู ${S} (ล่าสุด)</b> ${shortDate(start)}–${shortDate(end)}: <b>${fmt(cur.length)} จุด</b></div>`,
-      `<div class="ap-line ap-prev"><b>ฤดู ${S - 1} (ปีก่อน)</b> ${monthly ? `เดือนเดียวกัน (${Geo.monthSpan(pStart, pEnd)})` : 'ช่วงเดียวกัน'} ${fmt(prev.length)} จุด · ทั้งฤดู ${fmt(prevAll.length)} จุด${monthly ? `<br><span class="ap-note">${W.note}</span>` : ''}</div>`
+      `<div class="ap-line ap-now"><b>ช่วงที่เลือก</b> ${shortDate(isoDate(s0.year - 543, s0.month, 1))}–${shortDate(selEnd)}: <b>${fmt(sel.length)} จุด</b></div>`,
+      `<div class="ap-line ap-prev"><b>ช่วงเดียวกันปีก่อน</b> ${!W || W.none ? 'ไม่มีข้อมูล' : monthly ? `${W.prevLabel} ${fmt(prev.length)} จุด (ปีนี้ ${W.curLabel} ${fmt(curC.length)} จุด)` : `${fmt(prev.length)} จุด`} · ทั้งปีงบ ${S - 1} ${fmt(prevAll.length)} จุด${monthly || W?.none ? `<br><span class="ap-note">${W.note}</span>` : ''}</div>`
     ];
     const extra = [];
-    const what = monthly ? 'เดือนเดียวกันปีก่อน (ผลรวมรายเดือน)' : 'ช่วงเดียวกันปีก่อน';
-    if (chg !== null) extra.push(`เทียบ${what} ${chg > 0 ? '+' : ''}${chg}%`); else if (cur.length) extra.push(`${what}ไม่พบจุด`);
+    const what = monthly ? 'เดือนที่มีข้อมูลทั้งสองปี' : 'ช่วงเดียวกันปีก่อน';
+    if (chg !== null) extra.push(`เทียบ${what} ${chg > 0 ? '+' : ''}${chg}%`); else if (W && !W.none && curC.length) extra.push(`${what}: ปีก่อนไม่พบจุด`);
     if (crops.length) extra.push(`ชนิดพืช: ${crops.map(([k, v]) => `${k} ${fmt(v)}`).join(' · ')}`);
     if (state.crop) extra.push(`กรองชนิดพืช: ${state.crop}`);
-    if (p.n_high !== null && p.n_high !== undefined) extra.push(`ตำบลคะแนนสูง–สูงมาก ${p.n_high}/${p.n_tambon} ตำบล (ระดับอำเภอ = ค่าเฉลี่ยถ่วงพื้นที่เกษตรของตำบล)`);
+    if (p.n_high !== null && p.n_high !== undefined) extra.push(raw.risk?.model === 'M5' ? `ตำบลระดับสูง–สูงมาก ${p.n_high}/${p.n_tambon} ตำบล` : `ตำบลคะแนนสูง–สูงมาก ${p.n_high}/${p.n_tambon} ตำบล (ระดับอำเภอ = ค่าเฉลี่ยถ่วงพื้นที่เกษตรของตำบล)`);
     if (raw.risk && !raw.risk.empty) extra.push(riskBasisText(true));
     let admin = '';
-    if (p.detail?.m4) {
+    if (p.detail?.m5) {
+      const d = p.detail, H = raw.risk?.history || [], f1 = x => x === null || x === undefined ? '-' : Number(x).toLocaleString('th-TH', { maximumFractionDigits: 3 });
+      const ns = H.map((s, i) => `${s}: ${fmt(d['n' + i])}`).join(' · ');
+      const tr = { up: '↑ ปีล่าสุดสูงกว่าค่าเฉลี่ยปีก่อน', down: '↓ ปีล่าสุดต่ำกว่าค่าเฉลี่ยปีก่อน', flat: '→ ใกล้เคียงค่าเฉลี่ยปีก่อน' }[d.trend] || '';
+      admin = `<div class="tip-admin">ผู้ดูแล · Model 5${d.score !== null && d.score !== undefined ? ` · ลำดับ ${Number(d.score).toFixed(1)}/100 ในจังหวัด` : ''}<br>ความหนาแน่น ${f1(d.D)} จุด/1,000 ไร่/ปี${d.R !== null && d.R !== undefined ? ` · เผาซ้ำ ${d.R}%` : ''} · พื้นที่ ${f1(d.cropRai)} ไร่<br>จุดความร้อนปีฐาน (${raw.risk?.monthsText || ''}) ${ns || '-'}${tr ? `<br>แนวโน้ม: ${tr}` : ''}${d.crop ? `<br>ชนิดพืช: ${d.crop}` : ''}<br>${d.reason || ''}</div>`;
+    } else if (p.detail?.m4) {
       const d = p.detail, H = raw.risk?.history || [], f1 = x => x === null || x === undefined ? '-' : Number(x).toLocaleString('th-TH', { maximumFractionDigits: 3 });
       const us = H.map((s, i) => `${s}: ${f1(d['u' + i])}`).join(' · ');
       const sig = `สัญญาณฤดู ${raw.risk?.season || ''}: ${fmt(d.hs0)} จุด${d.base !== null && d.base !== undefined ? ` เทียบช่วงเดียวกันฤดูก่อน ${fmt(d.base)} จุด${d.trend ? ` · ${TREND_TEXT[d.trend]}` : ''}` : ''}`;
@@ -345,40 +370,47 @@ const MapModule = (() => {
       ${lines.join('')}${extra.length ? `<div class="ap-more">${extra.map(x => `<div>${x}</div>`).join('')}</div>` : ''}${admin}${drill}</div>`;
   }
 
-  function renderHotspots() {
-    remove(shown.hotspot); shown.hotspot = null;
-    if (!raw.bundle || !document.getElementById('lyr-hotspot')?.checked) return;
-    // วงกลมกลุ่มจุดใช้สีกลาง (ไม่ใช้เขียว/เหลือง/ส้มค่าเริ่มต้นที่ซ้ำกับสีระดับความเสี่ยง) ตัวเลข = จำนวนจุดความร้อนในกลุ่ม
-    const group = L.markerClusterGroup({ disableClusteringAtZoom: 11, chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 50,
-      iconCreateFunction: c => { const n = c.getChildCount(), size = n < 10 ? 30 : n < 100 ? 36 : 44;
-        return L.divIcon({ html: `<span>${n.toLocaleString('th-TH')}</span>`, className: 'hs-cluster', iconSize: [size, size] }); } });
-    L.geoJSON({ type: 'FeatureCollection', features: mapHotspots() }, {
-      pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 5.5, fillColor: CONFIG.SEASON_COLORS[0], color: '#ffffff', weight: 1.4, fillOpacity: 0.95 }),
-      onEachFeature: (f, l) => {
-        const p = f.properties;
-        l.bindPopup(`<div class="hs-pop"><strong>จุดความร้อน</strong>
+  function hsPopup(p, prev) {
+    return `<div class="hs-pop"><strong>จุดความร้อน${prev ? ' · ช่วงเดียวกันปีก่อน' : ''}</strong>
           <div>${Geo.thaiDateTime(p.__date, p.__time)}${p.__time && p.__timeSrc === 'hsid' ? ' <span class="hs-pop-note" title="ไฟล์ต้นทางไม่มีเวลา ระบบคำนวณจากเวลา UTC ใน hsID ของ NASA FIRMS">(จาก hsID)</span>' : ''}</div>
           <div>อ.${p.__district} ต.${p.__subdistrict}${p.__village ? ` · ${p.__village}` : ''}</div>
           <div class="hs-pop-crop">${Geo.cropIcon(p.__crop, 'hs-pop-ic')}<span>${p.__crop}</span></div>${p.__land ? `<div class="hs-pop-note">พื้นที่: ${p.__land}</div>` : ''}
-          <div class="hs-pop-note">ฤดูกาล ${p.__season} (ต.ค. ${p.__season - 1} – ก.ย. ${p.__season})</div></div>`);
-      }
-    }).addTo(group);
-    group.addTo(map); shown.hotspot = group;
+          <div class="hs-pop-note">ปีงบประมาณ ${p.__season} (ต.ค. ${p.__season - 1} – ก.ย. ${p.__season})</div></div>`;
+  }
+  /** จุดความร้อน 2 ชั้น: ปีล่าสุดของช่วงที่เลือก (ชั้นบนสุด สีน้ำเงิน) และช่วงเดียวกันปีก่อน (ชั้นล่าง สีเทา) */
+  function renderHotspots() {
+    remove(shown.hotspot); shown.hotspot = null; remove(shown.hotspotPrev); shown.hotspotPrev = null;
+    if (!raw.bundle) return;
+    // วงกลมกลุ่มจุดใช้สีกลาง (ไม่ใช้เขียว/เหลือง/ส้มค่าเริ่มต้นที่ซ้ำกับสีระดับความเสี่ยง) ตัวเลข = จำนวนจุดความร้อนในกลุ่ม
+    const layer = (features, prev) => {
+      const pane = prev ? 'hsPrev' : 'hsCur';
+      const group = L.markerClusterGroup({ disableClusteringAtZoom: 11, chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 50, clusterPane: pane,
+        iconCreateFunction: c => { const n = c.getChildCount(), size = n < 10 ? 30 : n < 100 ? 36 : 44;
+          return L.divIcon({ html: `<span>${n.toLocaleString('th-TH')}</span>`, className: prev ? 'hs-cluster hs-cluster-prev' : 'hs-cluster', iconSize: [size, size] }); } });
+      L.geoJSON({ type: 'FeatureCollection', features }, {
+        pointToLayer: (f, ll) => L.circleMarker(ll, prev ? { pane, radius: 4.5, fillColor: '#94a3b8', color: '#ffffff', weight: 1, fillOpacity: 0.8 } : { pane, radius: 5.5, fillColor: CONFIG.SEASON_COLORS[0], color: '#ffffff', weight: 1.4, fillOpacity: 0.95 }),
+        onEachFeature: (f, l) => l.bindPopup(hsPopup(f.properties, prev))
+      }).addTo(group);
+      return group.addTo(map);
+    };
+    if (document.getElementById('lyr-hotspot-prev')?.checked) shown.hotspotPrev = layer(prevHotspots(), true);
+    if (document.getElementById('lyr-hotspot')?.checked) shown.hotspot = layer(mapHotspots(), false);
   }
 
   function renderLegend() {
     const el = document.getElementById('map-legend'); if (!el) return;
-    const S = displaySeason(), nPts = mapHotspots().length;
+    const S = displaySeason(), nPts = mapHotspots().length, W = compareInfo(), showPrev = !!document.getElementById('lyr-hotspot-prev')?.checked, nPrev = showPrev ? prevHotspots().length : 0;
     const rr = raw.risk, nH = (rr?.history || []).length;
-    const basis = !rr ? 'กำลังประเมิน…' : rr.empty ? 'ไม่มีข้อมูลสำหรับประเมิน' : rr.model === 'M4' ? `${riskBasisText(true)} (ฐานฤดู 2567–2568)` : rr.model === 'PROTO' ? riskBasisText(false) : rr.noHistory ? riskBasisText(false) : `${riskBasisText(true)} (ฤดูที่ครบแล้ว)${nH < 3 ? ' · ข้อมูลยังน้อยกว่า 3 ฤดู' : ''}`;
+    const basis = !rr ? 'กำลังประเมิน…' : rr.empty ? 'ไม่มีข้อมูลสำหรับประเมิน' : rr.model === 'M5' ? riskBasisText(true) : rr.model === 'M4' ? `${riskBasisText(true)} (ฐานฤดู 2567–2568)` : rr.model === 'PROTO' ? riskBasisText(false) : rr.noHistory ? riskBasisText(false) : `${riskBasisText(true)} (ฤดูที่ครบแล้ว)${nH < 3 ? ' · ข้อมูลยังน้อยกว่า 3 ฤดู' : ''}`;
     el.innerHTML = `<div class="max-w-[17rem] p-3 text-xs">
       <p class="mb-1.5 font-bold text-ink">ระดับความเสี่ยงการเผา (พื้นที่)</p>
       <div class="grid grid-cols-2 gap-x-3 gap-y-1">${CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span class="risk-pill text-xs"><span class="risk-dot" style="background:${l.color}"></span>${l.label}</span>`).join('')}</div>
-      ${rr?.model === 'M4' ? `<span class="risk-pill mt-1 text-xs"><span class="risk-dot" style="background:${NA_LEVEL.color}"></span>ไม่ประเมิน (ไม่มีพื้นที่เกษตร)</span>` : ''}
-      <p class="mt-1 leading-snug text-ink-soft">${basis}${rr?.fallback ? `<br>${rr.fallback}` : ''}</p>
-      ${S ? `<p class="mb-1.5 mt-2.5 font-bold text-ink">จุดความร้อน (ตำแหน่ง) · ${state.land === 'ALL' ? 'ทุกประเภทพื้นที่' : state.land}</p><span class="risk-pill text-xs"><span class="risk-dot ring-1 ring-white" style="background:${CONFIG.SEASON_COLORS[0]}"></span>ฤดู ${S} (ล่าสุด) ${nPts.toLocaleString('th-TH')} จุด</span>
+      ${rr?.model === 'M4' || rr?.model === 'M5' ? `<span class="risk-pill mt-1 text-xs"><span class="risk-dot" style="background:${NA_LEVEL.color}"></span>ไม่ประเมิน (ไม่มีพื้นที่เกษตร)</span>` : ''}
+      <p class="mt-1 leading-snug text-ink-soft">${basis}${rr?.fallback ? `<br>${rr.fallback}` : ''}${rr?.note ? `<br>${rr.note}` : ''}</p>
+      ${S ? `<p class="mb-1.5 mt-2.5 font-bold text-ink">จุดความร้อน (ตำแหน่ง) · ${state.land === 'ALL' ? 'ทุกประเภทพื้นที่' : state.land}</p><span class="risk-pill text-xs"><span class="risk-dot ring-1 ring-white" style="background:${CONFIG.SEASON_COLORS[0]}"></span>ปีงบ ${S} (ล่าสุด · ชั้นบนสุด) ${nPts.toLocaleString('th-TH')} จุด</span>
+      ${showPrev ? `<span class="risk-pill mt-1 text-xs"><span class="risk-dot ring-1 ring-white" style="background:#94a3b8"></span>ช่วงเดียวกันปีก่อน ${W && !W.none ? `${W.mode === 'month' ? W.prevLabel + ' ' : ''}${nPrev.toLocaleString('th-TH')} จุด` : 'ไม่มีข้อมูล'}</span>${W?.note ? `<p class="mt-1 leading-snug text-ink-soft">${W.note}</p>` : ''}` : ''}
       ${nPts ? `<p class="mt-1.5 flex items-center gap-1.5 leading-snug text-ink-soft"><span class="hs-cluster-mini">12</span>ตัวเลขในวงกลม = จำนวนจุดความร้อนที่อยู่รวมกัน</p>` : ''}
-      <p class="mt-1 leading-snug text-ink-soft">ข้อมูลฤดูก่อนหน้า: คลิกพื้นที่อำเภอ/ตำบลบนแผนที่</p>` : ''}
+      <p class="mt-1 leading-snug text-ink-soft">ข้อมูลรายปี: คลิกพื้นที่อำเภอ/ตำบลบนแผนที่</p>` : ''}
     </div>`;
     el.classList.remove('hidden');
   }
@@ -416,7 +448,7 @@ const MapModule = (() => {
     if (score === null || score === undefined) return NA_LEVEL; return CONFIG.RISK_LEVELS.find(x => score >= x.min && score < x.max) || CONFIG.RISK_LEVELS[0]; }
 
   return {
-    setDataStart: d => { raw.dataFirst = d || ''; }, isProto,
+    setDataStart: d => { raw.dataFirst = d || ''; }, setDataMonths: m => { raw.dataMonths = Array.isArray(m) ? m : []; }, isProto, compareInfo, prevHotspots, levelOf,
     init, showNational, highlightProvince, setProvince, clearProvince, applyFilter, focusSelection, getRiskLevel, seasonColor, riskInfo, riskBasisText, viewerDetailed,
     clearRiskCache: () => riskCache.clear(),
     map: () => map, getData: () => raw, getState: () => ({ ...state }), filteredHotspots, mapHotspots, displaySeason, inRange, selectionFeatures,

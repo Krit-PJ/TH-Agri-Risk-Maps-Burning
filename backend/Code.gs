@@ -88,7 +88,7 @@ function setup() {
   if (!findRow_('Settings', r => r.key === 'guide_url')) appendObj_('Settings', { key: 'guide_url', value: '' });
   if (!findRow_('Settings', r => r.key === 'hs_source')) appendObj_('Settings', { key: 'hs_source', value: 'AGENCY' });
   if (!findRow_('Settings', r => r.key === 'risk_ref_seasons')) appendObj_('Settings', { key: 'risk_ref_seasons', value: 'auto' });
-  if (!findRow_('Settings', r => r.key === 'risk_model')) appendObj_('Settings', { key: 'risk_model', value: 'M4' });
+  if (!findRow_('Settings', r => r.key === 'risk_model')) appendObj_('Settings', { key: 'risk_model', value: 'M5' });
   const fixed = migrateHsText_();
   const tagged = migrateHsSource_();
   const v35 = migrateV35_();
@@ -116,7 +116,7 @@ function ensureSetup_() {
 /* ============================== ROUTER ============================== */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  INACTIVE_MEMO_ = null;
+  INACTIVE_MEMO_ = null; HS_MEMO_ = {};
   try {
     ensureSetup_();
     switch (p.action) {
@@ -125,7 +125,7 @@ function doGet(e) {
       case 'hotspots': return json_(publicHotspots_(String(p.province || ''), p.land));
       case 'hit': return json_({ ok: true, counter: counter_(true) });
       case 'counter': return json_({ ok: true, counter: counter_(false) });
-      case 'settings': return json_({ ok: true, settings: { guideUrl: setting_('guide_url'), hsSource: hsSource_(), refSeasons: refSeasonsText_(), riskModel: riskModel_(), dataFirst: dataRange_().first, landTypes: LAND_TYPES, defaultLand: DEFAULT_LAND } });
+      case 'settings': return json_({ ok: true, settings: { guideUrl: setting_('guide_url'), hsSource: hsSource_(), refSeasons: refSeasonsText_(), riskModel: riskModel_(), dataFirst: dataRange_().first, dataMonths: dataMonths_(), satellitePolicy: SAT_POLICY_TEXT, landTypes: LAND_TYPES, defaultLand: DEFAULT_LAND } });
       case 'risk': return json_(riskForProvince_(p.province, p.end, false, p.land));
       case 'team': return json_({ ok: true, members: teamList_() });
       case 'ping': return json_({ ok: true, time: now_() });
@@ -138,7 +138,7 @@ function doPost(e) {
   let body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (_) { return json_({ ok: false, error: 'invalid JSON' }); }
   try {
-    INACTIVE_MEMO_ = null;
+    INACTIVE_MEMO_ = null; HS_MEMO_ = {};
     ensureSetup_();
     const a = body.action;
     if (a === 'login_admin') return json_(loginAdmin_(body));
@@ -378,6 +378,33 @@ function inactiveBatches_() {
 /** ประเภทพื้นที่ที่ขอดู: หนึ่งใน LAND_TYPES หรือ ALL (ค่าอื่น/ว่าง = พื้นที่เกษตร) */
 function landParam_(v) { const s = String(v || '').trim(); return s.toUpperCase() === 'ALL' ? 'ALL' : (LAND_TYPES.indexOf(s) >= 0 ? s : DEFAULT_LAND); }
 function rowLand_(v) { const s = String(v || '').trim(); return s || DEFAULT_LAND; }
+
+/* ---------- ดาวเทียมหลัก (v3.8): ใช้ Suomi-NPP ตลอดช่วงที่มีข้อมูล Suomi-NPP ของจังหวัด หลังจากนั้นใช้ดาวเทียมอื่น (NOAA-20) ----------
+ * เหตุผล: ข้อมูลย้อนหลังปี 2567–2569 เป็น Suomi-NPP ทั้งหมด จึงต้องใช้ดาวเทียมเดียวกันเพื่อเทียบข้ามปีได้
+ * ไม่ลบข้อมูล NOAA-20 (ยังเก็บไว้ในฐานข้อมูล) เพียงไม่นำมานับซ้ำในช่วงที่มี Suomi-NPP แล้ว */
+const PRIMARY_SAT = 'Suomi-NPP';
+const SAT_POLICY_TEXT = 'ใช้ดาวเทียม Suomi-NPP (VIIRS) ตลอดช่วงที่มีข้อมูลของจังหวัด หลังวันสุดท้ายของ Suomi-NPP ใช้ NOAA-20';
+let HS_MEMO_ = {};
+function rowSat_(r) { return String(r[14] || '') || satelliteFromId_(r[0]); }
+/** แถว HS ของจังหวัดที่ใช้งาน: แหล่งข้อมูล src · ชุดที่เปิดใช้งาน · ดาวเทียมหลักตามนโยบายข้างต้น (วันที่ปรับเป็น YYYY-MM-DD แล้ว) */
+function hsActive_(prov, src) {
+  const k = prov + ':' + src;
+  if (HS_MEMO_[k]) return HS_MEMO_[k];
+  const sh = hsSheet_(prov, false), off = inactiveBatches_();
+  const all = (sh && sh.getLastRow() > 1) ? sh.getRange(2, 1, sh.getLastRow() - 1, HS_HEADERS.length).getValues() : [];
+  let snppLast = '';
+  const rows = all.filter(r => r[0] && rowSource_(r[13]) === src && !off[String(r[11])]);
+  rows.forEach(r => { r[1] = normalizeDate_(r[1]); if (rowSat_(r) === PRIMARY_SAT && r[1] > snppLast) snppLast = r[1]; });
+  const out = snppLast ? rows.filter(r => r[1] > snppLast || rowSat_(r) === PRIMARY_SAT || !rowSat_(r)) : rows;
+  HS_MEMO_[k] = out;
+  return out;
+}
+/** เดือนที่ฐานข้อมูลมีข้อมูล (ทุกจังหวัด ทุกประเภทพื้นที่ แหล่งข้อมูลหลัก) ['YYYY-MM', …] — ใช้ตัดสินว่าช่วงปีก่อน/ปีฐานมีข้อมูลเดือนใดบ้าง */
+function dataMonths_() {
+  const props = PropertiesService.getScriptProperties().getProperties(), src = hsSource_(), set = {};
+  Object.keys(props).forEach(k => { if (k.indexOf('months:' + src + ':') === 0) String(props[k] || '').split(',').forEach(m => { if (m) set[m] = 1; }); });
+  return Object.keys(set).sort();
+}
 function landMatch_(land, v) { return land === 'ALL' || rowLand_(v) === land; }
 
 function hsRowFrom_(r, batchId, at, source) {
@@ -447,6 +474,42 @@ function hsImport_(user, b) {
     }
     return res;
   } finally { lock.releaseLock(); }
+}
+
+/** เรียกจาก Apps Script Editor (ผู้ดูแลระบบ): นำเข้าไฟล์ขนาดใหญ่ที่ตรวจสอบแล้วจากชีตพักข้อมูล (Google Sheet ที่แปลงจาก CSV) แบบ upsert
+ *  ใช้ตรรกะเดียวกับหน้าเว็บ (hsImport_) ทีละ 4,000 แถว ต่อรอบไม่เกิน ~4.5 นาที — เรียกซ้ำจนกว่า Log จะแจ้งว่า "เสร็จสิ้น"
+ *  คอลัมน์ชีตพัก: prov,id,date(yyyymmdd),time(hhmm),dCode,sCode,dName,sName,village,plant,lat,lng,sat,land (เรียงตามจังหวัด) */
+function importStagedHs(sheetId, fileName) {
+  const t0 = Date.now(), props = PropertiesService.getScriptProperties(), pk = 'STAGE_' + sheetId;
+  const st = JSON.parse(props.getProperty(pk) || '{"row":2,"n":0}');
+  const src = SpreadsheetApp.openById(sheetId).getSheets()[0], last = src.getLastRow();
+  if (st.row > last) { Logger.log('เสร็จสิ้นแล้ว: ' + st.n + ' แถว'); return st; }
+  if (st.row === 2) trimHsColumns_();
+  const provCol = src.getRange(2, 1, last - 1, 1).getValues().map(r => String(r[0]).padStart(2, '0'));
+  const user = { sub: 'EDITOR', role: 'superadmin', prov: '*', name: 'ผู้ดูแลระบบ (นำเข้าไฟล์รวม)' };
+  const tag = String(sheetId).replace(/[^\w]/g, '').slice(0, 8), CH = 4000;
+  const str8 = v => { const x = String(v).replace(/\D/g, ''); return x.length === 8 ? x.slice(0, 4) + '-' + x.slice(4, 6) + '-' + x.slice(6, 8) : ''; };
+  while (st.row <= last && Date.now() - t0 < 270000) {
+    const prov = provCol[st.row - 2];
+    let n = 0; while (n < CH && st.row + n <= last && provCol[st.row - 2 + n] === prov) n++;
+    const vals = src.getRange(st.row, 1, n, 14).getValues();
+    const rows = vals.map(v => ({ id: String(v[1]), date: str8(v[2]), time: v[3] === '' ? '' : Number(v[3]), dCode: String(v[4]), sCode: String(v[5]), dName: v[6], sName: v[7],
+      village: v[8], plant: String(v[9]), lat: Number(v[10]), lng: Number(v[11]), sat: String(v[12]), land: String(v[13]) }));
+    const final = st.row + n > last || provCol[st.row - 2 + n] !== prov;
+    const res = hsImport_(user, { provinceCode: prov, rows: rows, mode: 'upsert', source: 'AGENCY', batchId: 'B-' + prov + '-' + tag, fileName: fileName || 'staged', note: 'upsert (นำเข้าจากชีตพักข้อมูล)', final: final });
+    st.row += n; st.n += n; props.setProperty(pk, JSON.stringify(st));
+    Logger.log('จ.' + prov + ' แถว ' + (st.row - n) + '–' + (st.row - 1) + ': ใหม่ ' + res.accepted + ' ปรับปรุง ' + res.updated + ' ซ้ำ ' + res.duplicates + (final && res.reconcile ? ' · ตรวจยอดชุดนี้ในฐานข้อมูล ' + res.reconcile.total + ' จุด' : ''));
+  }
+  if (st.row > last) { bumpCache_('all'); Logger.log('เสร็จสิ้น: ' + st.n + ' แถว'); } else Logger.log('ยังไม่เสร็จ (' + st.n + '/' + (last - 1) + ' แถว) — กด Run อีกครั้ง');
+  return st;
+}
+/** ลดจำนวนคอลัมน์ของชีต HS_xx ให้เหลือเท่าคอลัมน์ข้อมูล (ค่าเริ่มต้นของ Google Sheets คือ 26) — ประหยัดเซลล์ ไม่กระทบข้อมูล */
+function trimHsColumns_() {
+  db_().getSheets().filter(sh => /^HS_\d{2}$/.test(sh.getName())).forEach(sh => {
+    if (typeof sh.getMaxColumns !== 'function') return;
+    const extra = sh.getMaxColumns() - HS_HEADERS.length;
+    if (extra > 0) sh.deleteColumns(HS_HEADERS.length + 1, extra);
+  });
 }
 
 /** จำนวนจุดของชุดข้อมูลในฐานข้อมูล (อ่านจากชีตจริง) แยกตามประเภทพื้นที่ */
@@ -535,17 +598,23 @@ function rewriteHs_(prov, keepFn) {
 
 /** ยอดสรุปรายจังหวัด (หน้าแรก): นับเฉพาะแหล่งข้อมูลหลัก · พื้นที่เกษตร · ชุดข้อมูลที่เปิดใช้งาน */
 function refreshSummary_(prov) {
-  const sh = hsSheet_(prov, false);
-  let count = 0, first = '', last = '';
-  if (sh && sh.getLastRow() > 1) {
-    const src = hsSource_(), off = inactiveBatches_();
-    const dates = sh.getRange(2, 1, sh.getLastRow() - 1, HS_HEADERS.length).getValues()
-      .filter(r => r[0] && rowSource_(r[13]) === src && !off[String(r[11])] && rowLand_(r[15]) === DEFAULT_LAND).map(r => normalizeDate_(r[1])).filter(Boolean).sort();
-    count = dates.length; first = dates[0] || ''; last = dates[dates.length - 1] || '';
-  }
+  const src = hsSource_();
+  HS_MEMO_ = {};
+  const rows = hsActive_(prov, src), months = {};
+  rows.forEach(r => { if (/^\d{4}-\d{2}/.test(r[1])) months[r[1].slice(0, 7)] = 1; });
+  const dates = rows.filter(r => rowLand_(r[15]) === DEFAULT_LAND).map(r => r[1]).filter(Boolean).sort();
+  const count = dates.length, first = dates[0] || '', last = dates[dates.length - 1] || '';
+  PropertiesService.getScriptProperties().setProperty('months:' + src + ':' + prov, Object.keys(months).sort().join(','));
   const row = findRow_('ProvinceSummary', r => String(r.provinceCode) === prov);
   const data = { provinceCode: prov, provinceName: PROVINCES[prov], hsCount: count, firstDate: first, lastDate: last, updatedAt: now_() };
   if (row) updateRow_('ProvinceSummary', row._row, data); else appendObj_('ProvinceSummary', data);
+}
+/** เรียกจาก Editor: ปรับยอดสรุปและเดือนที่มีข้อมูลของทุกจังหวัด (หลังเปลี่ยนนโยบายดาวเทียม/แหล่งข้อมูล) */
+function refreshAllSummaries() {
+  INACTIVE_MEMO_ = null;
+  Object.keys(PROVINCES).forEach(p => { if (hsSheet_(p, false)) { refreshSummary_(p); bumpCache_(p); } });
+  bumpCache_('all');
+  return dataMonths_().length;
 }
 
 function publicProvinces_() {
@@ -564,13 +633,12 @@ function publicHotspots_(prov, landIn) {
   const cache = CacheService.getScriptCache();
   const ver = cache.get('ver:' + prov) || '0';
   const src = hsSource_();
-  const key = 'hs5:' + prov + ':' + src + ':' + land + ':' + ver;
+  const key = 'hs6:' + prov + ':' + src + ':' + land + ':' + ver;
   const cached = cacheGet_(cache, key);
   if (cached) return JSON.parse(cached);
-  const sh = hsSheet_(prov, false), off = inactiveBatches_();
-  const rows = (sh && sh.getLastRow() > 1) ? sh.getRange(2, 1, sh.getLastRow() - 1, HS_HEADERS.length).getValues() : [];
-  const out = { ok: true, province: prov, source: src, land: land, cols: ['date', 'time', 'dCode', 'sCode', 'dName', 'sName', 'village', 'plant', 'lat', 'lng', 'tsrc', 'land'],
-    rows: rows.filter(r => r[0] && rowSource_(r[13]) === src && !off[String(r[11])] && landMatch_(land, r[15])).map(r => {
+  const rows = hsActive_(prov, src);
+  const out = { ok: true, province: prov, source: src, land: land, satellitePolicy: SAT_POLICY_TEXT, cols: ['date', 'time', 'dCode', 'sCode', 'dName', 'sName', 'village', 'plant', 'lat', 'lng', 'tsrc', 'land'],
+    rows: rows.filter(r => landMatch_(land, r[15])).map(r => {
       const date = normalizeDate_(r[1]);
       let time = normalizeTime_(r[2]), tsrc = '';
       if (!time) { time = timeFromHsId_(r[0], date); if (time) tsrc = 'hsid'; }

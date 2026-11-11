@@ -23,29 +23,36 @@ const Dashboard = (() => {
       return (!st.crop || p.__crop === st.crop) && (!st.district || p.__dCode === st.district) && (!st.subdistrict || p.__sCode === st.subdistrict);
     });
     const s = Number(st.startYM), e = Number(st.endYM);
-    // เทียบช่วงเดียวกันปีก่อน: วันต่อวัน (ตัดที่วันล่าสุดของข้อมูล) — ถ้าปีก่อนเริ่มก่อนวันแรกของฐานข้อมูล เทียบผลรวมระดับเดือนแทน
-    const iso = (i, last) => { const m = Geo.ymFromIndex(i), y = m.year - 543, d = last ? new Date(Date.UTC(y, m.month, 0)).getUTCDate() : 1; return `${y}-${String(m.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`; };
-    const latest = (raw.hotspot?.features || []).reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
-    const W = Geo.compareWindow(iso(s, false), iso(e, true), latest, raw.dataFirst);
-    const [startD, endD] = W.cur, [pStart, pEnd] = W.prev;
-    const current = base.filter(f => f.properties.__date >= startD && f.properties.__date <= endD);
-    const prior = base.filter(f => f.properties.__date >= pStart && f.properties.__date <= pEnd);
+    // เทียบช่วงเดียวกันปีก่อน (MapModule.compareInfo → Geo.compareWindow): วันต่อวัน หรือเฉพาะเดือนที่มีข้อมูลทั้งสองปี
+    const W = MapModule.compareInfo() || { mode: 'day', none: true, inCur: () => false, inPrev: () => false, cur: ['', ''], prev: ['', ''], note: '' };
+    const latest = W.latest || '';
+    const current = base.filter(f => f.properties.__ym >= s && f.properties.__ym <= e);           // ทุกจุดในช่วงที่เลือก
+    const curCmp = base.filter(f => W.inCur(f.properties.__date));                                    // ส่วนของช่วงที่เลือกที่ใช้เทียบ
+    const prior = base.filter(f => W.inPrev(f.properties.__date));
     const countBy = fs => fs.reduce((o, f) => { const k = f.properties[unitKey] || '-'; o[k] = (o[k] || 0) + 1; return o; }, {});
-    const cur = countBy(current), prev = countBy(prior);
+    const cur = countBy(current), cmpC = countBy(curCmp), prev = countBy(prior);
+    const NA = { text: '–', cls: 'chg-flat' };
     const rows = risk.map(f => {
-      const p = f.properties, lv = MapModule.riskInfo() ? (p.risk_level < 0 ? NO_LEVEL : MapModule.getRiskLevel(p.risk_score)) : NO_LEVEL;
-      return { code: p.code, name: p.name, current: cur[p.code] || 0, previous: prev[p.code] || 0, score: p.risk_score, level: lv, change: pctChange(cur[p.code] || 0, prev[p.code] || 0) };
+      const p = f.properties, lv = MapModule.riskInfo() ? MapModule.levelOf(p) : NO_LEVEL;
+      return { code: p.code, name: p.name, current: cur[p.code] || 0, cmpCurrent: cmpC[p.code] || 0, previous: prev[p.code] || 0, score: p.risk_score ?? 0, level: lv,
+        change: W.none ? NA : pctChange(cmpC[p.code] || 0, prev[p.code] || 0) };
     });
     const unassigned = (cur['-'] || 0);
     const levels = CONFIG.RISK_LEVELS.map(l => rows.filter(r => r.level === l).length);
     const months = [];
     for (let i = s; i <= e && months.length < 48; i++) months.push(i);
     const byMonth = months.map(i => current.filter(f => f.properties.__ym === i).length);
-    return { level, unitLabel: level === 'district' ? 'อำเภอ' : 'ตำบล', rows, current, prior, unassigned, levels, months, byMonth,
-      totalCur: current.length, totalPrev: prior.length, change: pctChange(current.length, prior.length),
-      compareMode: W.mode, compareNote: W.note,
-      currentText: W.mode === 'month' ? `${Geo.monthSpan(startD, endD)} (ผลรวมรายเดือน${latest && endD > latest ? ` · ข้อมูลถึง ${Geo.thaiDate(latest)}` : ''})` : `${Geo.thaiDate(startD)} – ${Geo.thaiDate(endD > latest && latest ? latest : endD)}`,
-      priorText: W.mode === 'month' ? `${Geo.monthSpan(pStart, pEnd)} (ผลรวมรายเดือน · ${W.note})` : `${Geo.thaiDate(pStart)} – ${Geo.thaiDate(pEnd)}` };
+    const partial = W.mode === 'month';
+    const [startD, endD] = W.cur, [pStart, pEnd] = W.prev;
+    const selText = (() => { const a = Geo.ymFromIndex(s), z = Geo.ymFromIndex(e), zd = new Date(Date.UTC(z.year - 543, z.month, 0)).getUTCDate();
+      let end = `${z.year - 543}-${String(z.month).padStart(2, '0')}-${zd}`; if (latest && end > latest) end = latest;
+      return `${Geo.thaiDate(`${a.year - 543}-${String(a.month).padStart(2, '0')}-01`)} – ${Geo.thaiDate(end)}`; })();
+    return { level, unitLabel: level === 'district' ? 'อำเภอ' : 'ตำบล', rows, current, curCmp, prior, unassigned, levels, months, byMonth,
+      totalCur: current.length, totalCmp: curCmp.length, totalPrev: prior.length, change: W.none ? NA : pctChange(curCmp.length, prior.length),
+      compareMode: W.mode, compareNote: W.note, compareNone: !!W.none, selText,
+      currentText: W.none ? selText : partial ? `${W.curLabel} (เดือนที่มีข้อมูลทั้งสองปี${latest && endD >= latest ? ` · ข้อมูลถึง ${Geo.thaiDate(latest)}` : ''})` : `${Geo.thaiDate(startD)} – ${Geo.thaiDate(endD)}`,
+      priorText: W.none ? W.note : partial ? `${W.prevLabel} (${W.note})` : `${Geo.thaiDate(pStart)} – ${Geo.thaiDate(pEnd)}`,
+      compareText: W.none ? W.note : partial ? `เทียบเดือนที่มีข้อมูลทั้งสองปี: ${W.prevLabel} ${fmt(prior.length)} จุด → ${W.curLabel} ${fmt(curCmp.length)} จุด` : `เทียบช่วงเดียวกันปีก่อน (${fmt(prior.length)} จุด)` };
   }
 
   function chartBase() {
@@ -71,19 +78,20 @@ const Dashboard = (() => {
     const highCount = S.levels[2] + S.levels[3];
     el('summary-cards').innerHTML = [
       [fmt(S.totalCur), 'จุดความร้อนในช่วงที่เลือก'],
-      [`<span class="chg ${S.change.cls} align-middle text-base">${S.change.text}</span>`, S.compareMode === 'month' ? `เทียบเดือนเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด) · ${S.compareNote}` : `เทียบช่วงเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด)`],
+      [`<span class="chg ${S.change.cls} align-middle text-base">${S.change.text}</span>`, S.compareText],
       [`${fmt(withHs)}<span class="text-base font-semibold text-ink-soft">/${fmt(S.rows.length)}</span>`, `${u}ที่พบจุดความร้อน`],
       [fmt(highCount), `${u}เสี่ยงสูง–สูงมาก`]
     ].map(([v, l]) => `<div class="kpi"><div class="kpi-v">${v}</div><div class="kpi-l">${l}</div></div>`).join('');
 
     // comparison table (template)
-    const cmp = S.rows.slice().sort((a, b) => b.current - a.current || a.name.localeCompare(b.name, 'th'));
+    const cmp = S.rows.slice().sort((a, b) => b.current - a.current || b.cmpCurrent - a.cmpCurrent || a.name.localeCompare(b.name, 'th'));
     el('comparison-area-header').textContent = u;
+    if (el('th-cmp-prev')) { el('th-cmp-prev').textContent = S.compareMode === 'month' && !S.compareNone ? `ปีก่อน (${S.priorText.split(' (')[0]})` : 'ช่วงเดียวกันปีก่อน'; el('th-cmp-cur').textContent = S.compareMode === 'month' && !S.compareNone ? `ปีนี้ (${S.currentText.split(' (')[0]})` : 'ช่วงที่เลือก'; }
     el('title-comparison').textContent = `เปรียบเทียบ HS ราย${u}`;
-    el('comparison-period').textContent = `${S.currentText} เทียบ ${S.priorText}${MapModule.getState().crop ? ` · ${MapModule.getState().crop}` : ''}`;
-    document.querySelector('#tbl-hotspot-comparison tbody').innerHTML = cmp.map(r => `<tr><td>${r.name}</td><td class="num">${fmt(r.previous)}</td><td class="num">${fmt(r.current)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`).join('');
-    el('comparison-previous-total').textContent = fmt(S.totalPrev);
-    el('comparison-current-total').textContent = fmt(S.totalCur);
+    el('comparison-period').textContent = `${S.compareNone ? `${S.selText} · ${S.priorText}` : `${S.currentText} เทียบ ${S.priorText}`}${MapModule.getState().crop ? ` · ${MapModule.getState().crop}` : ''}`;
+    document.querySelector('#tbl-hotspot-comparison tbody').innerHTML = cmp.map(r => `<tr><td>${r.name}</td><td class="num">${S.compareNone ? '–' : fmt(r.previous)}</td><td class="num">${fmt(r.cmpCurrent)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`).join('');
+    el('comparison-previous-total').textContent = S.compareNone ? '–' : fmt(S.totalPrev);
+    el('comparison-current-total').textContent = fmt(S.totalCmp);
     el('comparison-change-total').innerHTML = `<span class="chg ${S.change.cls}">${S.change.text}</span>`;
 
     // monthly trend
@@ -110,7 +118,7 @@ const Dashboard = (() => {
     // all units ranked (template "ทุกอำเภอ")
     el('rank-area-header').textContent = u;
     el('title-top10').textContent = `ทุก${u} เรียงตามจำนวน HS`;
-    document.querySelector('#tbl-top-district tbody').innerHTML = cmp.map((r, i) => `<tr><td class="num text-ink-mute">${i + 1}</td><td>${r.name}</td><td class="num">${fmt(r.current)}</td><td><span class="risk-pill"${MapModule.viewerDetailed() ? ` title="คะแนน ${r.score.toFixed(1)}"` : ''}><span class="risk-dot" style="background:${r.level.color}"></span>${r.level.label}</span></td></tr>`).join('');
+    document.querySelector('#tbl-top-district tbody').innerHTML = cmp.map((r, i) => `<tr><td class="num text-ink-mute">${i + 1}</td><td>${r.name}</td><td class="num">${fmt(r.current)}</td><td><span class="risk-pill"${MapModule.viewerDetailed() ? ` title="คะแนน ${Number(r.score).toFixed(1)}"` : ''}><span class="risk-dot" style="background:${r.level.color}"></span>${r.level.label}</span></td></tr>`).join('');
     return S;
   }
 

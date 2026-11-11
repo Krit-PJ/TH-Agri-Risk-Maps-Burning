@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.7.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.8.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -72,7 +72,9 @@
       <strong id="province-title" class="text-base text-brand-800">-</strong>
     </div>
     <div class="flex flex-wrap items-center gap-2 text-sm" aria-label="ช่วงข้อมูลจุดความร้อนสะสม">
-      <span class="text-ink-soft">ช่วงข้อมูล HS ตั้งแต่</span>
+      <label class="text-ink-soft" for="range-fy">ปีงบประมาณ</label>
+      <select id="range-fy" class="field-sm" aria-label="เลือกปีงบประมาณ (ต.ค.–ก.ย.)"></select>
+      <span class="text-ink-soft">หรือช่วงข้อมูล HS ตั้งแต่</span>
       <select id="range-start-month" class="field-sm" aria-label="เดือนเริ่มต้น"></select>
       <select id="range-start-year" class="field-sm" aria-label="ปีเริ่มต้น"></select>
       <span class="text-ink-soft">ถึง</span>
@@ -114,7 +116,8 @@
         <label class="toggle"><input id="lyr-district" type="checkbox" checked/> อำเภอ</label>
         <label class="toggle"><input id="lyr-subdistrict" type="checkbox"/> ตำบล</label>
         <p class="panel-sub mt-3">ข้อมูลวิเคราะห์</p>
-        <label class="toggle"><input id="lyr-hotspot" type="checkbox" checked/> จุดความร้อน (HS) ตามช่วงที่เลือก</label>
+        <label class="toggle"><input id="lyr-hotspot" type="checkbox" checked/> จุดความร้อน (HS) ปีล่าสุดของช่วงที่เลือก (ชั้นบนสุด)</label>
+        <label class="toggle"><input id="lyr-hotspot-prev" type="checkbox" checked/> จุดความร้อนช่วงเดียวกันปีก่อน</label>
         <label class="toggle"><input id="lyr-risk" type="checkbox" checked/> แผนที่ระดับความเสี่ยง</label>
       </section>
 
@@ -179,7 +182,7 @@
         </div>
         <div class="max-h-72 overflow-auto">
           <table id="tbl-hotspot-comparison" class="data-table">
-            <thead><tr><th id="comparison-area-header">อำเภอ</th><th class="num">ช่วงเดียวกันปีก่อน</th><th class="num">ช่วงที่เลือก</th><th class="num">เพิ่ม/ลด</th></tr></thead>
+            <thead><tr><th id="comparison-area-header">อำเภอ</th><th class="num" id="th-cmp-prev">ช่วงเดียวกันปีก่อน</th><th class="num" id="th-cmp-cur">ช่วงที่เลือก</th><th class="num">เพิ่ม/ลด</th></tr></thead>
             <tbody></tbody>
             <tfoot><tr><th>รวม</th><th class="num" id="comparison-previous-total">0</th><th class="num" id="comparison-current-total">0</th><th class="num" id="comparison-change-total">0%</th></tr></tfoot>
           </table>
@@ -437,10 +440,11 @@
           </fieldset>
           <fieldset class="rounded-xl border border-line p-3">
             <legend class="px-1 text-sm font-semibold">สูตรประเมินความเสี่ยง (เลือกใช้ได้ครั้งละ 1 สูตร มีผลทั้งระบบ)</legend>
-            <label class="chip mb-1.5"><input type="radio" name="set-model" value="M4"/> Model 4: คะแนนจัดลำดับเฝ้าระวัง (ค่าเริ่มต้น) — ความหนาแน่นการตรวจพบไฟเกษตรต่อพื้นที่เพาะปลูก · เกณฑ์กลางเดียวกันทุกจังหวัด</label>
+            <label class="chip mb-1.5"><input type="radio" name="set-model" value="M5"/> Model 5: ประเมินย้อนหลังรายจังหวัด (ค่าเริ่มต้น) — ข้อมูล 2–3 ปีงบประมาณ · ความหนาแน่นต่อพื้นที่เกษตร + การเผาซ้ำ · เกณฑ์ของแต่ละจังหวัด</label>
+            <label class="chip mb-1.5"><input type="radio" name="set-model" value="M4"/> Model 4: คะแนนจัดลำดับเฝ้าระวัง — ความหนาแน่นการตรวจพบไฟเกษตรต่อพื้นที่เพาะปลูก (NASA FIRMS) · เกณฑ์กลางเดียวกันทุกจังหวัด</label>
             <label class="chip mb-1.5"><input type="radio" name="set-model" value="BRI2"/> Model 3: BRI เวอร์ชัน 2 — ฤดูที่ครบแล้ว · ความหนาแน่นต่อพื้นที่ (Empirical Bayes) · ฐานรายจังหวัด</label>
             <label class="chip"><input type="radio" name="set-model" value="PROTO"/> Model 1: ต้นแบบ (V3 แรก) — HS ช่วงที่เลือก · เกณฑ์จำนวนจุด / Model A · เทียบภายในจังหวัด</label>
-            <p class="mt-2 text-xs text-ink-soft">ทุกสูตรคำนวณจากข้อมูลของแต่ละพื้นที่ · Model 4 ใช้เกณฑ์กลางที่ตรึงไว้ (เทียบข้ามจังหวัดได้) · Model 3 ใช้เกณฑ์รายจังหวัด · รายละเอียดและผลทดสอบอยู่ในคู่มือหัวข้อ 4–6</p>
+            <p class="mt-2 text-xs text-ink-soft">ทุกสูตรคำนวณจากข้อมูลของแต่ละพื้นที่ · Model 5 ใช้ข้อมูลและเกณฑ์ของแต่ละจังหวัด (ประเมินจากข้อมูลที่ผ่านมา ไม่ใช่การทำนาย) · Model 4 ใช้เกณฑ์กลางที่ตรึงไว้ (เทียบข้ามจังหวัดได้) · Model 3 ใช้เกณฑ์รายจังหวัด · รายละเอียดและผลทดสอบอยู่ในคู่มือหัวข้อ 4–6</p>
           </fieldset>
           <div>
             <label class="field-label" for="set-ref">ฤดูอ้างอิงสำหรับจุดตัด 4 ระดับ (auto หรือปี พ.ศ. คั่นด้วย ,)</label>
@@ -511,13 +515,13 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.7.0"></script>
-<script src="js/api.js?v=3.7.0"></script>
-<script src="js/geo.js?v=3.7.0"></script>
-<script src="js/map.js?v=3.7.0"></script>
-<script src="js/dashboard.js?v=3.7.0"></script>
-<script src="js/report.js?v=3.7.0"></script>
-<script src="js/admin.js?v=3.7.0"></script>
-<script src="js/app.js?v=3.7.0"></script>
+<script src="js/config.js?v=3.8.0"></script>
+<script src="js/api.js?v=3.8.0"></script>
+<script src="js/geo.js?v=3.8.0"></script>
+<script src="js/map.js?v=3.8.0"></script>
+<script src="js/dashboard.js?v=3.8.0"></script>
+<script src="js/report.js?v=3.8.0"></script>
+<script src="js/admin.js?v=3.8.0"></script>
+<script src="js/app.js?v=3.8.0"></script>
 </body>
 </html>

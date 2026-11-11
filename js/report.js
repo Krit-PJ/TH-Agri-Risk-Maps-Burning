@@ -15,6 +15,7 @@ const Report = (() => {
   function riskMethodText(ctx) {
     const r = ctx.risk;
     if (!r) return `${ctx.basis || 'ยังไม่มีผลประเมินระดับความเสี่ยง'} จำนวนจุดในตารางเป็นของช่วงที่เลือก`;
+    if (r.model === 'M5') return `${ctx.basis} พื้นที่สีเทา = ไม่ประเมินเพราะไม่มีพื้นที่เพาะปลูก ตารางแสดงจำนวนจุดของช่วงที่เลือก`;
     if (r.model === 'M4') return `${ctx.basis} ระดับ: ต่ำ < 50 ≤ ปานกลาง < 75 ≤ สูง < 90 ≤ สูงมาก (เปอร์เซ็นไทล์เทียบฐานกลาง) พื้นที่สีเทา = ไม่ประเมินเพราะไม่มีพื้นที่เพาะปลูก จำนวนจุดในตารางเป็นของช่วงที่เลือก`;
     if (r.model === 'PROTO') return `${ctx.basis} ระดับเป็นการเทียบภายในจังหวัดและขึ้นกับช่วงเวลาที่เลือก (สูตรต้นแบบ ไม่ได้ปรับด้วยขนาดพื้นที่แบบความหนาแน่น)`;
     const w = r.weights || {}, pct = x => Math.round((x || 0) * 100) + '%';
@@ -38,10 +39,10 @@ const Report = (() => {
     // ---- table: every district/subdistrict in scope, including zero HS ----
     const rows = S.rows.slice().sort((a, b) => b.current - a.current || b.score - a.score || a.name.localeCompare(b.name, 'th'));
     el('pr-table-title').textContent = `จุดความร้อน (HS) ราย${S.unitLabel} — ครบ ${rows.length} ${S.unitLabel}`;
-    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th class="num">HS ช่วงที่เลือก</th><th class="num">ช่วงเดียวกันปีก่อน</th><th class="num">เพิ่ม/ลด</th><th>ระดับความเสี่ยง</th></tr>`;
+    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th class="num">HS ช่วงที่เลือก</th><th class="num">${S.compareMode === 'month' && !S.compareNone ? `ปีก่อน (${S.priorText.split(' (')[0]})` : 'ช่วงเดียวกันปีก่อน'}</th><th class="num">${S.compareMode === 'month' && !S.compareNone ? 'เพิ่ม/ลด (เดือนเดียวกัน)' : 'เพิ่ม/ลด'}</th><th>ระดับความเสี่ยง</th></tr>`;
     const extra = S.unassigned ? `<tr><td class="num">–</td><td>ไม่ระบุพื้นที่</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td><td class="num">–</td><td>–</td></tr>` : '';
-    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td class="num"><b>${fmt(r.current)}</b></td><td class="num">${fmt(r.previous)}</td><td class="num">${r.change.text}</td><td><span class="lv"><i style="background:${r.level.color}"></i>${r.level.label}</span></td></tr>`).join('') + extra;
-    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th class="num">${fmt(S.totalCur)}</th><th class="num">${fmt(S.totalPrev)}</th><th class="num">${S.change.text}</th><th></th></tr>`;
+    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td class="num"><b>${fmt(r.current)}</b></td><td class="num">${S.compareNone ? '–' : fmt(r.previous)}</td><td class="num">${r.change.text}</td><td><span class="lv"><i style="background:${r.level.color}"></i>${r.level.label}</span></td></tr>`).join('') + extra;
+    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th class="num">${fmt(S.totalCur)}</th><th class="num">${S.compareNone ? '–' : fmt(S.totalPrev)}</th><th class="num">${S.change.text}</th><th></th></tr>`;
     // fit all rows on one page
     const n = rows.length + (S.unassigned ? 1 : 0) + 2;
     const h = Math.min(7, 158 / n);                         // mm per row
@@ -52,7 +53,7 @@ const Report = (() => {
     // ---- notes under the table: risk distribution + method ----
     const totU = S.levels.reduce((a, b) => a + b, 0) || 1;
     notes.innerHTML = `<div><h3>สรุประดับความเสี่ยง</h3><table>${CONFIG.RISK_LEVELS.slice().reverse().map(l => { const v = S.levels[CONFIG.RISK_LEVELS.indexOf(l)]; return `<tr><td><span class="lv"><i style="background:${l.color};width:2.4mm;height:2.4mm;border-radius:50%;display:inline-block;margin-right:1mm"></i>${l.label}</span></td><td class="num">${v} ${S.unitLabel}</td><td class="num">${(v * 100 / totU).toFixed(1)}%</td></tr>`; }).join('')}</table></div>
-      <div><h3>วิธีประเมิน</h3><p>${riskMethodText(ctx)}</p><p>เปรียบเทียบกับช่วงเดียวกันปีก่อน: ${S.priorText}</p></div>`;
+      <div><h3>วิธีประเมิน</h3><p>${riskMethodText(ctx)}</p><p>เปรียบเทียบกับช่วงเดียวกันปีก่อน: ${S.compareText}${S.compareMode === 'month' && !S.compareNone ? ` (${S.compareNote})` : ''}</p></div>`;
     let f = fs, p = pad; setSize(f, p); notes.style.display = '';
     const fits = () => right.scrollHeight <= right.clientHeight + 1;
     if (!fits()) notes.style.display = 'none';
@@ -61,12 +62,12 @@ const Report = (() => {
     // ---- legend & KPIs (outside the map so nothing covers data) ----
     const seasons = MapModule.displaySeason() ? [MapModule.displaySeason()] : [];
     el('pr-legend').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join('')
-      + seasons.map(s => `<span><i class="pt" style="background:${CONFIG.SEASON_COLORS[0]}"></i>HS ฤดู ${s} (ล่าสุด)</span>`).join('')
+      + seasons.map(s => `<span><i class="pt" style="background:${CONFIG.SEASON_COLORS[0]}"></i>HS ปีงบ ${s} (ล่าสุด)</span>`).join('') + (document.getElementById('lyr-hotspot-prev')?.checked ? `<span><i class="pt" style="background:#94a3b8"></i>HS ช่วงเดียวกันปีก่อน</span>` : '')
       + `<span class="north">▲ ทิศเหนือ</span>`;
     const withHs = rows.filter(r => r.current > 0).length;
     el('pr-kpis').innerHTML = [
       [fmt(S.totalCur), 'จุดความร้อนในช่วงที่เลือก'],
-      [S.change.text, S.compareMode === 'month' ? `เทียบเดือนเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด) · ${S.compareNote}` : `เทียบช่วงเดียวกันปีก่อน (${fmt(S.totalPrev)} จุด)`],
+      [S.change.text, S.compareText],
       [`${withHs}/${rows.length}`, `${S.unitLabel}ที่พบจุดความร้อน`],
       [String(S.levels[2] + S.levels[3]), `${S.unitLabel}เสี่ยงสูง–สูงมาก`]
     ].map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
@@ -75,7 +76,7 @@ const Report = (() => {
     const m = ensureMap();
     layers.forEach(l => m.removeLayer(l)); layers = [];
     const riskFC = MapModule.getRiskForScope(S.level);
-    const riskLayer = L.geoJSON(riskFC, { style: f => ({ color: '#ffffff', weight: 0.6, fillColor: MapModule.getRiskLevel(f.properties.risk_score).color, fillOpacity: ctx.risk ? (f.properties.risk_level < 0 ? 0.3 : 0.55) : 0 }), interactive: false }).addTo(m);
+    const riskLayer = L.geoJSON(riskFC, { style: f => ({ color: '#ffffff', weight: 0.6, fillColor: MapModule.levelOf(f.properties).color, fillOpacity: ctx.risk ? (f.properties.risk_level < 0 ? 0.3 : 0.55) : 0 }), interactive: false }).addTo(m);
     layers.push(riskLayer);
     const outline = S.level === 'district'
       ? L.geoJSON(raw.bundle.district, { style: { color: '#334155', weight: 1.1, fill: false }, interactive: false })
@@ -84,6 +85,8 @@ const Report = (() => {
     const focus = MapModule.selectionFeatures();
     const frame = L.geoJSON({ type: 'FeatureCollection', features: focus }, { style: { color: '#0f172a', weight: 2.2, fill: false }, interactive: false }).addTo(m);
     layers.push(frame);
+    if (document.getElementById('lyr-hotspot-prev')?.checked) layers.push(L.geoJSON({ type: 'FeatureCollection', features: MapModule.prevHotspots() }, {
+      pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 2, fillColor: '#94a3b8', color: '#ffffff', weight: 0.5, fillOpacity: 0.9 }), interactive: false }).addTo(m));
     const pts = L.geoJSON({ type: 'FeatureCollection', features: MapModule.mapHotspots() }, {
       pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 2.4, fillColor: CONFIG.SEASON_COLORS[0], color: '#ffffff', weight: 0.6, fillOpacity: 1 }), interactive: false
     }).addTo(m);

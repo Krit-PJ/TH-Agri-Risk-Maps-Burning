@@ -304,13 +304,13 @@ const Admin = (() => {
       el('set-guide').value = r.settings.guideUrl || '';
       document.querySelectorAll('input[name="set-source"]').forEach(x => { x.checked = x.value === (r.settings.hsSource || 'AGENCY'); });
       el('set-ref').value = r.settings.refSeasons || 'auto';
-      document.querySelectorAll('input[name="set-model"]').forEach(x => { x.checked = x.value === (r.settings.riskModel || 'M4'); });
+      document.querySelectorAll('input[name="set-model"]').forEach(x => { x.checked = x.value === (r.settings.riskModel || 'M5'); });
     } catch (err) { setMsg(el('console-status'), err.message, 'error'); }
   }
   async function saveSettings(e) {
     e.preventDefault();
     const hsSource = document.querySelector('input[name="set-source"]:checked')?.value || 'AGENCY';
-    if (await run(() => Api.post('settings_save', { guideUrl: el('set-guide').value.trim(), hsSource, refSeasons: el('set-ref').value.trim() || 'auto', riskModel: document.querySelector('input[name="set-model"]:checked')?.value || 'M4' }), 'บันทึกการตั้งค่าแล้ว — แผนที่และระดับความเสี่ยงใช้ค่าใหม่แล้ว')) hooks.onSettingsChanged?.();
+    if (await run(() => Api.post('settings_save', { guideUrl: el('set-guide').value.trim(), hsSource, refSeasons: el('set-ref').value.trim() || 'auto', riskModel: document.querySelector('input[name="set-model"]:checked')?.value || 'M5' }), 'บันทึกการตั้งค่าแล้ว — แผนที่และระดับความเสี่ยงใช้ค่าใหม่แล้ว')) hooks.onSettingsChanged?.();
   }
 
   /* ======================= เปรียบเทียบแหล่งข้อมูล (ต้นสังกัด vs NASA FIRMS) ======================= */
@@ -540,7 +540,7 @@ const Admin = (() => {
   async function processProvince(code) {
     const { detail, idx, wb, opts } = imp;
     const provinceName = provName(code), bundle = await Geo.provinceBundle(code);
-    const seen = new Set();
+    const seen = new Map();
     const qa = { input: 0, accepted: 0, outOfRange: 0, wrongPlant: 0, wrongDate: 0, duplicates: 0, noCoordinates: 0, outside: 0 };
     const records = [], byPlant = {}, byPlantAgri = {}, byMonth = {}, byDistrict = {}, byLand = {}, fileByLand = {};
     for (const row of detail.rows) {
@@ -556,10 +556,15 @@ const Admin = (() => {
       if ((opts.from && date < opts.from) || (opts.to && date > opts.to)) { qa.outOfRange++; continue; }
       const plantRaw = String(get('PlantType') ?? '').trim(), plant = plantRaw ? Geo.normalizeCrop(plantRaw) : 'อื่น ๆ';
       if (!ALLOWED.has(plant)) { qa.wrongPlant++; continue; }
-      const id = String(get('hsID') ?? '').trim();
-      if (id && seen.has(id)) { qa.duplicates++; continue; } if (id) seen.add(id);
       const c = extractCoordinates(get, bundle);
       if (!c) { qa.noCoordinates++; continue; }
+      // hsID ซ้ำ: พิกัดเดียวกัน = แถวซ้ำ (ตัดออก) · พิกัดต่างกัน = คนละจุดที่ได้รหัสชนกัน (พบในไฟล์รวม 67–69) → เติมลำดับ -2, -3 ให้ไม่ทับกัน
+      let id = String(get('hsID') ?? '').trim();
+      if (id) {
+        const pk = `${c[0].toFixed(5)},${c[1].toFixed(5)}`, prev = seen.get(id);
+        if (prev) { if (prev.includes(pk)) { qa.duplicates++; continue; } prev.push(pk); id = `${id}-${prev.length}`; qa.idSuffixed = (qa.idSuffixed || 0) + 1; }
+        else seen.set(id, [pk]);
+      }
       if (!Geo.insideProvince(bundle, c[0], c[1])) qa.outside++;
       const dName = String(get('Amphoe') ?? '').trim(), sName = String(get('Tambon') ?? '').trim();
       const codes = Geo.resolveCodes(bundle, c[0], c[1], dName, sName);

@@ -52,7 +52,7 @@ const App = (() => {
     try {
       const r = await Api.get('settings'); const a = el('risk-guide-link');
       a.href = r.settings.guideUrl || CONFIG.GUIDE_PDF; a.classList.remove('hidden');
-      MapModule.setDataStart(r.settings.dataFirst || '');
+      MapModule.setDataStart(r.settings.dataFirst || ''); MapModule.setDataMonths(r.settings.dataMonths || []);
     } catch { }
   }
 
@@ -187,23 +187,36 @@ const App = (() => {
     el('filter-crop').innerHTML = '<option value="">ทุกชนิดพืช</option>' + CONFIG.PLANT_TYPES.filter(p => present.has(p)).map(p => `<option value="${p}">${p}</option>`).join('');
   }
 
-  /* ---------- period (ต้นแบบ: ต.ค. ปีก่อน → เดือนล่าสุดของข้อมูล) ---------- */
+  /* ---------- period: ค่าเริ่มต้น = ปีงบประมาณล่าสุดที่ครบแล้ว (ต.ค.–ก.ย.) · เลือกปีงบหรือกำหนดช่วงเดือนเองได้ ---------- */
   function setupPeriod(fc) {
     const yms = fc.features.map(f => f.properties.__ym);
     const maxYM = yms.length ? Math.max(...yms) : Geo.ymIndex(new Date().getFullYear() + 543, new Date().getMonth() + 1);
     const minYM = yms.length ? Math.min(...yms) : maxYM;
     const latest = Geo.ymFromIndex(maxYM), first = Geo.ymFromIndex(minYM);
-    const years = []; for (let y = Math.min(first.year, latest.year - 1); y <= latest.year; y++) years.push(y);
+    const lastDate = fc.features.reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
+    const years = []; for (let y = Math.min(first.year, latest.year - 1, Geo.seasonOf(first.year, first.month) - 1); y <= latest.year; y++) years.push(y);
     const mOpts = CONFIG.MONTH_SHORT.slice(1).map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
     const yOpts = years.map(y => `<option value="${y}">${y}</option>`).join('');
     ['range-start-month', 'range-end-month'].forEach(id => { el(id).innerHTML = mOpts; });
     ['range-start-year', 'range-end-year'].forEach(id => { el(id).innerHTML = yOpts; });
-    // ค่าเริ่มต้น: ต.ค. ของฤดูกาลล่าสุด ถึงเดือนล่าสุดที่มีข้อมูล
-    const season = Geo.seasonOf(latest.year, latest.month);
-    setRangeUI(season - 1, 10, latest.year, latest.month);
+    const season = Geo.seasonOf(latest.year, latest.month), firstFy = Geo.seasonOf(first.year, first.month);
+    // ปีงบของวันล่าสุดยังไม่ครบ (ยังไม่ถึง 30 ก.ย.) → ค่าเริ่มต้นเป็นปีงบก่อนหน้าที่ครบแล้ว
+    const complete = lastDate >= `${season - 543}-09-30`, def = complete || season - 1 < firstFy ? season : season - 1;
+    if (el('range-fy')) {
+      const fys = []; for (let y = season; y >= firstFy; y--) fys.push(y);
+      el('range-fy').innerHTML = fys.map(y => `<option value="${y}">${y} (ต.ค. ${String(y - 1).slice(2)} – ก.ย. ${String(y).slice(2)})${y === season && !complete ? ' · ถึงปัจจุบัน' : ''}</option>`).join('') + '<option value="">กำหนดเอง</option>';
+      el('range-fy').value = String(def);
+    }
+    fyRange(def, season, latest);
     appliedRange = readRange();
     current.defaultRange = { ...appliedRange };
+    current.fyLatest = { season, latest };
     el('btn-apply-period').classList.remove('ring-2', 'ring-amber-400');
+  }
+  /** ช่วงของปีงบประมาณ fy: ต.ค. (fy−1) – ก.ย. fy (ปีงบปัจจุบันตัดที่เดือนล่าสุดของข้อมูล) */
+  function fyRange(fy, season, latest) {
+    if (fy === season && Geo.ymIndex(fy, 9) > Geo.ymIndex(latest.year, latest.month)) setRangeUI(fy - 1, 10, latest.year, latest.month);
+    else setRangeUI(fy - 1, 10, fy, 9);
   }
   function setRangeUI(sy, sm, ey, em) { el('range-start-year').value = sy; el('range-start-month').value = sm; el('range-end-year').value = ey; el('range-end-month').value = em; }
   function readRange() {
@@ -245,10 +258,17 @@ const App = (() => {
     el('filter-land').addEventListener('change', changeLand);
     el('btn-reset-filter').addEventListener('click', () => {
       el('filter-district').value = ''; populateSubdistricts(); el('filter-crop').value = '';
-      if (current?.defaultRange) { const r = current.defaultRange; setRangeUI(r.startYear, r.startMonth, r.endYear, r.endMonth); appliedRange = { ...r }; }
+      if (current?.defaultRange) { const r = current.defaultRange; setRangeUI(r.startYear, r.startMonth, r.endYear, r.endMonth); appliedRange = { ...r }; if (el('range-fy')) el('range-fy').value = String(r.endMonth === 9 ? r.endYear : r.endYear + (r.endMonth >= 10 ? 1 : 0)); }
       if (currentLand() !== CONFIG.DEFAULT_LAND) { el('filter-land').value = CONFIG.DEFAULT_LAND; changeLand(); } else applyCurrent();
     });
+    el('range-fy')?.addEventListener('change', () => {
+      const fy = Number(el('range-fy').value); if (!fy || !current?.fyLatest) return;
+      fyRange(fy, current.fyLatest.season, current.fyLatest.latest);
+      el('btn-apply-period').classList.add('ring-2', 'ring-amber-400');
+      el('timeline-status').textContent = `เลือกปีงบประมาณ ${fy} (${Geo.periodText(readRange())}) แล้ว กด "แสดงข้อมูล" เพื่อใช้ช่วงนี้`;
+    });
     ['range-start-month', 'range-start-year', 'range-end-month', 'range-end-year'].forEach(id => el(id).addEventListener('change', () => {
+      if (el('range-fy')) { const r = readRange(), fy = r.startMonth === 10 && r.endMonth === 9 && r.endYear === r.startYear + 1 ? String(r.endYear) : ''; el('range-fy').value = [...el('range-fy').options].some(o => o.value === fy) ? fy : ''; }
       el('btn-apply-period').classList.add('ring-2', 'ring-amber-400');
       el('timeline-status').textContent = `เลือกช่วง ${Geo.periodText(readRange())} แล้ว กด "แสดงข้อมูล" เพื่อใช้ช่วงนี้`;
     }));

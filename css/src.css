@@ -205,3 +205,4 @@
 .ap-more { margin-top: .3rem; color: #4a5a51; font-size: 12px; }
 .ap-drill { margin-top: .55rem; width: 100%; border-radius: .5rem; border: 1px solid #cfe3d6; background: #f1f8f3; padding: .35rem .5rem; font-weight: 600; color: #14532d; }
 .ap-drill:hover { background: #e2f1e7; }
+.hs-cluster-prev span { background: rgba(100, 116, 139, .78); box-shadow: 0 0 0 4px rgba(100, 116, 139, .2); }

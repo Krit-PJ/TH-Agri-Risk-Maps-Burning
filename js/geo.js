@@ -125,19 +125,47 @@ const Geo = (() => {
     const ic = CONFIG.CROP_ICONS[crop] || CONFIG.CROP_ICONS['อื่น ๆ'];
     return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic.svg}</svg>`;
   }
-  /** ช่วงเทียบ "ช่วงเดียวกันปีก่อน": ปกติเทียบวันต่อวัน (ตัดที่วันล่าสุดของข้อมูล)
-   *  ถ้าช่วงปีก่อนเริ่มก่อนวันแรกของฐานข้อมูล → เทียบผลรวมระดับเดือน (เดือนเต็มของทั้งสองปี) และแจ้ง "ข้อมูลตั้งแต่ …" */
-  function compareWindow(start, end, latest, dataFirst) {
+  /** ช่วงเทียบ "ช่วงเดียวกันปีก่อน" (ใช้ร่วมกันทุกส่วน: การ์ดสรุป ตารางเปรียบเทียบ ป๊อปอัป ชั้นข้อมูลปีก่อนบนแผนที่ รายงาน)
+   *  - ปกติ: เทียบวันต่อวัน (ตัดที่วันล่าสุดของข้อมูล)
+   *  - ถ้าบางเดือนของช่วงปีก่อนไม่มีข้อมูล (dataMonths = เดือนที่ฐานข้อมูลมีข้อมูล) หรือปีก่อนเริ่มก่อนวันแรกของข้อมูล
+   *    → เทียบเฉพาะเดือนที่มีข้อมูลทั้งสองปี (ระดับเดือน) และแจ้งช่วงที่มีข้อมูล
+   *  คืน { mode, cur:[a,b], prev:[a,b], inCur(date), inPrev(date), months, note, none } */
+  function compareWindow(start, end, latest, dataFirst, dataMonths) {
     const pad = n => String(n).padStart(2, '0');
     const dim = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
     const minus1 = d => { const y = +d.slice(0, 4) - 1, m = +d.slice(5, 7); return `${y}-${pad(m)}-${pad(Math.min(+d.slice(8, 10), dim(y, m)))}`; };
+    const pym = ym => `${+ym.slice(0, 4) - 1}${ym.slice(4)}`;
     let e = end; if (latest && e > latest) e = latest;
-    const day = { mode: 'day', cur: [start, e], prev: [minus1(start), minus1(e)], note: '' };
-    if (!dataFirst || day.prev[0] >= dataFirst) return day;
-    const ms = `${start.slice(0, 7)}-01`, ey = +end.slice(0, 4), em = +end.slice(5, 7), me = `${ey}-${pad(em)}-${pad(dim(ey, em))}`;
-    const prevEnd = `${ey - 1}-${pad(em)}-${pad(dim(ey - 1, em))}`;
-    return { mode: 'month', cur: [ms, me], prev: [`${+ms.slice(0, 4) - 1}${ms.slice(4)}`, prevEnd], note: `ข้อมูลตั้งแต่ ${thaiDate(dataFirst)}` };
+    if (e < start) e = start;
+    const months = []; for (let y = +start.slice(0, 4), m = +start.slice(5, 7); `${y}-${pad(m)}` <= e.slice(0, 7); m === 12 ? (y++, m = 1) : m++) months.push(`${y}-${pad(m)}`);
+    const has = dataMonths && dataMonths.length ? new Set(dataMonths) : null;
+    const prevStart = minus1(start), prevEnd = minus1(e);
+    const allPrev = has ? months.every(m => has.has(pym(m))) : true;
+    if (allPrev && (!dataFirst || prevStart >= dataFirst)) {
+      return { mode: 'day', cur: [start, e], prev: [prevStart, prevEnd], months, note: '', none: false,
+        inCur: d => d >= start && d <= e, inPrev: d => d >= prevStart && d <= prevEnd };
+    }
+    const okPrev = m => has ? has.has(pym(m)) : `${pym(m)}-${pad(dim(+pym(m).slice(0, 4), +m.slice(5, 7)))}` >= (dataFirst || '');
+    const matched = months.filter(m => (!has || has.has(m)) && okPrev(m)), set = new Set(matched), pset = new Set(matched.map(pym));
+    const label = list => monthsLabel(list);
+    if (!matched.length) {
+      return { mode: 'month', cur: [start, e], prev: [prevStart, prevEnd], months: [], none: true, inCur: () => false, inPrev: () => false,
+        note: `ไม่มีข้อมูลช่วงเดียวกันปีก่อน${dataFirst ? ` (ข้อมูลตั้งแต่ ${thaiDate(dataFirst)})` : ''}` };
+    }
+    const a = matched[0] + '-01', z = matched[matched.length - 1], zEnd = `${z}-${pad(dim(+z.slice(0, 4), +z.slice(5, 7)))}`, cEnd = zEnd < e ? zEnd : e;
+    const pEnd = minus1(cEnd);
+    return { mode: 'month', cur: [a, cEnd], prev: [pym(matched[0]) + '-01', pEnd], months: matched, none: false,
+      inCur: d => set.has(d.slice(0, 7)) && d <= cEnd, inPrev: d => pset.has(d.slice(0, 7)) && d <= pEnd,
+      curLabel: label(matched), prevLabel: label(matched.map(pym)),
+      note: `ช่วงปีก่อนมีข้อมูลเฉพาะ ${label(matched.map(pym))} · เทียบเฉพาะเดือนที่มีข้อมูลทั้งสองปี` };
+  }
+  /** ['2025-01',…,'2025-05'] → "ม.ค. – พ.ค. 68" (ช่วงไม่ต่อเนื่องคั่นด้วย ,) */
+  function monthsLabel(list) {
+    const idx = ym => (+ym.slice(0, 4)) * 12 + (+ym.slice(5, 7)), runs = [];
+    list.slice().sort().forEach(ym => { const r = runs[runs.length - 1]; if (r && idx(ym) === idx(r[1]) + 1) r[1] = ym; else runs.push([ym, ym]); });
+    const lab = ym => CONFIG.MONTH_SHORT[+ym.slice(5, 7)], yy = ym => String(+ym.slice(0, 4) + 543).slice(2);
+    return runs.map(([x, y]) => x === y ? `${lab(x)} ${yy(x)}` : yy(x) === yy(y) ? `${lab(x)}–${lab(y)} ${yy(y)}` : `${lab(x)} ${yy(x)} – ${lab(y)} ${yy(y)}`).join(', ');
   }
   const monthSpan = (a, b) => { const f = d => `${CONFIG.MONTH_SHORT[+d.slice(5, 7)]} ${String(+d.slice(0, 4) + 543).slice(2)}`; return f(a) === f(b) ? f(a) : `${f(a)} – ${f(b)}`; };
-  return { compareWindow, monthSpan, provinces, provinceBundle, clean, normalizeCrop, ymIndex, ymFromIndex, seasonOf, periodText, thaiDate, thaiDateTime, normalizeTime, cropIcon, buildHotspots, resolveCodes, insideProvince };
+  return { compareWindow, monthsLabel, monthSpan, provinces, provinceBundle, clean, normalizeCrop, ymIndex, ymFromIndex, seasonOf, periodText, thaiDate, thaiDateTime, normalizeTime, cropIcon, buildHotspots, resolveCodes, insideProvince };
 })();
