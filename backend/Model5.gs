@@ -1,4 +1,4 @@
-/* ============================== RISK MODEL 5: ประเมินระดับความเสี่ยงการเผาย้อนหลังรายจังหวัด (ค่าเริ่มต้น v3.8) ==============================
+/* ============================== RISK MODEL 5: ประเมินระดับความเสี่ยงการเผาย้อนหลังรายจังหวัด (ทางเลือก: ความหนาแน่นต่อพื้นที่เกษตร + การเผาซ้ำ) ==============================
  * วัตถุประสงค์: ใช้ข้อมูลจุดความร้อนที่เกิดขึ้นแล้ว 2–3 ปีงบประมาณ (เท่าที่มี) บ่งชี้ระดับความเสี่ยงการเผาของแต่ละตำบล/อำเภอ
  *   "ไม่ใช่การทำนาย" — เป็นการสรุปพฤติกรรมการเผาที่ผ่านมาของพื้นที่ เทียบกันภายในจังหวัดเดียวกัน (ใช้ข้อมูลของจังหวัดนั้นเท่านั้น)
  * ข้อมูล: แหล่งข้อมูลหลัก (ชุดที่เปิดใช้งาน) ประเภทพื้นที่ที่เลือก · ดาวเทียมหลัก Suomi-NPP (VIIRS) ตลอดช่วงที่มี แล้วจึงใช้ NOAA-20 (hsActive_)
@@ -45,19 +45,6 @@ function m5Years_(S, end) {
   }
   while (!W.length && H.length > 1) { H = H.slice(0, -1); W = inter(H); }
   return { H: H, W: W, note: '' };
-}
-/** เปอร์เซ็นไทล์แบบลำดับกลาง (mid-rank) 0–100 ของค่าแต่ละตัวในชุด */
-function midrank_(vals) {
-  const n = vals.length, sorted = vals.slice().sort((a, b) => a - b);
-  const lower = v => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] < v) lo = m + 1; else hi = m; } return lo; };
-  const upper = v => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] <= v) lo = m + 1; else hi = m; } return lo; };
-  return vals.map(v => n ? (lower(v) + 0.5 * (upper(v) - lower(v))) / n * 100 : 0);
-}
-/** ช่วงค่าเริ่มต้นของหน้าเว็บ = ปีงบประมาณล่าสุดที่ครบแล้ว (วันสิ้นสุด 30 ก.ย.) — ถ้าปีงบของวันล่าสุดยังไม่ครบ ใช้ปีงบก่อนหน้า */
-function m5DefaultEnd_() {
-  const last = dataRange_().last; if (!last) return '';
-  const S = seasonOfDate_(last), fyEnd = (S - 543) + '-09-30';
-  return last >= fyEnd ? fyEnd : (S - 544) + '-09-30';
 }
 function m5Level_(p) { return p >= M5_CUTS[2] ? 3 : p >= M5_CUTS[1] ? 2 : p >= M5_CUTS[0] ? 1 : 0; }
 

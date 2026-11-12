@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.8.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.9.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -149,7 +149,7 @@
       <section class="panel-sec" id="risk-methodology">
         <h3 class="panel-h">เกณฑ์ระดับความเสี่ยง</h3>
         <ul class="space-y-1.5 text-sm" id="risk-criteria"></ul>
-        <p class="mt-2 text-xs leading-relaxed text-ink-soft">ประเมินด้วยดัชนีความเสี่ยงการเผา (BRI) จากจุดความร้อนของฤดูที่ครบแล้ว (1 ต.ค.–30 ก.ย.) ล่าสุดไม่เกิน 3 ฤดู: ความหนาแน่นจุดต่อพื้นที่ 60% · การเกิดซ้ำ 20% · ชนิดพืช 20% (เมื่อมีข้อมูลฤดูเดียว: ความหนาแน่น 80% · ชนิดพืช 20%) แล้วจัด 4 ระดับเทียบทุกพื้นที่ของทุกจังหวัดที่มีข้อมูล ระดับความเสี่ยงคือ “โอกาสเกิดการเผา” ในฤดูนี้ จึงอาจไม่ตรงกับจำนวนจุดของช่วงที่เลือก</p>
+        <p class="mt-2 text-xs leading-relaxed text-ink-soft">ค่าเริ่มต้น ABRI-2Y: จำนวนจุดความร้อนสะสม 2 ปีงบประมาณก่อนปีที่ประเมิน (เช่น ประเมินปีงบ 2570 ใช้ปีงบ 2568–2569) จัดลำดับเทียบพื้นที่ในจังหวัดเดียวกัน พื้นที่ที่มีจุดรวมน้อยกว่า 3 จุด = ต่ำ · เป็นระดับความเสี่ยงเชิงประวัติเพื่อกำหนดพื้นที่เป้าหมายส่งเสริมการลดเผา ไม่ใช่การทำนาย และไม่ใช่จำนวนจุดของช่วงที่เลือก</p>
         <a id="risk-guide-link" href="docs/Agri-Risk-Manual.pdf" class="btn-ghost btn-sm mt-3 w-full justify-center" target="_blank" rel="noopener noreferrer">คู่มือการใช้งานและการประเมินความเสี่ยง (PDF)</a>
       </section>
     </div>
@@ -440,17 +440,11 @@
           </fieldset>
           <fieldset class="rounded-xl border border-line p-3">
             <legend class="px-1 text-sm font-semibold">สูตรประเมินความเสี่ยง (เลือกใช้ได้ครั้งละ 1 สูตร มีผลทั้งระบบ)</legend>
-            <label class="chip mb-1.5"><input type="radio" name="set-model" value="M5"/> Model 5: ประเมินย้อนหลังรายจังหวัด (ค่าเริ่มต้น) — ข้อมูล 2–3 ปีงบประมาณ · ความหนาแน่นต่อพื้นที่เกษตร + การเผาซ้ำ · เกณฑ์ของแต่ละจังหวัด</label>
-            <label class="chip mb-1.5"><input type="radio" name="set-model" value="M4"/> Model 4: คะแนนจัดลำดับเฝ้าระวัง — ความหนาแน่นการตรวจพบไฟเกษตรต่อพื้นที่เพาะปลูก (NASA FIRMS) · เกณฑ์กลางเดียวกันทุกจังหวัด</label>
-            <label class="chip mb-1.5"><input type="radio" name="set-model" value="BRI2"/> Model 3: BRI เวอร์ชัน 2 — ฤดูที่ครบแล้ว · ความหนาแน่นต่อพื้นที่ (Empirical Bayes) · ฐานรายจังหวัด</label>
-            <label class="chip"><input type="radio" name="set-model" value="PROTO"/> Model 1: ต้นแบบ (V3 แรก) — HS ช่วงที่เลือก · เกณฑ์จำนวนจุด / Model A · เทียบภายในจังหวัด</label>
-            <p class="mt-2 text-xs text-ink-soft">ทุกสูตรคำนวณจากข้อมูลของแต่ละพื้นที่ · Model 5 ใช้ข้อมูลและเกณฑ์ของแต่ละจังหวัด (ประเมินจากข้อมูลที่ผ่านมา ไม่ใช่การทำนาย) · Model 4 ใช้เกณฑ์กลางที่ตรึงไว้ (เทียบข้ามจังหวัดได้) · Model 3 ใช้เกณฑ์รายจังหวัด · รายละเอียดและผลทดสอบอยู่ในคู่มือหัวข้อ 4–6</p>
+            <label class="chip mb-1.5"><input type="radio" name="set-model" value="ABRI"/> ABRI-2Y (ค่าเริ่มต้น) — จำนวนจุดความร้อนสะสม 2 ปีงบฐาน (ปีงบ Y−2, Y−1) จัดลำดับภายในจังหวัด · จุดตัด 50/75/90 · จุดรวม &lt; 3 = ต่ำ</label>
+            <label class="chip mb-1.5"><input type="radio" name="set-model" value="M5"/> Model 5 — ความหนาแน่นต่อพื้นที่เกษตร 70% + การเผาซ้ำ 30% (2–3 ปีงบ) จัดลำดับภายในจังหวัด</label>
+            <label class="chip"><input type="radio" name="set-model" value="M4"/> Model 4 — ความหนาแน่นการตรวจพบไฟเกษตร (NASA FIRMS) ต่อพื้นที่เพาะปลูก · เกณฑ์กลางเดียวกันทุกจังหวัด</label>
+            <p class="mt-2 text-xs text-ink-soft">ทุกสูตรประเมินจากข้อมูลที่ผ่านมา ไม่ใช่การทำนาย · ABRI-2Y และ Model 5 ใช้ข้อมูลและเกณฑ์ของแต่ละจังหวัด · Model 4 ใช้เกณฑ์กลางเทียบข้ามจังหวัดได้ · รายละเอียดในคู่มือหัวข้อ 4</p>
           </fieldset>
-          <div>
-            <label class="field-label" for="set-ref">ฤดูอ้างอิงสำหรับจุดตัด 4 ระดับ (auto หรือปี พ.ศ. คั่นด้วย ,)</label>
-            <input id="set-ref" class="field w-full" placeholder="auto" pattern="^\s*(auto|25\d\d(\s*,\s*25\d\d)*)\s*$"/>
-            <p class="mt-1 text-xs text-ink-soft">auto (แนะนำ) = ใช้ฤดูที่ครบแล้วซึ่งเป็นฐานการประเมิน · จุดตัด = เปอร์เซ็นไทล์ 50/75/90 ของดัชนี · ฤดูที่ระบุจะใช้เมื่อมีข้อมูลครบทั้งฤดู</p>
-          </div>
           <button type="submit" class="btn-primary">บันทึกการตั้งค่า</button>
         </form>
       </section>
@@ -515,13 +509,13 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.8.0"></script>
-<script src="js/api.js?v=3.8.0"></script>
-<script src="js/geo.js?v=3.8.0"></script>
-<script src="js/map.js?v=3.8.0"></script>
-<script src="js/dashboard.js?v=3.8.0"></script>
-<script src="js/report.js?v=3.8.0"></script>
-<script src="js/admin.js?v=3.8.0"></script>
-<script src="js/app.js?v=3.8.0"></script>
+<script src="js/config.js?v=3.9.0"></script>
+<script src="js/api.js?v=3.9.0"></script>
+<script src="js/geo.js?v=3.9.0"></script>
+<script src="js/map.js?v=3.9.0"></script>
+<script src="js/dashboard.js?v=3.9.0"></script>
+<script src="js/report.js?v=3.9.0"></script>
+<script src="js/admin.js?v=3.9.0"></script>
+<script src="js/app.js?v=3.9.0"></script>
 </body>
 </html>

@@ -1,13 +1,13 @@
-/* ============================== PUBLIC DATA API v1 (อ่านอย่างเดียว) ==============================
+/* ============================== PUBLIC DATA API v1.2 (อ่านอย่างเดียว) ==============================
  * GET <web app>/exec?action=api&fn=<fn>&...   เอกสาร: docs/API.md
  *   fn=meta                                       ข้อมูลระบบ เวอร์ชัน สูตรที่ใช้ ช่วงข้อมูล และรายการ endpoint
  *   fn=provinces                                  จังหวัดที่มีข้อมูล (จำนวนจุดพื้นที่เกษตร ช่วงวันที่)
- *   fn=risk&province=62[&level=subdistrict|district][&model=M5|M4|BRI2][&land=][&end=YYYY-MM-DD][&format=json|csv][&key=]
+ *   fn=risk&province=62[&level=subdistrict|district][&model=ABRI|M5|M4][&land=][&end=YYYY-MM-DD][&format=json|csv][&key=]
  *   fn=hotspots&province=62[&land=][&from=][&to=][&format=json|csv]
- * ไม่มี key: ระดับความเสี่ยง (4 ระดับ) + จำนวนจุดฤดูปัจจุบัน · มี key ที่ออกโดยผู้ดูแล: คะแนน 0–100 องค์ประกอบ และเหตุผล
+ * ไม่มี key: ระดับความเสี่ยง (4 ระดับ) + จำนวนจุดปีงบปัจจุบัน · มี key ที่ออกโดยผู้ดูแล: คะแนน 0–100 องค์ประกอบ และเหตุผล
  * key เก็บใน Script Properties (API_KEYS) — ออก/ดู/ยกเลิกจาก Editor: createApiKey('ชื่อหน่วยงาน'), listApiKeys(), revokeApiKey('key')
  * ผลลัพธ์เป็นข้อมูลล่าสุดในฐานข้อมูลเสมอ (แคชจะถูกล้างทันทีเมื่อมีการนำเข้า/เปิด-ปิดชุดข้อมูล/เปลี่ยนตั้งค่า) */
-const API_VERSION = '1.1';   // 1.1 (v3.8): Model 5 เป็นค่าเริ่มต้น · meta มี model5, dataMonths, satellitePolicy
+const API_VERSION = '1.2';   // 1.2 (v3.9): ABRI-2Y เป็นค่าเริ่มต้น · สูตรที่ให้บริการ ABRI | M5 | M4
 const API_DOCS = 'https://github.com/Krit-PJ/TH-Agri-Risk-Maps-Burning/blob/main/docs/API.md';
 
 function apiKeys_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('API_KEYS') || '{}'); } catch (e) { return {}; } }
@@ -23,11 +23,12 @@ function apiGet_(p) {
       const range = dataRange_(), prov = publicProvinces_();
       return apiOut_(Object.assign(base, {
         activeModel: riskModel_(), models: RISK_MODEL_LABELS,
-        model5: { version: M5_VERSION, cuts: M5_CUTS, weights: M5_W, minHotspots: M5_MIN_HS, gridM: M5_GRID_M, maxYears: M5_MAX_YEARS, defaultEnd: m5DefaultEnd_() },
+        abri: { version: ABRI_VERSION, cuts: ABRI_CUTS, minHotspots: ABRI_MIN_HS, defaultEnd: defaultEnd_(), assessmentYear: defaultEnd_() ? abriYear_(defaultEnd_()) : null },
+        model5: { version: M5_VERSION, cuts: M5_CUTS, weights: M5_W, minHotspots: M5_MIN_HS, gridM: M5_GRID_M, maxYears: M5_MAX_YEARS, defaultEnd: defaultEnd_() },
         satellitePolicy: SAT_POLICY_TEXT, dataMonths: dataMonths_(), model4: { version: M4_BASE.version, baseSeasons: M4_BASE.baseSeasons, satellite: M4_BASE.satellite, gridM: M4_BASE.gridM, cuts: M4_CUTS },
         source: hsSource_(), data: { first: range.first, last: range.last, provinces: prov.length },
         landTypes: LAND_TYPES, defaultLand: DEFAULT_LAND, levels: RISK_LEVEL_LABELS, detailed: detailed,
-        endpoints: ['fn=meta', 'fn=provinces', 'fn=risk&province=XX&level=subdistrict|district&model=M5|M4|BRI2&land=&end=&format=json|csv&key=', 'fn=hotspots&province=XX&land=&from=&to=&format=json|csv'] }), 'json');
+        endpoints: ['fn=meta', 'fn=provinces', 'fn=risk&province=XX&level=subdistrict|district&model=ABRI|M5|M4&land=&end=&format=json|csv&key=', 'fn=hotspots&province=XX&land=&from=&to=&format=json|csv'] }), 'json');
     }
     case 'provinces': {
       const rows = publicProvinces_().map(r => ({ code: r.code, name: r.name, hsAgri: r.count, first: r.first, last: r.last, updatedAt: r.updatedAt }));
@@ -38,10 +39,8 @@ function apiGet_(p) {
       const prov = String(p.province || '').padStart(2, '0');
       if (!PROVINCES[prov]) return apiOut_(Object.assign(base, { ok: false, error: 'province required (2-digit code)' }), 'json');
       const level = String(p.level || 'subdistrict') === 'district' ? 'district' : 'subdistrict';
-      const model = String(p.model || '').toUpperCase() === 'PROTO' ? '' : p.model;   // Model 1 คำนวณที่หน้าเว็บ ไม่ให้บริการผ่าน API
-      const r = riskForProvince_(prov, p.end, detailed, p.land, model);
+      const r = riskForProvince_(prov, p.end, detailed, p.land, p.model);
       if (!r.ok || r.empty) return apiOut_(Object.assign(base, { ok: !!r.ok, empty: true, province: prov }), 'json');
-      if (r.model === 'PROTO') return apiOut_(Object.assign(base, { ok: false, error: 'active model is Model 1 (computed in the web page); request model=M4 or model=BRI2' }), 'json');
       const names = geoNames_(), units = r[level] || {}, cols = level === 'district' && r.distCols ? r.distCols : r.cols;
       const header = ['code', 'name', 'districtCode', 'district', 'levelIndex', 'level'].concat(cols.filter(c => c !== 'level'));
       const rows = Object.keys(units).sort().map(c => {
@@ -53,7 +52,7 @@ function apiGet_(p) {
       if (fmt === 'csv') return apiCsv_(header, rows.map(o => header.map(h => o[h])));
       return apiOut_(Object.assign(base, {
         province: prov, provinceName: PROVINCES[prov], level: level, model: r.model, modelLabel: RISK_MODEL_LABELS[r.model] || r.model, modelVersion: r.modelVersion || '',
-        fallback: r.fallback || '', land: r.land, months: r.months || null, monthsText: r.monthsText || '', source: r.source, season: r.season, history: r.history || [], end: r.end, latest: r.latest,
+        fallback: r.fallback || '', land: r.land, assessmentYear: r.assessmentYear || null, baseYears: r.baseYears || null, months: r.months || null, monthsText: r.monthsText || '', source: r.source, season: r.season, history: r.history || [], end: r.end, latest: r.latest,
         currentWindow: r.window || null, detailed: detailed, columns: header, rows: rows,
         note: 'คะแนนเป็นลำดับเชิงเปรียบเทียบสำหรับจัดลำดับการเฝ้าระวัง ไม่ใช่ความน่าจะเป็นการเผา' }), 'json');
     }
