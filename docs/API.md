@@ -99,8 +99,8 @@ Model 4 (`model=M4`):
 | `reason` | เหตุผลหลักของคะแนน (ข้อความ) |
 | `nHigh`, `cropHigh`, `nTambon` | (ระดับอำเภอ) จำนวนตำบลคะแนนสูง–สูงมาก, พื้นที่เกษตรในตำบลเหล่านั้น, จำนวนตำบลทั้งหมด |
 
-ส่วนหัว JSON บอก `model`, `modelVersion`, `season`, `history` (ฤดูฐาน), `end`, `latest`, `fallback` (ถ้าใช้ Model 3 แทน)
-Model 4 ใช้กับ `land` = พื้นที่เกษตร / เขต สปก. ใน 17 จังหวัดที่มีข้อมูลพื้นที่เพาะปลูก ประเภทอื่นระบบใช้ Model 3 และแจ้งใน `fallback`
+ส่วนหัว JSON บอก `model`, `modelVersion`, `assessmentYear`, `baseYears`, `history` (ปีฐานที่มีข้อมูล), `end`, `latest`, `fallback`
+Model 4 ใช้กับ `land` = พื้นที่เกษตร / เขต สปก. ใน 17 จังหวัดที่มีข้อมูลพื้นที่เพาะปลูก ประเภทอื่นระบบใช้ ABRI-2Y และแจ้งใน `fallback`
 
 ## API key (ข้อมูลคะแนนละเอียด)
 
