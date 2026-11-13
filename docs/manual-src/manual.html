@@ -44,13 +44,13 @@ code{font-family:Plex,monospace;background:#f3f4f6;padding:0 1mm;border-radius:1
   <div>
     <div class="band">
       <p style="opacity:.85">คู่มือการใช้งานและคู่มือวิชาการ</p>
-      <h1>ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่เกษตร<br>Agri-Risk Map Burning (เวอร์ชัน 3.9.2)</h1>
+      <h1>ระบบประเมินและเฝ้าระวังความเสี่ยงการเผาในพื้นที่เกษตร<br>Agri-Risk Map Burning (เวอร์ชัน 3.9.3)</h1>
       <p>การใช้งาน · ฐานข้อมูลจุดความร้อน · สูตร ABRI-2Y และสูตรทางเลือก · เกณฑ์ 4 ระดับ · ผลการประเมินและแนวทางส่งเสริม</p>
     </div>
     <table class="meta" style="margin-top:10mm;width:auto">
       <tr><td style="width:38mm"><b>เว็บไซต์</b></td><td>https://krit-pj.github.io/TH-Agri-Risk-Maps-Burning</td></tr>
       <tr><td><b>ผู้พัฒนา</b></td><td>ดร. กิตติ โพธิ์จวง กลุ่มอารักขาพืช สำนักงานเกษตรจังหวัดกำแพงเพชร กรมส่งเสริมการเกษตร</td></tr>
-      <tr><td><b>ฉบับ</b></td><td>14 พฤศจิกายน 2569 (v3.9.2: ตารางเปรียบเทียบแสดงเฉพาะจำนวนจริงของช่วงที่เลือก · ชุดข้อมูลที่นำเข้าเปิดใช้งานอัตโนมัติ · ABRI-2Y เป็นค่าเริ่มต้น · ฐาน 2 ปีงบ · จุดตัด 50/75/90 · สูตรที่เลือกได้ 3 สูตร · Public Data API v1.2)</td></tr>
+      <tr><td><b>ฉบับ</b></td><td>14 พฤศจิกายน 2569 (v3.9.3: API ใช้ข้อมูลชุดเดียวกับหน้าเว็บ + fn=compare · ตารางเปรียบเทียบแสดงเฉพาะจำนวนจริงของช่วงที่เลือก · ชุดข้อมูลที่นำเข้าเปิดใช้งานอัตโนมัติ · ABRI-2Y เป็นค่าเริ่มต้น · ฐาน 2 ปีงบ · จุดตัด 50/75/90 · สูตรที่เลือกได้ 3 สูตร · Public Data API v1.3)</td></tr>
     </table>
   </div>
   <div>
@@ -332,15 +332,16 @@ code{font-family:Plex,monospace;background:#f3f4f6;padding:0 1mm;border-radius:1
 </section>
 <section>
 <h2>8. การเชื่อมต่อข้อมูลสำหรับระบบอื่น (API)</h2>
-<p>ระบบมี <b>Public Data API v1.2</b> แบบอ่านอย่างเดียว ข้อมูลเป็นปัจจุบันเสมอ (ล้างแคชทันทีเมื่อนำเข้า/เปิด-ปิดชุดข้อมูล/เปลี่ยนตั้งค่า) ใช้ได้กับเว็บอื่น Excel/Power Query Google Sheets (<code>IMPORTDATA</code>) Python และ R รายละเอียดเต็มอยู่ที่ <code>docs/API.md</code> ใน GitHub</p>
+<p>ระบบมี <b>Public Data API v1.3</b> แบบอ่านอย่างเดียว <b>ใช้ข้อมูลชุดเดียวกับหน้าเว็บ</b> (ชุดข้อมูลที่เปิดใช้งาน นโยบายดาวเทียม สูตรที่ตั้งค่า และช่วงเริ่มต้นปีงบล่าสุดที่ครบแล้ว — ตัวกรองเดียวกันได้ตัวเลขเดียวกัน) ข้อมูลเป็นปัจจุบันเสมอ (ล้างแคชทันทีเมื่อนำเข้า/เปิด-ปิดชุดข้อมูล/เปลี่ยนตั้งค่า) ใช้ได้กับเว็บอื่น Excel/Power Query Google Sheets (<code>IMPORTDATA</code>) Python และ R รายละเอียดเต็มอยู่ที่ <code>docs/API.md</code> ใน GitHub</p>
 <table>
 <tr><th>fn</th><th>คืนค่า</th><th>ตัวอย่าง (ต่อท้าย URL เว็บแอป <code>…/exec?action=api</code>)</th></tr>
 <tr><td>meta</td><td>เวอร์ชัน สูตรที่ใช้งาน ช่วงข้อมูล รายการ endpoint</td><td><code>&amp;fn=meta</code></td></tr>
 <tr><td>provinces</td><td>จังหวัดที่มีข้อมูล</td><td><code>&amp;fn=provinces&amp;format=csv</code></td></tr>
 <tr><td>risk</td><td>ระดับรายตำบล/อำเภอ (+ คะแนน เหตุผล เมื่อมี key)</td><td><code>&amp;fn=risk&amp;province=62&amp;level=subdistrict&amp;format=csv</code></td></tr>
-<tr><td>hotspots</td><td>จุดความร้อนรายจุด</td><td><code>&amp;fn=hotspots&amp;province=62&amp;from=2026-10-01</code></td></tr>
+<tr><td>hotspots</td><td>จุดความร้อนรายจุด (กรองอำเภอ/ตำบล/ชนิดพืชได้)</td><td><code>&amp;fn=hotspots&amp;province=62&amp;from=2026-10-01</code></td></tr>
+<tr><td>compare</td><td>ตาราง “เปรียบเทียบ HS” เดียวกับหน้าเว็บ: ช่วงเดียวกันปีก่อน · ช่วงที่เลือก · เพิ่ม/ลด · ระดับ</td><td><code>&amp;fn=compare&amp;province=62&amp;from=2026-01-01&amp;to=2026-11-30&amp;format=csv</code></td></tr>
 </table>
-<p class="small">API v1.2: สูตรที่ใช้งาน (ค่าเริ่มต้น ABRI-2Y) ปีงบที่ประเมินและปีฐาน (<code>assessmentYear</code>, <code>baseYears</code>) อยู่ในส่วนหัวของผลลัพธ์ · ไม่ระบุ <code>end</code> = ปีงบประมาณล่าสุดที่ครบแล้ว · <code>model=ABRI|M5|M4</code> · ไม่มี key: ระดับ 4 ระดับ + จำนวนจุดปีงบปัจจุบัน · มี key (ผู้ดูแลออกให้ด้วย <code>createApiKey('ชื่อหน่วยงาน')</code> ใน Apps Script Editor): ลำดับ ABRI จุดรายปีฐาน ชนิดพืชหลัก ความหนาแน่น และเหตุผล</p>
+<p class="small">API v1.3: สูตรที่ใช้งาน (ค่าเริ่มต้น ABRI-2Y) ปีงบที่ประเมินและปีฐาน (<code>assessmentYear</code>, <code>baseYears</code>) อยู่ในส่วนหัวของผลลัพธ์ · ไม่ระบุ <code>end</code> = ปีงบประมาณล่าสุดที่ครบแล้ว · <code>model=ABRI|M5|M4</code> · ไม่มี key: ระดับ 4 ระดับ + จำนวนจุดปีงบปัจจุบัน · มี key (ผู้ดูแลออกให้ด้วย <code>createApiKey('ชื่อหน่วยงาน')</code> ใน Apps Script Editor): ลำดับ ABRI จุดรายปีฐาน ชนิดพืชหลัก ความหนาแน่น และเหตุผล</p>
 </section>
 <section>
 <h2>9. ข้อจำกัดและข้อแนะนำการแปลผล</h2>

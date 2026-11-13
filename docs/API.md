@@ -1,7 +1,9 @@
-# TH Agri-Risk Map Burning — Public Data API v1.2
+# TH Agri-Risk Map Burning — Public Data API v1.3
 
 API อ่านอย่างเดียวสำหรับระบบอื่นที่ต้องการนำข้อมูลจุดความร้อนและระดับความเสี่ยงไปใช้ ข้อมูลเป็นปัจจุบันเสมอ
 แคชจะถูกล้างทันทีเมื่อมีการนำเข้า เปิด/ปิดชุดข้อมูล หรือเปลี่ยนการตั้งค่า
+
+**ข้อมูลชุดเดียวกับหน้าเว็บ**: ทุก endpoint ใช้ฟังก์ชันเดียวกับหน้าเว็บ — แหล่งข้อมูลหลัก · เฉพาะชุดข้อมูลที่เปิดใช้งาน · นโยบายดาวเทียม (NOAA-20 ตั้งแต่วันแรกที่มีข้อมูล ก่อนหน้านั้น Suomi-NPP) · ประเภทพื้นที่ค่าเริ่มต้น “พื้นที่เกษตร” · สูตรที่ตั้งค่าไว้ · ช่วงเริ่มต้น = ปีงบประมาณล่าสุดที่ครบแล้ว (`meta.defaultPeriod`) · ตรวจแล้วว่าจำนวนจุด ระดับ และตารางเปรียบเทียบตรงกับหน้าเว็บทุกค่า (v1.3)
 
 **Base URL**
 
@@ -21,7 +23,8 @@ https://script.google.com/macros/s/AKfycbzAgSOxgQsaOx9bqBYM53KXFzk1QKsop46HZeINg
 | `meta` | – | เวอร์ชัน API, สูตรที่ใช้งานอยู่ (`abri`: เวอร์ชัน จุดตัด เกณฑ์ขั้นต่ำ ปีงบที่ประเมิน · `model5`), ช่วงข้อมูล, เดือนที่มีข้อมูล (`dataMonths`), นโยบายดาวเทียม, ประเภทพื้นที่, ระดับ, รายการ endpoint |
 | `provinces` | `format` | จังหวัดที่มีข้อมูล: จำนวนจุดพื้นที่เกษตร วันแรก/วันล่าสุด |
 | `risk` | `province` (จำเป็น), `level=subdistrict\|district`, `model=ABRI\|M5\|M4`, `land`, `end`, `format`, `key` | ระดับความเสี่ยงรายตำบล/อำเภอ |
-| `hotspots` | `province` (จำเป็น), `land`, `from`, `to`, `format` | จุดความร้อนรายจุด (แหล่งข้อมูลหลัก ชุดที่เปิดใช้งาน) |
+| `hotspots` | `province` (จำเป็น), `land`, `from`, `to`, `district`, `subdistrict`, `crop`, `format` | จุดความร้อนรายจุด (แหล่งข้อมูลหลัก ชุดที่เปิดใช้งาน) |
+| `compare` | `province` (จำเป็น), `from`, `to`, `level=district\|subdistrict`, `district`, `subdistrict`, `crop`, `land`, `format` | **ตาราง “เปรียบเทียบ HS” และการ์ดสรุปเดียวกับหน้าเว็บ**: ช่วงเดียวกันปีก่อน · ช่วงที่เลือก · เพิ่ม/ลด · ระดับความเสี่ยง (v1.3) |
 
 ### ตัวอย่าง
 
@@ -32,6 +35,9 @@ https://script.google.com/macros/s/AKfycbzAgSOxgQsaOx9bqBYM53KXFzk1QKsop46HZeINg
 ?action=api&fn=risk&province=62&level=district&format=csv
 ?action=api&fn=hotspots&province=62&from=2026-10-01&to=2026-11-30&format=csv
 ?action=api&fn=hotspots&province=58&land=ALL
+?action=api&fn=compare&province=62
+?action=api&fn=compare&province=62&from=2026-01-01&to=2026-11-30&format=csv
+?action=api&fn=compare&province=62&district=6201&crop=นาข้าว
 ```
 
 Google Sheets: `=IMPORTDATA("<Base URL>&fn=risk&province=62&format=csv")`
@@ -101,6 +107,25 @@ Model 4 (`model=M4`):
 
 ส่วนหัว JSON บอก `model`, `modelVersion`, `assessmentYear`, `baseYears`, `history` (ปีฐานที่มีข้อมูล), `end`, `latest`, `fallback`
 Model 4 ใช้กับ `land` = พื้นที่เกษตร / เขต สปก. ใน 17 จังหวัดที่มีข้อมูลพื้นที่เพาะปลูก ประเภทอื่นระบบใช้ ABRI-2Y และแจ้งใน `fallback`
+
+## fn=compare — ตารางเปรียบเทียบ (v1.3)
+
+ให้ผลเดียวกับการ์ด “เปรียบเทียบ HS รายอำเภอ/ตำบล” และการ์ดสรุปบนหน้าเว็บ (ตัวกรองเดียวกัน = ตัวเลขเดียวกัน)
+
+* ไม่ระบุ `from`/`to` = ปีงบประมาณล่าสุดที่ครบแล้ว (เช่น `2025-10-01`–`2026-09-30`) · หน้าเว็บเลือกเป็นรายเดือน: `from` = วันที่ 1 ของเดือนเริ่ม · `to` = วันสุดท้ายของเดือนสิ้นสุด
+* `level`: ค่าเริ่มต้นรายอำเภอ · ระบุ `district` (4 หลัก) = รายตำบลในอำเภอนั้น · `subdistrict` = เฉพาะตำบลนั้น · `crop` = PlantType (นาข้าว, อ้อย, ข้าวโพดและไร่หมุนเวียน, เกษตรอื่น ๆ, พื้นที่ป่า, อื่น ๆ)
+* กติกาเทียบปีก่อน (`compare.mode`): `day` = ปีก่อนมีข้อมูลครบ เทียบวันต่อวัน · `month` = ปีก่อนมีข้อมูลบางเดือน นับปีก่อนและคำนวณ % **เฉพาะเดือนที่มีข้อมูลทั้งสองปี** (`compare.matchedMonths`, `compare.previousLabel`) · `compare.none = true` = ไม่มีข้อมูลปีก่อน → `previous = null` และ `change = "–"`
+* `selected` = **จำนวนจุดจริงทั้งหมดในช่วงที่เลือก** (ผลรวม = `total.selected` = การ์ดสรุป) · จุดที่รหัสพื้นที่ไม่ตรงขอบเขตอยู่ใน `unassigned`
+
+| คอลัมน์ | ความหมาย |
+|---|---|
+| `code`, `name` | รหัสและชื่ออำเภอ/ตำบล |
+| `previous` | จุดความร้อนช่วงเดียวกันปีก่อน (`null` = ไม่มีข้อมูล) |
+| `selected` | จุดความร้อนในช่วงที่เลือก (จำนวนจริงทั้งหมด) |
+| `change` | เพิ่ม/ลด เช่น `+67%`, `ใหม่` (ปีก่อน 0), `–` (ไม่มีข้อมูลปีก่อน) |
+| `levelIndex`, `level` | ระดับความเสี่ยงตามสูตรที่ตั้งค่า ณ วันสิ้นสุดช่วง (`riskModel`, `assessmentYear`) |
+
+CSV มีแถว “ไม่ระบุพื้นที่” (ถ้ามี) และแถว “รวม” ท้ายตาราง
 
 ## API key (ข้อมูลคะแนนละเอียด)
 

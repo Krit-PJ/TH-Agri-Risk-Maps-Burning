@@ -168,9 +168,9 @@ A_i   = พื้นที่เพาะปลูก ESA WorldCover 2021 (ไ�
 * ต้องเปิดใช้งานชุดข้อมูล NASA FIRMS (แหล่งข้อมูล FIRMS ไม่ถูกแสดงบนแผนที่เมื่อแหล่งหลักเป็นต้นสังกัด) และนำเข้า FIRMS Suomi-NPP เพิ่มหลังจบแต่ละฤดู
 * ใช้กับพื้นที่เกษตร/เขต สปก. ของ 17 จังหวัดที่มีข้อมูลพื้นที่เพาะปลูก ประเภทอื่นใช้ ABRI-2Y อัตโนมัติ
 
-## Public Data API v1.2
+## Public Data API v1.3
 
-`GET …/exec?action=api&fn=meta|provinces|risk|hotspots` (JSON หรือ `format=csv`) · ค่าเริ่มต้น ABRI-2Y · `model=ABRI|M5|M4` — เอกสาร [`docs/API.md`](docs/API.md) · API key: `createApiKey('ชื่อ')` ใน Editor
+`GET …/exec?action=api&fn=meta|provinces|risk|hotspots|compare` (JSON หรือ `format=csv`) · **ข้อมูลชุดเดียวกับหน้าเว็บ** (ชุดที่เปิดใช้งาน · นโยบายดาวเทียม · สูตรที่ตั้งค่า · ช่วงเริ่มต้น = ปีงบล่าสุดที่ครบแล้ว) · `fn=compare` = ตารางเปรียบเทียบ HS เดียวกับการ์ดบนหน้าเว็บ (v1.3) · ค่าเริ่มต้น ABRI-2Y · `model=ABRI|M5|M4` — เอกสาร [`docs/API.md`](docs/API.md) · API key: `createApiKey('ชื่อ')` ใน Editor
 
 ## แหล่งข้อมูล HS (ต้นสังกัด / NASA FIRMS)
 
