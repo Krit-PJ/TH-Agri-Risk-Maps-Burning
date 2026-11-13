@@ -54,7 +54,7 @@ const TEXT_COLUMNS = {
   LoginAttempts: ['identifier', 'accountId', 'provinceCode'],
   Team: ['memberId', 'provinceCode', 'photo', 'links']
 };
-const SETUP_VERSION = '3.9';
+const SETUP_VERSION = '3.9.1';
 const TEAM_ROLES = ['ผู้พัฒนาระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];
 const ACCOUNT_ROLES = { admin: 'Admin', minisuper: 'Mini Super Admin' };
 const LOGIN_RESULTS = { success: 'สำเร็จ', not_found: 'ไม่มีหมายเลขในระบบ', pending: 'รออนุมัติ', disabled: 'บัญชีถูกระงับ', invalid: 'รูปแบบไม่ถูกต้อง', wrong_credentials: 'ชื่อผู้ใช้/รหัสผ่านไม่ถูกต้อง' };
@@ -460,13 +460,15 @@ function hsImport_(user, b) {
     if (bt) {
       updateRow_('Batches', bt._row, {
         accepted: Number(bt.accepted || 0) + out.length + updated, duplicates: Number(bt.duplicates || 0) + dup,
-        firstDate: [bt.firstDate, dates[0]].filter(Boolean).sort()[0] || '', lastDate: [bt.lastDate, dates[dates.length - 1]].filter(Boolean).sort().pop() || ''
+        firstDate: [bt.firstDate, dates[0]].filter(Boolean).sort()[0] || '', lastDate: [bt.lastDate, dates[dates.length - 1]].filter(Boolean).sort().pop() || '',
+        active: true   // v3.9.1: ชุดที่นำเข้า/ปรับปรุงเปิดใช้งานอัตโนมัติเสมอ (กันกรณีชุดเดิมถูกปิดไว้แล้วนำเข้าเพิ่ม)
       });
     } else {
       appendObj_('Batches', { batchId: batchId, provinceCode: prov, fileName: clean_(b.fileName), accepted: out.length + updated, duplicates: dup,
         firstDate: dates[0] || '', lastDate: dates[dates.length - 1] || '', importedBy: user.name, importedAt: at, note: clean_(b.note) || (upsert ? 'upsert' : ''), source: source, active: true });
     }
-    const res = { ok: true, batchId: batchId, accepted: out.length, updated: updated, duplicates: dup };
+    INACTIVE_MEMO_ = null;
+    const res = { ok: true, batchId: batchId, accepted: out.length, updated: updated, duplicates: dup, active: true };
     if (b.final !== false) {
       refreshSummary_(prov); bumpCache_(prov);
       audit_(user, 'hs_import', batchId + ' [' + source + (upsert ? ', upsert' : '') + '] ' + (b.fileName || ''), prov);

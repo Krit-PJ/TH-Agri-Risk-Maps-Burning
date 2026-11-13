@@ -37,7 +37,9 @@ const Dashboard = (() => {
       return { code: p.code, name: p.name, current: cur[p.code] || 0, cmpCurrent: cmpC[p.code] || 0, previous: prev[p.code] || 0, score: p.risk_score ?? 0, level: lv,
         change: W.none ? NA : pctChange(cmpC[p.code] || 0, prev[p.code] || 0) };
     });
-    const unassigned = (cur['-'] || 0);
+    // จุดที่ไม่มีรหัส/ไม่ตรงกับขอบเขตพื้นที่ในแผนที่ — แสดงเป็นแถว “ไม่ระบุพื้นที่” เพื่อให้ผลรวมตาราง = จำนวนจุดจริงในช่วงที่เลือก
+    const sumOf = k => rows.reduce((a, r) => a + r[k], 0);
+    const unassigned = Math.max(0, current.length - sumOf('current')), unassignedPrev = Math.max(0, prior.length - sumOf('previous')), unassignedCmp = Math.max(0, curCmp.length - sumOf('cmpCurrent'));
     const levels = CONFIG.RISK_LEVELS.map(l => rows.filter(r => r.level === l).length);
     const months = [];
     for (let i = s; i <= e && months.length < 48; i++) months.push(i);
@@ -47,9 +49,9 @@ const Dashboard = (() => {
     const selText = (() => { const a = Geo.ymFromIndex(s), z = Geo.ymFromIndex(e), zd = new Date(Date.UTC(z.year - 543, z.month, 0)).getUTCDate();
       let end = `${z.year - 543}-${String(z.month).padStart(2, '0')}-${zd}`; if (latest && end > latest) end = latest;
       return `${Geo.thaiDate(`${a.year - 543}-${String(a.month).padStart(2, '0')}-01`)} – ${Geo.thaiDate(end)}`; })();
-    return { level, unitLabel: level === 'district' ? 'อำเภอ' : 'ตำบล', rows, current, curCmp, prior, unassigned, levels, months, byMonth,
+    return { level, unitLabel: level === 'district' ? 'อำเภอ' : 'ตำบล', rows, current, curCmp, prior, unassigned, unassignedPrev, unassignedCmp, levels, months, byMonth,
       totalCur: current.length, totalCmp: curCmp.length, totalPrev: prior.length, change: W.none ? NA : pctChange(curCmp.length, prior.length),
-      compareMode: W.mode, compareNote: W.note, compareNone: !!W.none, selText,
+      compareMode: W.mode, compareNote: W.note, compareNone: !!W.none, selText, curLabel: W.curLabel || '', prevLabel: W.prevLabel || '',
       currentText: W.none ? selText : partial ? `${W.curLabel} (เดือนที่มีข้อมูลทั้งสองปี${latest && endD >= latest ? ` · ข้อมูลถึง ${Geo.thaiDate(latest)}` : ''})` : `${Geo.thaiDate(startD)} – ${Geo.thaiDate(endD)}`,
       priorText: W.none ? W.note : partial ? `${W.prevLabel} (${W.note})` : `${Geo.thaiDate(pStart)} – ${Geo.thaiDate(pEnd)}`,
       compareText: W.none ? W.note : partial ? `เทียบเดือนที่มีข้อมูลทั้งสองปี: ${W.prevLabel} ${fmt(prior.length)} จุด → ${W.curLabel} ${fmt(curCmp.length)} จุด` : `เทียบช่วงเดียวกันปีก่อน (${fmt(prior.length)} จุด)` };
@@ -86,12 +88,27 @@ const Dashboard = (() => {
     // comparison table (template)
     const cmp = S.rows.slice().sort((a, b) => b.current - a.current || b.cmpCurrent - a.cmpCurrent || a.name.localeCompare(b.name, 'th'));
     el('comparison-area-header').textContent = u;
-    if (el('th-cmp-prev')) { el('th-cmp-prev').textContent = S.compareMode === 'month' && !S.compareNone ? `ปีก่อน (${S.priorText.split(' (')[0]})` : 'ช่วงเดียวกันปีก่อน'; el('th-cmp-cur').textContent = S.compareMode === 'month' && !S.compareNone ? `ปีนี้ (${S.currentText.split(' (')[0]})` : 'ช่วงที่เลือก'; }
+    // v3.9.1: คอลัมน์ “ช่วงที่เลือก” = จำนวนจุดจริงทั้งหมดในช่วงที่เลือก (ผลรวม = KPI) · “ช่วงเดียวกันปีก่อน” = ไม่มีข้อมูล เมื่อฐานข้อมูลไม่มีปีก่อน
+    const st = MapModule.getState(), partial = S.compareMode === 'month' && !S.compareNone;
+    if (el('th-cmp-prev')) { el('th-cmp-prev').textContent = partial ? 'ช่วงเดียวกันปีก่อน*' : 'ช่วงเดียวกันปีก่อน'; el('th-cmp-cur').textContent = 'ช่วงที่เลือก'; }
     el('title-comparison').textContent = `เปรียบเทียบ HS ราย${u}`;
-    el('comparison-period').textContent = `${S.compareNone ? `${S.selText} · ${S.priorText}` : `${S.currentText} เทียบ ${S.priorText}`}${MapModule.getState().crop ? ` · ${MapModule.getState().crop}` : ''}`;
-    document.querySelector('#tbl-hotspot-comparison tbody').innerHTML = cmp.map(r => `<tr><td>${r.name}</td><td class="num">${S.compareNone ? '–' : fmt(r.previous)}</td><td class="num">${fmt(r.cmpCurrent)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`).join('');
-    el('comparison-previous-total').textContent = S.compareNone ? '–' : fmt(S.totalPrev);
-    el('comparison-current-total').textContent = fmt(S.totalCmp);
+    el('comparison-period').textContent = `${S.compareNone ? `${S.selText} · ${S.priorText}` : partial ? `${S.selText} · เทียบเดือนที่มีข้อมูลทั้งสองปี` : `${S.currentText} เทียบ ${S.priorText}`}${st.crop ? ` · ${st.crop}` : ''}`;
+    const prevCell = v => S.compareNone ? '<span class="text-ink-mute text-xs">ไม่มีข้อมูล</span>' : fmt(v);
+    const curCell = (v, c) => partial && c !== v ? `${fmt(v)}<span class="block text-[10px] text-ink-mute">เทียบ ${fmt(c)}</span>` : fmt(v);
+    const picked = S.level === 'district' ? st.district : st.subdistrict;
+    const body = cmp.map(r => `<tr class="cmp-row${picked === r.code ? ' cmp-picked' : ''}" data-cmp-code="${r.code}" tabindex="0" title="คลิกเพื่อ${S.level === 'district' ? 'ดูรายตำบลในอำเภอนี้' : picked === r.code ? 'ยกเลิกการเลือกตำบล' : 'เลือกตำบลนี้'}"><td>${r.name}</td><td class="num">${prevCell(r.previous)}</td><td class="num">${curCell(r.current, r.cmpCurrent)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`);
+    if (S.unassigned || S.unassignedPrev) body.push(`<tr class="text-ink-soft"><td>ไม่ระบุพื้นที่</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${curCell(S.unassigned, S.unassignedCmp)}</td><td class="num">–</td></tr>`);
+    const tb = document.querySelector('#tbl-hotspot-comparison tbody');
+    tb.innerHTML = body.join('');
+    tb.querySelectorAll('[data-cmp-code]').forEach(tr => {
+      const go = () => document.dispatchEvent(new CustomEvent('agri-risk:area-click', { detail: { level: S.level, code: tr.dataset.cmpCode, source: 'table' } }));
+      tr.addEventListener('click', go); tr.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+    });
+    el('comparison-previous-total').innerHTML = prevCell(S.totalPrev);
+    el('comparison-current-total').innerHTML = curCell(S.totalCur, S.totalCmp);
+    if (el('comparison-note')) el('comparison-note').textContent = partial
+      ? `* ปีก่อนมีข้อมูลไม่ครบทุกเดือน จึงนับปีก่อนและคำนวณ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel} เทียบ ${S.curLabel}) — ตัวเลข “เทียบ” ใต้ช่วงที่เลือกคือจำนวนจุดในเดือนเหล่านั้น`
+      : S.compareNone ? `ช่วงที่เลือกแสดงจำนวนจุดความร้อนจริง ${fmt(S.totalCur)} จุด · ${S.compareNote}` : '';
     el('comparison-change-total').innerHTML = `<span class="chg ${S.change.cls}">${S.change.text}</span>`;
 
     // monthly trend

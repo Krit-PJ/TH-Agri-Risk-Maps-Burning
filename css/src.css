@@ -178,6 +178,7 @@
 .pr-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pr-table .lv { display: inline-flex; align-items: center; gap: 1mm; white-space: nowrap; }
 .pr-table .lv i { width: 2.4mm; height: 2.4mm; border-radius: 50%; display: inline-block; }
+.pr-table .pr-foot-note { font-size: .85em; color: #4a5a51; border-bottom: 0; white-space: normal; }
 .pr-foot { display: flex; justify-content: space-between; gap: 4mm; border-top: .25mm solid #c9d3cd; padding-top: 1.2mm; margin-top: 2mm; font-size: 6.5pt; color: #4a5a51; }
 
 @page { size: A4 landscape; margin: 8mm; }
@@ -206,3 +207,9 @@
 .ap-drill { margin-top: .55rem; width: 100%; border-radius: .5rem; border: 1px solid #cfe3d6; background: #f1f8f3; padding: .35rem .5rem; font-weight: 600; color: #14532d; }
 .ap-drill:hover { background: #e2f1e7; }
 .hs-cluster-prev span { background: rgba(100, 116, 139, .78); box-shadow: 0 0 0 4px rgba(100, 116, 139, .2); }
+
+/* v3.9.1: ตารางเปรียบเทียบ HS — คลิกแถวเพื่อเลือกพื้นที่ (เหมือนคลิกบนแผนที่) */
+#tbl-hotspot-comparison .cmp-row { cursor: pointer; }
+#tbl-hotspot-comparison .cmp-row:hover td { background: #f1f8f3; }
+#tbl-hotspot-comparison .cmp-row:focus-visible { outline: 2px solid #16a34a; outline-offset: -2px; }
+#tbl-hotspot-comparison .cmp-picked td { background: #e3f1e7; font-weight: 600; }

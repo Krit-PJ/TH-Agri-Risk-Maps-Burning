@@ -196,7 +196,7 @@ const App = (() => {
     const lastDate = fc.features.reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
     const years = []; for (let y = Math.min(first.year, latest.year - 1, Geo.seasonOf(first.year, first.month) - 1); y <= latest.year; y++) years.push(y);
     const mOpts = CONFIG.MONTH_SHORT.slice(1).map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
-    const yOpts = years.map(y => `<option value="${y}">${y}</option>`).join('');
+    const yOpts = years.slice().reverse().map(y => `<option value="${y}">${y}</option>`).join('');   // v3.9.1: ปีล่าสุดอยู่บนสุด
     ['range-start-month', 'range-end-month'].forEach(id => { el(id).innerHTML = mOpts; });
     ['range-start-year', 'range-end-year'].forEach(id => { el(id).innerHTML = yOpts; });
     const season = Geo.seasonOf(latest.year, latest.month), firstFy = Geo.seasonOf(first.year, first.month);
@@ -276,9 +276,16 @@ const App = (() => {
       appliedRange = readRange(); const r = appliedRange; setRangeUI(r.startYear, r.startMonth, r.endYear, r.endMonth);
       el('btn-apply-period').classList.remove('ring-2', 'ring-amber-400'); applyCurrent();
     });
+    // คลิกพื้นที่บนแผนที่ (ปุ่มดูรายตำบล) หรือคลิกแถวในตารางเปรียบเทียบ: อำเภอ → ดูรายตำบล · ตำบล → เลือก/ยกเลิกตำบล
     document.addEventListener('agri-risk:area-click', e => {
-      if (e.detail.level !== 'district' || el('filter-district').value) return;
-      el('filter-district').value = e.detail.code; populateSubdistricts(); applyCurrent();
+      const { level, code } = e.detail;
+      if (level === 'district') {
+        if (el('filter-district').value) return;
+        el('filter-district').value = code; populateSubdistricts(); applyCurrent();
+      } else if (level === 'subdistrict') {
+        const t = el('filter-subdistrict'); if (![...t.options].some(o => o.value === code)) return;
+        t.value = t.value === code ? '' : code; applyCurrent();
+      }
     });
   }
 

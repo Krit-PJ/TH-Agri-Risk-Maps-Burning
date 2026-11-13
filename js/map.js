@@ -15,7 +15,7 @@ const MapModule = (() => {
     L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
     Object.entries(CONFIG.BASEMAPS).forEach(([k, b]) => { if (k !== 'print') base[k] = L.tileLayer(b.url, { maxZoom: 19, attribution: b.attribution, crossOrigin: true }); });
     base[basemapKey].addTo(map);
-    // ลำดับชั้น: ระดับความเสี่ยง (overlayPane 400) < จุดความร้อนปีก่อน (440) < จุดความร้อนปีล่าสุด (450, ชั้นบนสุดของข้อมูล)
+    // ลำดับชั้น: ระดับความเสี่ยง (overlayPane 400) < จุดความร้อนช่วงเดียวกันปีก่อน (440) < จุดความร้อนช่วงที่เลือก (450, ชั้นบนสุดของข้อมูล)
     map.createPane('hsPrev').style.zIndex = 440; map.createPane('hsCur').style.zIndex = 450;
     map.fitBounds(CONFIG.THAILAND_BOUNDS, { animate: false });
 
@@ -90,12 +90,13 @@ const MapModule = (() => {
     return inRange(p) && (!state.crop || p.__crop === state.crop) && (!state.district || p.__dCode === state.district) && (!state.subdistrict || p.__sCode === state.subdistrict);
   }
   function filteredHotspots() { return (raw.hotspot?.features || []).filter(matchesFeature); }
-  /** ปีงบที่แสดงบนแผนที่ = ปีงบของวันสิ้นสุดช่วงที่เลือก (ปีล่าสุด) — ข้อมูลปีก่อนดูได้เมื่อคลิกพื้นที่ */
+  /** ปีงบของวันสิ้นสุดช่วงที่เลือก (ใช้ในป๊อปอัปพื้นที่: ยอดทั้งปีงบก่อนหน้า) */
   function displaySeason() {
     if (state.endYM) { const e = Geo.ymFromIndex(state.endYM); return Geo.seasonOf(e.year, e.month); }
     return raw.seasons[raw.seasons.length - 1] || null;
   }
-  function mapHotspots() { const s = displaySeason(); return filteredHotspots().filter(f => f.properties.__season === s); }
+  /** v3.9.1: จุดบนแผนที่ = ทุกจุดในช่วงที่เลือก (จำนวนเท่ากับการ์ดสรุปและตารางเปรียบเทียบ) — เดิมแสดงเฉพาะปีงบล่าสุด ทำให้จำนวนบนแผนที่น้อยกว่าข้อมูลจริงเมื่อช่วงคาบเกี่ยวหลายปีงบ */
+  function mapHotspots() { return filteredHotspots(); }
   /** ช่วงที่เลือกเทียบช่วงเดียวกันปีก่อน (Geo.compareWindow) — แหล่งเดียวสำหรับการ์ด ตาราง ป๊อปอัป ชั้นข้อมูลปีก่อน และรายงาน */
   function compareInfo() {
     if (!state.endYM) return null;
@@ -307,7 +308,7 @@ const MapModule = (() => {
           <div class="hs-pop-crop">${Geo.cropIcon(p.__crop, 'hs-pop-ic')}<span>${p.__crop}</span></div>${p.__land ? `<div class="hs-pop-note">พื้นที่: ${p.__land}</div>` : ''}
           <div class="hs-pop-note">ปีงบประมาณ ${p.__season} (ต.ค. ${p.__season - 1} – ก.ย. ${p.__season})</div></div>`;
   }
-  /** จุดความร้อน 2 ชั้น: ปีล่าสุดของช่วงที่เลือก (ชั้นบนสุด สีน้ำเงิน) และช่วงเดียวกันปีก่อน (ชั้นล่าง สีเทา) */
+  /** จุดความร้อน 2 ชั้น: ช่วงที่เลือก (ชั้นบนสุด สีน้ำเงิน) และช่วงเดียวกันปีก่อน (ชั้นล่าง สีเทา) */
   function renderHotspots() {
     remove(shown.hotspot); shown.hotspot = null; remove(shown.hotspotPrev); shown.hotspotPrev = null;
     if (!raw.bundle) return;

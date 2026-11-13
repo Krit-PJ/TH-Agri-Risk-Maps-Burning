@@ -32,12 +32,16 @@ const Report = (() => {
     // ---- table: every district/subdistrict in scope, including zero HS ----
     const rows = S.rows.slice().sort((a, b) => b.current - a.current || b.score - a.score || a.name.localeCompare(b.name, 'th'));
     el('pr-table-title').textContent = `จุดความร้อน (HS) ราย${S.unitLabel} — ครบ ${rows.length} ${S.unitLabel}`;
-    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th class="num">HS ช่วงที่เลือก</th><th class="num">${S.compareMode === 'month' && !S.compareNone ? `ปีก่อน (${S.priorText.split(' (')[0]})` : 'ช่วงเดียวกันปีก่อน'}</th><th class="num">${S.compareMode === 'month' && !S.compareNone ? 'เพิ่ม/ลด (เดือนเดียวกัน)' : 'เพิ่ม/ลด'}</th><th>ระดับความเสี่ยง</th></tr>`;
-    const extra = S.unassigned ? `<tr><td class="num">–</td><td>ไม่ระบุพื้นที่</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td><td class="num">–</td><td>–</td></tr>` : '';
-    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td class="num"><b>${fmt(r.current)}</b></td><td class="num">${S.compareNone ? '–' : fmt(r.previous)}</td><td class="num">${r.change.text}</td><td><span class="lv"><i style="background:${r.level.color}"></i>${r.level.label}</span></td></tr>`).join('') + extra;
-    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th class="num">${fmt(S.totalCur)}</th><th class="num">${S.compareNone ? '–' : fmt(S.totalPrev)}</th><th class="num">${S.change.text}</th><th></th></tr>`;
+    // v3.9.1: ลำดับคอลัมน์เหมือนหน้าจอ — ช่วงเดียวกันปีก่อน → ช่วงที่เลือก (จำนวนจริงทั้งหมด) → เพิ่ม/ลด → ระดับ
+    const partial = S.compareMode === 'month' && !S.compareNone;
+    const prevCell = v => S.compareNone ? 'ไม่มีข้อมูล' : fmt(v);
+    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th class="num">ช่วงเดียวกันปีก่อน${partial ? '*' : ''}</th><th class="num">ช่วงที่เลือก</th><th class="num">เพิ่ม/ลด${partial ? '*' : ''}</th><th>ระดับความเสี่ยง</th></tr>`;
+    const extra = S.unassigned || S.unassignedPrev ? `<tr><td class="num">–</td><td>ไม่ระบุพื้นที่</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td><td>–</td></tr>` : '';
+    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td class="num">${prevCell(r.previous)}</td><td class="num"><b>${fmt(r.current)}</b></td><td class="num">${r.change.text}</td><td><span class="lv"><i style="background:${r.level.color}"></i>${r.level.label}</span></td></tr>`).join('') + extra;
+    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th class="num">${prevCell(S.totalPrev)}</th><th class="num">${fmt(S.totalCur)}</th><th class="num">${S.change.text}</th><th></th></tr>`
+      + (partial ? `<tr><td colspan="6" class="pr-foot-note">* ปีก่อนมีข้อมูลไม่ครบทุกเดือน: นับปีก่อนและ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel} เทียบ ${S.curLabel} = ${fmt(S.totalCmp)} จุด)</td></tr>` : '');
     // fit all rows on one page
-    const n = rows.length + (S.unassigned ? 1 : 0) + 2;
+    const n = rows.length + (S.unassigned || S.unassignedPrev ? 1 : 0) + (partial ? 3 : 2);
     const h = Math.min(7, 158 / n);                         // mm per row
     const fs = Math.max(5.6, Math.min(9, h * 1.45));          // pt
     const pad = Math.max(0.25, (h - fs * 0.3528 * 1.25) / 2); // mm
@@ -53,9 +57,8 @@ const Report = (() => {
     while (!fits() && f > 5.2) { f -= 0.25; p = Math.max(0.12, p - 0.1); setSize(f, p); }
 
     // ---- legend & KPIs (outside the map so nothing covers data) ----
-    const seasons = MapModule.displaySeason() ? [MapModule.displaySeason()] : [];
     el('pr-legend').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join('')
-      + seasons.map(s => `<span><i class="pt" style="background:${CONFIG.SEASON_COLORS[0]}"></i>HS ปีงบ ${s} (ล่าสุด)</span>`).join('') + (document.getElementById('lyr-hotspot-prev')?.checked ? `<span><i class="pt" style="background:#94a3b8"></i>HS ช่วงเดียวกันปีก่อน</span>` : '')
+      + `<span><i class="pt" style="background:${CONFIG.SEASON_COLORS[0]}"></i>HS ช่วงที่เลือก (${fmt(S.totalCur)} จุด)</span>` + (document.getElementById('lyr-hotspot-prev')?.checked ? `<span><i class="pt" style="background:#94a3b8"></i>HS ช่วงเดียวกันปีก่อน</span>` : '')
       + `<span class="north">▲ ทิศเหนือ</span>`;
     const withHs = rows.filter(r => r.current > 0).length;
     el('pr-kpis').innerHTML = [

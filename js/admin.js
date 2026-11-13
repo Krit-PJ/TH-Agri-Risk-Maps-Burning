@@ -244,6 +244,7 @@ const Admin = (() => {
   }
 
   /* ---------- batches ---------- */
+  let lastBatches = [];
   async function loadBatches() {
     const box = el('batches-list'); box.innerHTML = '<span class="spinner"></span>';
     const bp = el('batches-province');
@@ -252,6 +253,7 @@ const Admin = (() => {
     el('btn-clear-province').disabled = isNational() && !bp.value;
     const r = await run(() => Api.post('hs_batches', isNational() && bp.value ? { provinceCode: bp.value } : {}));
     if (!r) { box.innerHTML = ''; return; }
+    lastBatches = r.batches;
     const nOn = r.batches.filter(b => b.active).length;
     box.innerHTML = r.batches.length ? `<p class="mb-2 text-xs text-ink-soft">ทั้งหมด ${r.batches.length} ชุด · เปิดใช้งาน ${nOn} ชุด · ปิด ${r.batches.length - nOn} ชุด — “จุดในฐานข้อมูล” คือจำนวนจุดที่อยู่ในชุดนั้นจริงตอนนี้ (จุดที่ถูกปรับปรุงด้วยไฟล์ใหม่แบบ upsert จะย้ายไปอยู่กับชุดใหม่)</p>
       <div class="overflow-x-auto"><table class="data-table"><thead><tr><th><input type="checkbox" id="batch-all" aria-label="เลือกทั้งหมด"/></th><th>สถานะ</th><th>ไฟล์</th><th>จังหวัด</th><th class="num">นำเข้า</th><th class="num">จุดในฐานข้อมูล</th><th>ช่วงวันที่</th><th>ผู้นำเข้า</th><th></th></tr></thead><tbody>${r.batches.map(b => `<tr class="${b.active ? '' : 'opacity-60'}">
@@ -277,7 +279,11 @@ const Admin = (() => {
     if (ids.length) setBatchesActive(ids, active);
   }
   async function setBatchesActive(ids, active) {
-    if (!await confirmBox(`${active ? 'เปิด' : 'ปิด'}การใช้งาน ${ids.length} ชุดข้อมูล? ${active ? 'จุดความร้อนของชุดนี้จะกลับมาแสดงผลและใช้ประเมินความเสี่ยง' : 'จุดความร้อนของชุดนี้จะไม่ถูกแสดงผลและไม่ใช้ประเมินความเสี่ยง (ข้อมูลยังเก็บไว้ เปิดกลับได้ทุกเมื่อ)'}`, { yes: active ? 'เปิดใช้งาน' : 'ปิดใช้งาน' })) return;
+    // v3.9.1: แจ้งผลกระทบก่อนปิดชุดข้อมูล — จังหวัด ช่วงวันที่ และจำนวนจุดที่จะหายจากแผนที่/การประเมิน
+    const sel = lastBatches.filter(b => ids.includes(String(b.batchId)));
+    const nRows = sel.reduce((a, b) => a + (Number(b.rows) || 0), 0);
+    const impact = sel.length ? ` (${[...new Set(sel.map(b => provName(String(b.provinceCode))))].join(', ')} · ${fmt(nRows)} จุด · ${Geo.thaiDate(sel.map(b => b.firstDate).filter(Boolean).sort()[0] || '')} – ${Geo.thaiDate(sel.map(b => b.lastDate).filter(Boolean).sort().pop() || '')})` : '';
+    if (!await confirmBox(`${active ? 'เปิด' : 'ปิด'}การใช้งาน ${ids.length} ชุดข้อมูล${impact}? ${active ? 'จุดความร้อนของชุดนี้จะกลับมาแสดงผลและใช้ประเมินความเสี่ยง' : 'จุดความร้อนของชุดนี้จะไม่ถูกแสดงผล ไม่นับในตารางเปรียบเทียบ และไม่ใช้ประเมินความเสี่ยง — ช่วงวันที่ข้างต้นอาจกลายเป็น “ไม่มีข้อมูล” (ข้อมูลยังเก็บไว้ เปิดกลับได้ทุกเมื่อ)'}`, { yes: active ? 'เปิดใช้งาน' : 'ปิดใช้งาน' })) return;
     const r = await run(() => Api.post('hs_batch_active', { batchIds: ids, active }), `${active ? 'เปิด' : 'ปิด'}การใช้งาน ${ids.length} ชุดข้อมูลแล้ว`);
     if (r) { loadBatches(); hooks.onDataChanged?.(); Api.post('risk_warm', {}).catch(() => { }); }
   }
