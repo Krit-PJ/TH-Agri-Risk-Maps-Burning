@@ -54,7 +54,7 @@ const Dashboard = (() => {
       compareMode: W.mode, compareNote: W.note, compareNone: !!W.none, selText, curLabel: W.curLabel || '', prevLabel: W.prevLabel || '',
       currentText: W.none ? selText : partial ? `${W.curLabel} (เดือนที่มีข้อมูลทั้งสองปี${latest && endD >= latest ? ` · ข้อมูลถึง ${Geo.thaiDate(latest)}` : ''})` : `${Geo.thaiDate(startD)} – ${Geo.thaiDate(endD)}`,
       priorText: W.none ? W.note : partial ? `${W.prevLabel} (${W.note})` : `${Geo.thaiDate(pStart)} – ${Geo.thaiDate(pEnd)}`,
-      compareText: W.none ? W.note : partial ? `เทียบเดือนที่มีข้อมูลทั้งสองปี: ${W.prevLabel} ${fmt(prior.length)} จุด → ${W.curLabel} ${fmt(curCmp.length)} จุด` : `เทียบช่วงเดียวกันปีก่อน (${fmt(prior.length)} จุด)` };
+      compareText: W.none ? W.note : partial ? `เทียบช่วงเดียวกันปีก่อน ${fmt(prior.length)} จุด (คิดเฉพาะเดือนที่มีข้อมูลทั้งสองปี: ${W.prevLabel})` : `เทียบช่วงเดียวกันปีก่อน (${fmt(prior.length)} จุด)` };
   }
 
   function chartBase() {
@@ -94,10 +94,9 @@ const Dashboard = (() => {
     el('title-comparison').textContent = `เปรียบเทียบ HS ราย${u}`;
     el('comparison-period').textContent = `${S.compareNone ? `${S.selText} · ${S.priorText}` : partial ? `${S.selText} · เทียบเดือนที่มีข้อมูลทั้งสองปี` : `${S.currentText} เทียบ ${S.priorText}`}${st.crop ? ` · ${st.crop}` : ''}`;
     const prevCell = v => S.compareNone ? '<span class="text-ink-mute text-xs">ไม่มีข้อมูล</span>' : fmt(v);
-    const curCell = (v, c) => partial && c !== v ? `${fmt(v)}<span class="block text-[10px] text-ink-mute">เทียบ ${fmt(c)}</span>` : fmt(v);
     const picked = S.level === 'district' ? st.district : st.subdistrict;
-    const body = cmp.map(r => `<tr class="cmp-row${picked === r.code ? ' cmp-picked' : ''}" data-cmp-code="${r.code}" tabindex="0" title="คลิกเพื่อ${S.level === 'district' ? 'ดูรายตำบลในอำเภอนี้' : picked === r.code ? 'ยกเลิกการเลือกตำบล' : 'เลือกตำบลนี้'}"><td>${r.name}</td><td class="num">${prevCell(r.previous)}</td><td class="num">${curCell(r.current, r.cmpCurrent)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`);
-    if (S.unassigned || S.unassignedPrev) body.push(`<tr class="text-ink-soft"><td>ไม่ระบุพื้นที่</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${curCell(S.unassigned, S.unassignedCmp)}</td><td class="num">–</td></tr>`);
+    const body = cmp.map(r => `<tr class="cmp-row${picked === r.code ? ' cmp-picked' : ''}" data-cmp-code="${r.code}" tabindex="0" title="คลิกเพื่อ${S.level === 'district' ? 'ดูรายตำบลในอำเภอนี้' : picked === r.code ? 'ยกเลิกการเลือกตำบล' : 'เลือกตำบลนี้'}"><td>${r.name}</td><td class="num">${prevCell(r.previous)}</td><td class="num">${fmt(r.current)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`);
+    if (S.unassigned || S.unassignedPrev) body.push(`<tr class="text-ink-soft"><td>ไม่ระบุพื้นที่</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td></tr>`);
     const tb = document.querySelector('#tbl-hotspot-comparison tbody');
     tb.innerHTML = body.join('');
     tb.querySelectorAll('[data-cmp-code]').forEach(tr => {
@@ -105,9 +104,9 @@ const Dashboard = (() => {
       tr.addEventListener('click', go); tr.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
     });
     el('comparison-previous-total').innerHTML = prevCell(S.totalPrev);
-    el('comparison-current-total').innerHTML = curCell(S.totalCur, S.totalCmp);
+    el('comparison-current-total').textContent = fmt(S.totalCur);
     if (el('comparison-note')) el('comparison-note').textContent = partial
-      ? `* ปีก่อนมีข้อมูลไม่ครบทุกเดือน จึงนับปีก่อนและคำนวณ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel} เทียบ ${S.curLabel}) — ตัวเลข “เทียบ” ใต้ช่วงที่เลือกคือจำนวนจุดในเดือนเหล่านั้น`
+      ? `* ปีก่อนมีข้อมูลไม่ครบทุกเดือน จึงนับปีก่อนและคำนวณ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel}) · คอลัมน์ช่วงที่เลือกแสดงจำนวนจริงทั้งหมด`
       : S.compareNone ? `ช่วงที่เลือกแสดงจำนวนจุดความร้อนจริง ${fmt(S.totalCur)} จุด · ${S.compareNote}` : '';
     el('comparison-change-total').innerHTML = `<span class="chg ${S.change.cls}">${S.change.text}</span>`;
 

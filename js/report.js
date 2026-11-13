@@ -39,7 +39,7 @@ const Report = (() => {
     const extra = S.unassigned || S.unassignedPrev ? `<tr><td class="num">–</td><td>ไม่ระบุพื้นที่</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td><td>–</td></tr>` : '';
     el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td class="num">${prevCell(r.previous)}</td><td class="num"><b>${fmt(r.current)}</b></td><td class="num">${r.change.text}</td><td><span class="lv"><i style="background:${r.level.color}"></i>${r.level.label}</span></td></tr>`).join('') + extra;
     el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th class="num">${prevCell(S.totalPrev)}</th><th class="num">${fmt(S.totalCur)}</th><th class="num">${S.change.text}</th><th></th></tr>`
-      + (partial ? `<tr><td colspan="6" class="pr-foot-note">* ปีก่อนมีข้อมูลไม่ครบทุกเดือน: นับปีก่อนและ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel} เทียบ ${S.curLabel} = ${fmt(S.totalCmp)} จุด)</td></tr>` : '');
+      + (partial ? `<tr><td colspan="6" class="pr-foot-note">* ปีก่อนมีข้อมูลไม่ครบทุกเดือน: นับปีก่อนและ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel}) · คอลัมน์ช่วงที่เลือกแสดงจำนวนจริงทั้งหมด</td></tr>` : '');
     // fit all rows on one page
     const n = rows.length + (S.unassigned || S.unassignedPrev ? 1 : 0) + (partial ? 3 : 2);
     const h = Math.min(7, 158 / n);                         // mm per row

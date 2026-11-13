@@ -274,7 +274,7 @@ const MapModule = (() => {
     let selEnd = isoDate(e0.year - 543, e0.month, new Date(Date.UTC(e0.year - 543, e0.month, 0)).getUTCDate()); if (latest && selEnd > latest) selEnd = latest;
     const lines = [
       `<div class="ap-line ap-now"><b>ช่วงที่เลือก</b> ${shortDate(isoDate(s0.year - 543, s0.month, 1))}–${shortDate(selEnd)}: <b>${fmt(sel.length)} จุด</b></div>`,
-      `<div class="ap-line ap-prev"><b>ช่วงเดียวกันปีก่อน</b> ${!W || W.none ? 'ไม่มีข้อมูล' : monthly ? `${W.prevLabel} ${fmt(prev.length)} จุด (ปีนี้ ${W.curLabel} ${fmt(curC.length)} จุด)` : `${fmt(prev.length)} จุด`} · ทั้งปีงบ ${S - 1} ${fmt(prevAll.length)} จุด${monthly || W?.none ? `<br><span class="ap-note">${W.note}</span>` : ''}</div>`
+      `<div class="ap-line ap-prev"><b>ช่วงเดียวกันปีก่อน</b> ${!W || W.none ? 'ไม่มีข้อมูล' : monthly ? `${W.prevLabel} ${fmt(prev.length)} จุด` : `${fmt(prev.length)} จุด`} · ทั้งปีงบ ${S - 1} ${fmt(prevAll.length)} จุด${monthly || W?.none ? `<br><span class="ap-note">${W.note}</span>` : ''}</div>`
     ];
     const extra = [];
     const what = monthly ? 'เดือนที่มีข้อมูลทั้งสองปี' : 'ช่วงเดียวกันปีก่อน';
