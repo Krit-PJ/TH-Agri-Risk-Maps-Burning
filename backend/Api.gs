@@ -1,16 +1,17 @@
-/* ============================== PUBLIC DATA API v1.3 (อ่านอย่างเดียว) ==============================
+/* ============================== PUBLIC DATA API v1.4 (อ่านอย่างเดียว) ==============================
  * GET <web app>/exec?action=api&fn=<fn>&...   เอกสาร: docs/API.md
  *   fn=meta                                       ข้อมูลระบบ เวอร์ชัน สูตรที่ใช้ ช่วงข้อมูล และรายการ endpoint
  *   fn=provinces                                  จังหวัดที่มีข้อมูล (จำนวนจุดพื้นที่เกษตร ช่วงวันที่)
  *   fn=risk&province=62[&level=subdistrict|district][&model=ABRI|M5|M4][&land=][&end=YYYY-MM-DD][&format=json|csv][&key=]
- *   fn=hotspots&province=62[&land=][&from=][&to=][&district=][&subdistrict=][&crop=][&format=json|csv]
+ *   fn=hotspots&province=62[&land=][&from=][&to=][&district=][&subdistrict=][&crop=][&since=YYYY-MM-DDTHH:mm:ss][&format=json|csv]
+ *       v1.4: ทุกแถวมี id (hsID) และ importedAt · since = ดึงเฉพาะจุดที่นำเข้า/ปรับปรุงหลังเวลานั้น (ซิงก์เฉพาะข้อมูลใหม่) · nextSince/totalActive สำหรับรอบถัดไป
  *   fn=compare&province=62[&from=YYYY-MM-DD][&to=YYYY-MM-DD][&level=district|subdistrict][&district=][&subdistrict=][&crop=][&land=][&format=json|csv]
  *       ตาราง “เปรียบเทียบ HS” และการ์ดสรุปเดียวกับหน้าเว็บ (ช่วงเดียวกันปีก่อน · ช่วงที่เลือก · เพิ่ม/ลด · ระดับความเสี่ยง)
  * ทุก fn ใช้ข้อมูลชุดเดียวกับหน้าเว็บ: แหล่งข้อมูลหลัก · ชุดที่เปิดใช้งาน · นโยบายดาวเทียม (hsActive_) · สูตรที่ตั้งค่า · ช่วงเริ่มต้น = ปีงบล่าสุดที่ครบแล้ว
  * ไม่มี key: ระดับความเสี่ยง (4 ระดับ) + จำนวนจุดปีงบปัจจุบัน · มี key ที่ออกโดยผู้ดูแล: คะแนน 0–100 องค์ประกอบ และเหตุผล
  * key เก็บใน Script Properties (API_KEYS) — ออก/ดู/ยกเลิกจาก Editor: createApiKey('ชื่อหน่วยงาน'), listApiKeys(), revokeApiKey('key')
  * ผลลัพธ์เป็นข้อมูลล่าสุดในฐานข้อมูลเสมอ (แคชจะถูกล้างทันทีเมื่อมีการนำเข้า/เปิด-ปิดชุดข้อมูล/เปลี่ยนตั้งค่า) */
-const API_VERSION = '1.3';   // 1.3 (v3.9.3): fn=compare (ตารางเปรียบเทียบเดียวกับหน้าเว็บ) · ตัวกรอง district/subdistrict/crop · 1.2: ABRI-2Y ค่าเริ่มต้น
+const API_VERSION = '1.4';   // 1.4 (v3.10): hotspots id/importedAt + since (ดึงเฉพาะข้อมูลใหม่) · 1.3 (v3.9.3): fn=compare (ตารางเปรียบเทียบเดียวกับหน้าเว็บ) · ตัวกรอง district/subdistrict/crop · 1.2: ABRI-2Y ค่าเริ่มต้น
 const API_DOCS = 'https://github.com/Krit-PJ/TH-Agri-Risk-Maps-Burning/blob/main/docs/API.md';
 
 function apiKeys_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('API_KEYS') || '{}'); } catch (e) { return {}; } }
@@ -31,9 +32,9 @@ function apiGet_(p) {
         satellitePolicy: SAT_POLICY_TEXT, dataMonths: dataMonths_(), model4: { version: M4_BASE.version, baseSeasons: M4_BASE.baseSeasons, satellite: M4_BASE.satellite, gridM: M4_BASE.gridM, cuts: M4_CUTS },
         source: hsSource_(), data: { first: range.first, last: range.last, provinces: prov.length },
         landTypes: LAND_TYPES, defaultLand: DEFAULT_LAND, levels: RISK_LEVEL_LABELS, detailed: detailed,
-        defaultPeriod: apiDefaultPeriod_(), sameAsWebsite: 'ทุก endpoint ใช้ข้อมูลและกติกาเดียวกับหน้าเว็บ (ชุดข้อมูลที่เปิดใช้งาน นโยบายดาวเทียม สูตรที่ตั้งค่า การเทียบช่วงเดียวกันปีก่อน)',
+        defaultPeriod: apiDefaultPeriod_(), incrementalSync: 'ดึงเฉพาะข้อมูลใหม่: fn=provinces (updatedAt เปลี่ยนเมื่อข้อมูลจังหวัดเปลี่ยน) → fn=hotspots&since=<nextSince ครั้งก่อน> แล้วรวมด้วย id · ถ้าจำนวนจุดหลังรวมไม่เท่า totalActive ให้ดึงใหม่ทั้งจังหวัด', sameAsWebsite: 'ทุก endpoint ใช้ข้อมูลและกติกาเดียวกับหน้าเว็บ (ชุดข้อมูลที่เปิดใช้งาน นโยบายดาวเทียม สูตรที่ตั้งค่า การเทียบช่วงเดียวกันปีก่อน)',
         endpoints: ['fn=meta', 'fn=provinces', 'fn=risk&province=XX&level=subdistrict|district&model=ABRI|M5|M4&land=&end=&format=json|csv&key=',
-          'fn=hotspots&province=XX&land=&from=&to=&district=&subdistrict=&crop=&format=json|csv',
+          'fn=hotspots&province=XX&land=&from=&to=&district=&subdistrict=&crop=&since=YYYY-MM-DDTHH:mm:ss&format=json|csv',
           'fn=compare&province=XX&from=&to=&level=district|subdistrict&district=&subdistrict=&crop=&land=&format=json|csv'] }), 'json');
     }
     case 'provinces': {
@@ -63,14 +64,18 @@ function apiGet_(p) {
         note: 'คะแนนเป็นลำดับเชิงเปรียบเทียบสำหรับจัดลำดับการเฝ้าระวัง ไม่ใช่ความน่าจะเป็นการเผา' }), 'json');
     }
     case 'hotspots': {
-      const h = publicHotspots_(String(p.province || ''), p.land);
+      const h = apiHotspots_(String(p.province || ''), p.land);
       if (!h.ok) return apiOut_(Object.assign(base, h), 'json');
-      const from = String(p.from || ''), to = String(p.to || ''), names = geoNames_(), f = apiFilter_(p);
-      const rows = h.rows.filter(r => (!from || r[0] >= from) && (!to || r[0] <= to) && f(r));
-      const header = ['date', 'time', 'districtCode', 'district', 'subdistrictCode', 'subdistrict', 'village', 'plantType', 'landType', 'lat', 'lng'];
-      const out = rows.map(r => [r[0], r[1], r[2], r[4] || names.district[r[2]] || '', r[3], r[5] || names.subdistrict[r[3]] || '', r[6], r[7], r[11], r[8], r[9]]);
+      const from = String(p.from || ''), to = String(p.to || ''), names = geoNames_(), f = apiFilter_(p), since = apiSince_(p.since);
+      if (p.since && !since) return apiOut_(Object.assign(base, { ok: false, error: 'invalid since (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss, Asia/Bangkok)' }), 'json');
+      const scope = h.rows.filter(r => (!from || r[0] >= from) && (!to || r[0] <= to) && f(r));   // ตามตัวกรอง (ไม่รวม since)
+      const rows = since ? scope.filter(r => r[13] > since) : scope;
+      const header = ['date', 'time', 'districtCode', 'district', 'subdistrictCode', 'subdistrict', 'village', 'plantType', 'landType', 'lat', 'lng', 'id', 'importedAt'];
+      const out = rows.map(r => [r[0], r[1], r[2], r[4] || names.district[r[2]] || '', r[3], r[5] || names.subdistrict[r[3]] || '', r[6], r[7], r[11], r[8], r[9], r[12], r[13]]);
+      const lastImportedAt = scope.reduce((m, r) => r[13] > m ? r[13] : m, '');
       if (fmt === 'csv') return apiCsv_(header, out);
-      return apiOut_(Object.assign(base, { province: h.province, source: h.source, land: h.land, from: from, to: to, district: f.district, subdistrict: f.subdistrict, crop: f.crop, satellitePolicy: SAT_POLICY_TEXT, count: out.length, columns: header, rows: out }), 'json');
+      return apiOut_(Object.assign(base, { province: h.province, source: h.source, land: h.land, from: from, to: to, district: f.district, subdistrict: f.subdistrict, crop: f.crop, since: since,
+        satellitePolicy: SAT_POLICY_TEXT, count: out.length, totalActive: scope.length, lastImportedAt: lastImportedAt, nextSince: lastImportedAt || since, columns: header, rows: out }), 'json');
     }
     case 'compare': {
       const c = apiCompare_(p);
@@ -82,6 +87,27 @@ function apiGet_(p) {
     default: return apiOut_(Object.assign(base, { ok: false, error: 'unknown fn' }), 'json');
   }
 }
+/* ---------- v1.4 จุดความร้อนพร้อม id และเวลานำเข้า (ชุดเดียวกับ publicHotspots_: แหล่งข้อมูลหลัก · ชุดที่เปิดใช้งาน · นโยบายดาวเทียม) ---------- */
+/** แถว: publicHotspots_ 12 คอลัมน์ + [id, importedAt] · importedAt = เวลาที่นำเข้าหรือปรับปรุงจุดนั้นล่าสุด (เวลาไทย yyyy-MM-ddTHH:mm:ss) */
+function apiHotspots_(prov, landIn) {
+  prov = String(prov).padStart(2, '0');
+  if (!PROVINCES[prov]) return { ok: false, error: 'invalid province' };
+  const land = landParam_(landIn), src = hsSource_(), cache = CacheService.getScriptCache();
+  const key = 'apihs1:' + prov + ':' + src + ':' + land + ':' + (cache.get('ver:' + prov) || '0');
+  const cached = cacheGet_(cache, key);
+  if (cached) return JSON.parse(cached);
+  const out = { ok: true, province: prov, source: src, land: land,
+    rows: hsActive_(prov, src).filter(r => landMatch_(land, r[15])).map(r => hsCompact_(r).concat([String(r[0]), apiStamp_(r[12])])) };
+  cachePut_(cache, key, JSON.stringify(out));
+  return out;
+}
+function apiStamp_(v) { return v instanceof Date ? Utilities.formatDate(v, 'Asia/Bangkok', "yyyy-MM-dd'T'HH:mm:ss") : String(v || '').trim().replace(' ', 'T'); }
+/** since: YYYY-MM-DD หรือ YYYY-MM-DDTHH:mm[:ss] (เวลาไทย) → yyyy-MM-ddTHH:mm:ss · ไม่ถูกต้อง = '' */
+function apiSince_(v) {
+  const m = String(v || '').trim().match(/^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  return m ? m[1] + 'T' + (m[2] || '00') + ':' + (m[3] || '00') + ':' + (m[4] || '00') : '';
+}
+
 /* ---------- ตัวกรองและตารางเปรียบเทียบ (กติกาเดียวกับหน้าเว็บ: js/dashboard.js summary() + js/geo.js compareWindow) ---------- */
 /** ตัวกรองแถว publicHotspots_: [date,time,dCode,sCode,dName,sName,village,plant,lat,lng,tsrc,land] */
 function apiFilter_(p) {

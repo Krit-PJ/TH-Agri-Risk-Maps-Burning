@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.9.3"/>
+<link rel="stylesheet" href="css/app.css?v=3.10.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -329,17 +329,17 @@
       <section data-pane="import" class="space-y-4">
         <div>
           <h3 class="text-base font-bold">นำเข้าข้อมูลจุดความร้อน (HS) จาก Excel</h3>
-          <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ขั้นตอน: เลือกไฟล์ → กด <b>ตรวจสอบไฟล์</b> → ดูผลตรวจ → กด <b>บันทึกเข้าฐานข้อมูล</b> และยืนยัน ระบบแยกข้อมูลรายจังหวัดจากคอลัมน์ Province นำเข้าทุกประเภทพื้นที่ (LandType) ตัดรายการซ้ำ และตรวจยอดกับชีตสรุป Land/hsPlant ในไฟล์ (ถ้ามี) — ไฟล์จากหน่วยงานต้นสังกัดบันทึกเป็นแหล่ง “ต้นสังกัด” ไฟล์ที่มีคอลัมน์ Source = FIRMS บันทึกเป็นแหล่ง “NASA FIRMS” (เฉพาะผู้ดูแลระดับประเทศ)</p>
+          <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ขั้นตอน: เลือกไฟล์ → กด <b>ตรวจสอบไฟล์</b> → ดูผลตรวจ → กด <b>บันทึกเข้าฐานข้อมูล</b> และยืนยัน ระบบแยกข้อมูลรายจังหวัดจากคอลัมน์ Province นำเข้าทุกประเภทพื้นที่ (LandType) ตัดรายการซ้ำ ตรวจยอดกับชีตสรุป Land/hsPlant ในไฟล์ (ถ้ามี) และเทียบกับฐานข้อมูลเพื่อนำเข้าเฉพาะข้อมูลใหม่ — ไฟล์จากหน่วยงานต้นสังกัดบันทึกเป็นแหล่ง “ต้นสังกัด” ไฟล์ที่มีคอลัมน์ Source = FIRMS บันทึกเป็นแหล่ง “NASA FIRMS” (เฉพาะผู้ดูแลระดับประเทศ)</p>
         </div>
         <div id="import-scope" class="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800"></div>
         <div><label class="field-label" for="import-file">ไฟล์ข้อมูล</label><input id="import-file" type="file" accept=".xlsx,.xls,.csv" class="field w-full file:mr-3 file:rounded file:border-0 file:bg-brand-50 file:px-2 file:py-1 file:text-brand-800"/></div>
         <div class="grid gap-3 rounded-xl border border-line p-3 sm:grid-cols-3">
           <div><label class="field-label" for="import-from">นำเข้าเฉพาะวันที่ตั้งแต่ (ไม่บังคับ)</label><input id="import-from" type="date" class="field w-full"/></div>
           <div><label class="field-label" for="import-to">ถึงวันที่ (ไม่บังคับ)</label><input id="import-to" type="date" class="field w-full"/></div>
-          <div><span class="field-label">จุดที่มี hsID อยู่แล้ว</span>
-            <label class="chip mb-1"><input type="radio" name="import-mode" value="skip" checked/> ข้าม (ไม่บันทึกซ้ำ)</label>
-            <label class="chip"><input type="radio" name="import-mode" value="upsert"/> ปรับปรุงด้วยไฟล์นี้ (upsert)</label></div>
-          <p class="text-xs text-ink-soft sm:col-span-3">ใช้ช่วงวันที่เมื่อต้องการนำเข้าเพียงบางช่วงของไฟล์ (เช่น ไฟล์ดาวเทียม Suomi-NPP ถึง 31 ธ.ค. 2568 และไฟล์ NOAA-20 ตั้งแต่ 1 ม.ค. 2569) · upsert: จุดเดิมจะถูกปรับปรุงค่าและย้ายมาอยู่ในชุดข้อมูลนี้</p>
+          <div><span class="field-label">วิธีนำเข้า</span>
+            <label class="chip mb-1"><input type="radio" name="import-mode" value="skip" checked/> นำเข้าเฉพาะข้อมูลใหม่ (แนะนำ)</label>
+            <label class="chip"><input type="radio" name="import-mode" value="upsert"/> ปรับปรุงด้วยไฟล์นี้ทั้งหมด (upsert)</label></div>
+          <p class="text-xs text-ink-soft sm:col-span-3">นำเข้าเฉพาะข้อมูลใหม่ (ค่าเริ่มต้น): ตอนตรวจสอบไฟล์ ระบบเทียบกับฐานข้อมูล แยกเป็น ข้อมูลใหม่ / มีแล้ว / มีแล้วแต่ค่าต่างจากเดิม และบันทึกเฉพาะข้อมูลใหม่ (เลือกปรับปรุงจุดที่ค่าเปลี่ยนเพิ่มได้) — จุดเดียวกัน = hsID ตรงกัน หรือ วันที่ เวลา และพิกัด (ห่างไม่เกิน ~55 ม.) ตรงกัน · upsert: ทุกจุดในไฟล์จะถูกปรับปรุงค่าและย้ายมาอยู่ในชุดข้อมูลนี้ · ใช้ช่วงวันที่เมื่อต้องการนำเข้าเพียงบางช่วงของไฟล์ (เช่น ไฟล์ดาวเทียม Suomi-NPP ถึง 31 ธ.ค. 2568 และไฟล์ NOAA-20 ตั้งแต่ 1 ม.ค. 2569)</p>
         </div>
         <div id="import-provinces" class="hidden"></div>
         <div class="flex flex-wrap gap-2">
@@ -510,13 +510,13 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.9.3"></script>
-<script src="js/api.js?v=3.9.3"></script>
-<script src="js/geo.js?v=3.9.3"></script>
-<script src="js/map.js?v=3.9.3"></script>
-<script src="js/dashboard.js?v=3.9.3"></script>
-<script src="js/report.js?v=3.9.3"></script>
-<script src="js/admin.js?v=3.9.3"></script>
-<script src="js/app.js?v=3.9.3"></script>
+<script src="js/config.js?v=3.10.0"></script>
+<script src="js/api.js?v=3.10.0"></script>
+<script src="js/geo.js?v=3.10.0"></script>
+<script src="js/map.js?v=3.10.0"></script>
+<script src="js/dashboard.js?v=3.10.0"></script>
+<script src="js/report.js?v=3.10.0"></script>
+<script src="js/admin.js?v=3.10.0"></script>
+<script src="js/app.js?v=3.10.0"></script>
 </body>
 </html>

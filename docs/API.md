@@ -1,4 +1,4 @@
-# TH Agri-Risk Map Burning — Public Data API v1.3
+# TH Agri-Risk Map Burning — Public Data API v1.4
 
 API อ่านอย่างเดียวสำหรับระบบอื่นที่ต้องการนำข้อมูลจุดความร้อนและระดับความเสี่ยงไปใช้ ข้อมูลเป็นปัจจุบันเสมอ
 แคชจะถูกล้างทันทีเมื่อมีการนำเข้า เปิด/ปิดชุดข้อมูล หรือเปลี่ยนการตั้งค่า
@@ -23,7 +23,7 @@ https://script.google.com/macros/s/AKfycbzAgSOxgQsaOx9bqBYM53KXFzk1QKsop46HZeINg
 | `meta` | – | เวอร์ชัน API, สูตรที่ใช้งานอยู่ (`abri`: เวอร์ชัน จุดตัด เกณฑ์ขั้นต่ำ ปีงบที่ประเมิน · `model5`), ช่วงข้อมูล, เดือนที่มีข้อมูล (`dataMonths`), นโยบายดาวเทียม, ประเภทพื้นที่, ระดับ, รายการ endpoint |
 | `provinces` | `format` | จังหวัดที่มีข้อมูล: จำนวนจุดพื้นที่เกษตร วันแรก/วันล่าสุด |
 | `risk` | `province` (จำเป็น), `level=subdistrict\|district`, `model=ABRI\|M5\|M4`, `land`, `end`, `format`, `key` | ระดับความเสี่ยงรายตำบล/อำเภอ |
-| `hotspots` | `province` (จำเป็น), `land`, `from`, `to`, `district`, `subdistrict`, `crop`, `format` | จุดความร้อนรายจุด (แหล่งข้อมูลหลัก ชุดที่เปิดใช้งาน) |
+| `hotspots` | `province` (จำเป็น), `land`, `from`, `to`, `district`, `subdistrict`, `crop`, `since`, `format` | จุดความร้อนรายจุด (แหล่งข้อมูลหลัก ชุดที่เปิดใช้งาน) พร้อม `id` และ `importedAt` · `since` = **ดึงเฉพาะข้อมูลใหม่** (v1.4) |
 | `compare` | `province` (จำเป็น), `from`, `to`, `level=district\|subdistrict`, `district`, `subdistrict`, `crop`, `land`, `format` | **ตาราง “เปรียบเทียบ HS” และการ์ดสรุปเดียวกับหน้าเว็บ**: ช่วงเดียวกันปีก่อน · ช่วงที่เลือก · เพิ่ม/ลด · ระดับความเสี่ยง (v1.3) |
 
 ### ตัวอย่าง
@@ -35,6 +35,7 @@ https://script.google.com/macros/s/AKfycbzAgSOxgQsaOx9bqBYM53KXFzk1QKsop46HZeINg
 ?action=api&fn=risk&province=62&level=district&format=csv
 ?action=api&fn=hotspots&province=62&from=2026-10-01&to=2026-11-30&format=csv
 ?action=api&fn=hotspots&province=58&land=ALL
+?action=api&fn=hotspots&province=62&land=ALL&since=2026-11-14T08:00:00
 ?action=api&fn=compare&province=62
 ?action=api&fn=compare&province=62&from=2026-01-01&to=2026-11-30&format=csv
 ?action=api&fn=compare&province=62&district=6201&crop=นาข้าว
@@ -126,6 +127,21 @@ Model 4 ใช้กับ `land` = พื้นที่เกษตร / เ�
 | `levelIndex`, `level` | ระดับความเสี่ยงตามสูตรที่ตั้งค่า ณ วันสิ้นสุดช่วง (`riskModel`, `assessmentYear`) |
 
 CSV มีแถว “ไม่ระบุพื้นที่” (ถ้ามี) และแถว “รวม” ท้ายตาราง
+
+## fn=hotspots — ดึงเฉพาะข้อมูลใหม่ (v1.4)
+
+ระบบภายนอกที่เก็บสำเนาข้อมูลไว้เอง ไม่ต้องดึงทั้งจังหวัดทุกครั้ง ใช้ `since` ดึงเฉพาะจุดที่นำเข้าหรือปรับปรุงหลังเวลาที่ระบุ
+
+* ทุกแถวมีคอลัมน์ต่อท้าย `id` (hsID — ใช้เป็นกุญแจรวมข้อมูล) และ `importedAt` (เวลาไทยที่นำเข้าหรือปรับปรุงจุดนั้นล่าสุด `YYYY-MM-DDTHH:mm:ss`) — คอลัมน์เดิมอยู่ตำแหน่งเดิม
+* `since` = `YYYY-MM-DD` หรือ `YYYY-MM-DDTHH:mm:ss` (เวลาไทย) → คืนเฉพาะแถวที่ `importedAt` หลังเวลานั้น (ใช้ร่วมกับตัวกรองอื่นได้)
+* ส่วนหัว JSON: `nextSince` (ใช้เป็น `since` รอบถัดไป), `lastImportedAt`, `totalActive` (จำนวนจุดทั้งหมดตามตัวกรองเดียวกันแต่ไม่จำกัด `since`)
+
+ขั้นตอนซิงก์ที่แนะนำ
+
+1. ครั้งแรก: `fn=hotspots&province=62&land=ALL` เก็บทุกแถว และเก็บ `nextSince`
+2. รอบถัดไป: `fn=provinces` — ถ้า `updatedAt` ของจังหวัดไม่เปลี่ยน แปลว่าไม่มีอะไรเปลี่ยน ไม่ต้องดึง
+3. ถ้าเปลี่ยน: `fn=hotspots&province=62&land=ALL&since=<nextSince เดิม>` แล้วรวมเข้ากับข้อมูลเดิมด้วย `id` (มีแล้ว = แทนที่ · ยังไม่มี = เพิ่ม) และเก็บ `nextSince` ใหม่
+4. ตรวจยอด: จำนวนแถวหลังรวมต้องเท่า `totalActive` — ถ้าไม่เท่า (เช่น ผู้ดูแลปิดใช้งานหรือลบชุดข้อมูล) ให้ดึงทั้งจังหวัดใหม่ตามข้อ 1
 
 ## API key (ข้อมูลคะแนนละเอียด)
 

@@ -594,17 +594,72 @@ const Admin = (() => {
     if (!records.length) error = whole ? 'ไม่มีจุดที่ผ่านเกณฑ์ (ชนิดพืช/วันที่/พิกัด)' : `ไม่มีจุดใน${rangeText(opts)}`;
     else if (refMatch === false) error = `ยอดพื้นที่เกษตร ${fmt(agriN)} จุด ไม่ตรงกับชีต ${ref.sheet} (${fmt(ref.total)} จุด)`;
     else if (landMatch === false) error = `ยอด ${fmt(records.length)} จุด ไม่ตรงกับชีต ${landRef.sheet} (${fmt(landRef.total)} จุด) — ตรวจสอบรายละเอียดรายประเภทพื้นที่`;
-    return { code, name: provinceName, records, qa, byPlant, byMonth, byDistrict, byLand, fileByLand, ref, refMatch, landRef, landMatch, whole, first: dates[0], last: dates[dates.length - 1], error };
+    // v3.10 ตรวจกับฐานข้อมูล: แยกจุดใหม่ / มีแล้ว / มีแล้วแต่ค่าต่างจากเดิม (กติกาเดียวกับ hsMatcher_ ใน backend/Code.gs)
+    let db = null;
+    if (records.length && !error) {
+      try { db = matchExisting(records, await Api.post('hs_check', { provinceCode: code }), imp.source); }
+      catch (err) { db = { error: err.message }; }
+    }
+    return { code, name: provinceName, records, qa, byPlant, byMonth, byDistrict, byLand, fileByLand, ref, refMatch, landRef, landMatch, whole, first: dates[0], last: dates[dates.length - 1], error, db };
+  }
+
+  /* ---------- v3.10 นำเข้าเฉพาะข้อมูลใหม่: เทียบไฟล์กับข้อมูลที่มีอยู่ในฐานข้อมูล ----------
+   * จุดเดียวกัน = hsID ตรงกันและพิกัดใกล้กัน · หรือแหล่งข้อมูล วันที่ เวลาเดียวกันและพิกัดห่างไม่เกิน nearDeg (≈ 55 ม.) · หรือ hsID ตรงกันแต่พิกัดต่างกัน (ค่าเปลี่ยน) */
+  const DIFF_LABEL = { date: 'วันที่', time: 'เวลา', coord: 'พิกัด', dCode: 'อำเภอ', sCode: 'ตำบล', village: 'หมู่บ้าน', plant: 'ชนิดพืช', land: 'ประเภทพื้นที่', sat: 'ดาวเทียม', source: 'แหล่งข้อมูล' };
+  const cleanText = v => String(v ?? '').replace(/[<>]/g, '').replace(/^[=+\-@]+/, '').trim().slice(0, 200);   // เหมือน clean_() ของ backend
+  function matchExisting(records, chk, source) {
+    const ix = Object.fromEntries(chk.cols.map((c, i) => [c, i])), NEAR = Number(chk.nearDeg) || 0.0005;
+    const byId = new Map(), byKey = new Map();
+    const add = e => { if (e.id && !byId.has(e.id)) byId.set(e.id, e); const k = `${e.src}|${e.date}`; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(e); };
+    chk.rows.forEach(x => add({ x, id: String(x[ix.id]), src: x[ix.source], date: x[ix.date], time: x[ix.time] || '', lat: +x[ix.lat], lng: +x[ix.lng] }));
+    const near = (e, r) => Math.abs(e.lat - r.lat) <= NEAR && Math.abs(e.lng - r.lng) <= NEAR;
+    const find = r => {
+      const e = byId.get(r.id); if (e && near(e, r)) return e;
+      for (const c of byKey.get(`${source}|${r.date}`) || []) if ((!r.time || !c.time || c.time === r.time) && near(c, r)) return c;
+      return e || null;
+    };
+    const fresh = [], changed = [], diffCount = {}, byMonth = {}, byLand = {};
+    let same = 0, inactive = 0, dupInFile = 0; const dupIds = new Set();
+    for (const r of records) {
+      const e = find(r);
+      if (!e) { fresh.push(r); add({ isNew: true, id: r.id, src: source, date: r.date, time: r.time || '', lat: r.lat, lng: r.lng }); byMonth[r.date.slice(0, 7)] = (byMonth[r.date.slice(0, 7)] || 0) + 1; byLand[r.land] = (byLand[r.land] || 0) + 1; continue; }
+      if (e.isNew || e.used) { dupInFile++; dupIds.add(r.id); continue; }   // ซ้ำกับจุดอื่นในไฟล์เดียวกัน (วันที่ เวลา พิกัดเดียวกัน)
+      e.used = true;
+      const x = e.x;
+      if (!x[ix.active]) inactive++;
+      const d = [];
+      if (r.date !== x[ix.date]) d.push('date');
+      if ((r.time || '') !== (x[ix.time] || '')) d.push('time');
+      if (Math.abs(r.lat - x[ix.lat]) > 2e-6 || Math.abs(r.lng - x[ix.lng]) > 2e-6) d.push('coord');
+      if (String(r.dCode || '') !== String(x[ix.dCode] || '')) d.push('dCode');
+      if (String(r.sCode || '') !== String(x[ix.sCode] || '')) d.push('sCode');
+      if (cleanText(r.village) !== String(x[ix.village] || '')) d.push('village');
+      if (r.plant !== x[ix.plant]) d.push('plant');
+      if (r.land !== x[ix.land]) d.push('land');
+      if (r.sat && x[ix.satellite] && cleanText(r.sat) !== x[ix.satellite]) d.push('sat');
+      if (source !== x[ix.source]) d.push('source');
+      if (d.length) { changed.push({ ...r, id: String(x[ix.id]) }); d.forEach(k => { diffCount[k] = (diffCount[k] || 0) + 1; }); }
+      else same++;
+    }
+    const fd = fresh.map(r => r.date).sort();
+    return { fresh, changed, same, inactive, dupInFile, dupIds, diffCount, byMonth, byLand, existing: chk.rows.length, checkedAt: chk.checkedAt, first: fd[0], last: fd[fd.length - 1] };
+  }
+  /** จุดที่จะส่งบันทึก และโหมดที่ส่ง (skip = นำเข้าเฉพาะจุดใหม่ · upsert = ปรับปรุงจุดเดิมด้วย) */
+  function importPlan(r, o) {
+    if (o.mode === 'upsert') return { send: r.db && !r.db.error ? r.records.filter(x => !r.db.dupIds.has(x.id)) : r.records, mode: 'upsert' };
+    if (!r.db || r.db.error) return { send: r.records, mode: 'skip' };   // ตรวจกับฐานข้อมูลไม่สำเร็จ: ส่งทั้งหมดให้ backend ตัดจุดซ้ำ (แบบเดิม)
+    const upd = imp.updateChanged ? r.db.changed : [];
+    return { send: r.db.fresh.concat(upd), mode: upd.length ? 'upsert' : 'skip' };
   }
 
   const landList = o => LANDS.concat(Object.keys(o).filter(k => !LANDS.includes(k))).filter(l => o[l]).map(l => `${esc(l)} ${fmt(o[l])}`).join(' · ') || '-';
   function provinceDetail(r) {
     const chk = (m, sheet, total) => m === null ? '' : `<p class="${m ? 'text-brand-700' : 'text-red-700'} font-semibold">ตรวจยอดกับชีต ${esc(sheet)}: ${m ? 'ตรงกัน' : 'ไม่ตรงกัน'} (อ้างอิง ${fmt(total)} จุด)</p>`;
-    return `<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    return `${dbDetail(r)}<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
         ${[[fmt(r.qa.accepted), 'จุดที่ผ่านเกณฑ์'], [fmt(r.qa.duplicates), 'hsID ซ้ำ (ตัดออก)'], [fmt(r.qa.noCoordinates), 'ไม่มีพิกัด'], [fmt(r.qa.outside), 'อยู่นอกขอบเขตจังหวัด (ยังนำเข้า)']].map(([v, l]) => `<div class="rounded-lg bg-paper p-2.5"><div class="text-lg font-bold">${v}</div><div class="text-xs text-ink-soft">${l}</div></div>`).join('')}
       </div>
       <p>ช่วงวันที่ ${Geo.thaiDate(r.first)} – ${Geo.thaiDate(r.last)} · แถวของจังหวัดนี้ในไฟล์ ${fmt(r.qa.input)} แถว${r.qa.outOfRange ? ` (นอกช่วงวันที่ที่เลือก ${fmt(r.qa.outOfRange)})` : ''}${r.qa.wrongPlant ? ` · ชนิดพืชไม่อยู่ในเกณฑ์ ${fmt(r.qa.wrongPlant)}` : ''}${r.qa.wrongDate ? ` · วันที่ไม่ถูกต้อง ${fmt(r.qa.wrongDate)}` : ''}</p>
-      <p><b>ประเภทพื้นที่ (ที่จะนำเข้า):</b> ${landList(r.byLand)}</p>
+      <p><b>ประเภทพื้นที่ (ทั้งไฟล์):</b> ${landList(r.byLand)}</p>
       <p><b>ชนิดพืช:</b> ${Object.entries(r.byPlant).map(([k, v]) => `${k} ${fmt(v)}`).join(' · ')}</p>
       <p><b>รายเดือน:</b> ${Object.entries(r.byMonth).sort().map(([k, v]) => `${CONFIG.MONTH_SHORT[+k.slice(5)]} ${+k.slice(0, 4) + 543} ${fmt(v)}`).join(' · ')}</p>
       <p><b>รายอำเภอ:</b> ${Object.entries(r.byDistrict).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${fmt(v)}`).join(' · ')}</p>
@@ -612,67 +667,106 @@ const Admin = (() => {
       ${!r.whole && (r.ref || r.landRef) ? `<p class="text-ink-soft">จำกัดช่วงวันที่ จึงไม่เทียบยอดกับชีตสรุปของไฟล์ (ชีตสรุปนับทั้งไฟล์) — ระบบจะตรวจยอดกับฐานข้อมูลหลังบันทึก</p>` : ''}
       ${!r.ref && !r.landRef ? '<p class="text-ink-soft">ไม่พบชีตสรุป (Land / hsPlant) สำหรับตรวจยอด — ระบบจะตรวจยอดกับฐานข้อมูลหลังบันทึก</p>' : ''}`;
   }
+  const kpiBox = (v, l, cls = '') => `<div class="rounded-lg bg-paper p-2.5"><div class="text-lg font-bold ${cls}">${v}</div><div class="text-xs text-ink-soft">${l}</div></div>`;
+  const diffText = dc => Object.entries(dc).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${DIFF_LABEL[k] || k} ${fmt(v)}`).join(' · ');
+  function dbDetail(r) {
+    const db = r.db; if (!db) return '';
+    if (db.error) return `<p class="font-semibold text-amber-700">ตรวจกับฐานข้อมูลไม่สำเร็จ (${esc(db.error)}) — ถ้าบันทึก ระบบจะส่งทุกจุดและตัดจุดที่มีอยู่แล้วที่เซิร์ฟเวอร์ (ไม่บันทึกซ้ำ)</p>`;
+    const upsertAll = imp.opts?.mode === 'upsert';
+    return `<div class="space-y-2 rounded-lg border border-brand-100 bg-brand-50/40 p-3">
+        <p class="font-semibold text-brand-800">เทียบกับฐานข้อมูล (มีอยู่ ${fmt(db.existing)} จุด · ตรวจเมื่อ ${esc(String(db.checkedAt || '').slice(11, 16))} น.)</p>
+        <div class="grid grid-cols-3 gap-2">${kpiBox(fmt(db.fresh.length), upsertAll ? 'ข้อมูลใหม่' : 'ข้อมูลใหม่ (จะนำเข้า)', 'text-brand-700')}${kpiBox(fmt(db.same), 'มีในฐานข้อมูลแล้ว ค่าเหมือนเดิม')}${kpiBox(fmt(db.changed.length), 'มีแล้ว แต่ค่าต่างจากเดิม', db.changed.length ? 'text-amber-700' : '')}</div>
+        ${db.fresh.length ? `<p><b>ข้อมูลใหม่:</b> ${Geo.thaiDate(db.first)} – ${Geo.thaiDate(db.last)} · ${Object.entries(db.byMonth).sort().map(([k, v]) => `${CONFIG.MONTH_SHORT[+k.slice(5)]} ${+k.slice(0, 4) + 543} ${fmt(v)}`).join(' · ')}</p><p><b>ประเภทพื้นที่ (ข้อมูลใหม่):</b> ${landList(db.byLand)}</p>` : '<p class="text-brand-700">ไม่มีข้อมูลใหม่ — ฐานข้อมูลมีทุกจุดในไฟล์แล้ว</p>'}
+        ${db.changed.length ? `<p class="text-amber-800"><b>ค่าที่ต่างจากเดิม:</b> ${diffText(db.diffCount)}${upsertAll ? '' : ' — ถ้าต้องการใช้ค่าจากไฟล์นี้ ให้เลือก “ปรับปรุงจุดที่ค่าเปลี่ยน” ด้านบน'}</p>` : ''}
+        ${db.dupInFile ? `<p class="text-ink-soft">จุดซ้ำในไฟล์ (วันที่ เวลา พิกัดเดียวกันแต่ hsID ต่างกัน) ${fmt(db.dupInFile)} จุด — นับครั้งเดียว</p>` : ''}
+        ${db.inactive ? `<p class="text-amber-700">จุดที่มีอยู่แล้ว ${fmt(db.inactive)} จุดอยู่ในชุดข้อมูลที่ปิดใช้งาน จึงยังไม่แสดงบนแผนที่ — เปิดใช้งานได้ที่แท็บ “ชุดข้อมูล”</p>` : ''}
+      </div>`;
+  }
 
   function renderImportPreview(codes) {
     const results = codes.map(c => imp.results[c]).filter(Boolean);
     const valid = results.filter(r => !r.error), blocked = results.filter(r => r.error);
     const total = valid.reduce((a, r) => a + r.records.length, 0);
-    const box = el('import-preview'), o = imp.opts;
-    const head = `<p class="text-sm text-ink-soft">ตัวเลือก: ${rangeText(o)} · จุดที่มีอยู่แล้ว: ${o.mode === 'upsert' ? '<b>ปรับปรุงด้วยไฟล์นี้ (upsert)</b>' : 'ข้าม'}</p>`;
+    const box = el('import-preview'), o = imp.opts, upsertAll = o.mode === 'upsert';
+    const sumDb = k => valid.reduce((a, r) => a + (r.db && !r.db.error ? (Array.isArray(r.db[k]) ? r.db[k].length : r.db[k]) : 0), 0);
+    const nFresh = sumDb('fresh'), nSame = sumDb('same'), nChanged = sumDb('changed'), dbFail = valid.filter(r => r.db?.error).length;
+    const plans = valid.map(r => ({ r, ...importPlan(r, o) })), nSend = plans.reduce((a, p) => a + p.send.length, 0);
+    const nUpd = upsertAll ? 0 : plans.reduce((a, p) => a + (p.mode === 'upsert' ? p.r.db.changed.length : 0), 0);
+    imp.plans = plans;
+    const head = `<p class="text-sm text-ink-soft">ตัวเลือก: ${rangeText(o)} · วิธีนำเข้า: ${upsertAll ? '<b>ปรับปรุงด้วยไฟล์นี้ทั้งหมด (upsert)</b>' : '<b>นำเข้าเฉพาะข้อมูลใหม่</b> (ตรวจกับฐานข้อมูลแล้ว)'}</p>
+      ${!upsertAll && nChanged ? `<label class="chip w-fit border-amber-300 bg-amber-50"><input type="checkbox" id="import-update-changed" ${imp.updateChanged ? 'checked' : ''}/> ปรับปรุงจุดที่ค่าเปลี่ยน ${fmt(nChanged)} จุดด้วยค่าจากไฟล์นี้ (ย้ายเข้าชุดข้อมูลนี้)</label>` : ''}`;
     if (results.length === 1) {
       const r = results[0];
       box.innerHTML = head + `<div class="space-y-3 rounded-xl border border-line p-4 text-sm"><p class="font-bold text-brand-800">จังหวัด${esc(r.name)}</p>${r.records.length ? provinceDetail(r) : ''}${r.error ? `<p class="font-semibold text-red-700">${esc(r.error)}</p>` : ''}${imp.otherNote ? `<p class="text-ink-soft">${esc(imp.otherNote)}</p>` : ''}</div>`;
     } else {
       const tot = {}; valid.forEach(r => Object.entries(r.byLand).forEach(([k, v]) => { tot[k] = (tot[k] || 0) + v; }));
       const stat = (m, ok) => m === null ? '<span class="text-ink-mute">–</span>' : m ? '<span class="text-brand-700">ตรงกัน</span>' : '<span class="text-red-700">ไม่ตรงกัน</span>';
-      box.innerHTML = head + `<div class="overflow-x-auto rounded-xl border border-line"><table class="data-table"><thead><tr><th>จังหวัด</th><th class="num">ผ่านเกณฑ์</th><th class="num">พื้นที่เกษตร</th><th class="num">ซ้ำ</th><th class="num">ไม่มีพิกัด</th><th>ช่วงวันที่</th><th>ตรวจยอด Land / hsPlant</th><th>สถานะ</th></tr></thead><tbody>${results.map(r => `<tr>
-          <td class="font-semibold">${esc(r.name)}</td><td class="num">${fmt(r.records.length)}</td><td class="num">${fmt(r.byLand?.[CONFIG.DEFAULT_LAND] || 0)}</td><td class="num">${fmt(r.qa?.duplicates)}</td><td class="num">${fmt(r.qa?.noCoordinates)}</td>
+      const dbCell = (r, k) => !r.db ? '-' : r.db.error ? '<span class="text-amber-700">ตรวจไม่ได้</span>' : fmt(Array.isArray(r.db[k]) ? r.db[k].length : r.db[k]);
+      const pill = r => r.error ? `<span class="text-red-700">${esc(r.error)}</span>` : (!upsertAll && r.db && !r.db.error && !importPlan(r, o).send.length) ? '<span class="status-pill bg-paper text-ink-soft">เป็นปัจจุบันแล้ว</span>' : '<span class="status-pill bg-brand-50 text-brand-700">พร้อมนำเข้า</span>';
+      box.innerHTML = head + `<div class="overflow-x-auto rounded-xl border border-line"><table class="data-table"><thead><tr><th>จังหวัด</th><th class="num">ผ่านเกณฑ์</th><th class="num">ข้อมูลใหม่</th><th class="num">มีแล้ว</th><th class="num">ค่าเปลี่ยน</th><th class="num">พื้นที่เกษตร</th><th class="num">ซ้ำ</th><th class="num">ไม่มีพิกัด</th><th>ช่วงวันที่</th><th>ตรวจยอด Land / hsPlant</th><th>สถานะ</th></tr></thead><tbody>${results.map(r => `<tr>
+          <td class="font-semibold">${esc(r.name)}</td><td class="num">${fmt(r.records.length)}</td><td class="num font-semibold text-brand-700">${dbCell(r, 'fresh')}</td><td class="num">${dbCell(r, 'same')}</td><td class="num">${dbCell(r, 'changed')}</td><td class="num">${fmt(r.byLand?.[CONFIG.DEFAULT_LAND] || 0)}</td><td class="num">${fmt(r.qa?.duplicates)}</td><td class="num">${fmt(r.qa?.noCoordinates)}</td>
           <td class="whitespace-nowrap text-xs">${r.first ? `${Geo.thaiDate(r.first)} – ${Geo.thaiDate(r.last)}` : '-'}</td>
           <td class="text-xs">${r.qa ? `${stat(r.landMatch)} / ${stat(r.refMatch)}` : '-'}</td>
-          <td class="text-xs">${r.error ? `<span class="text-red-700">${esc(r.error)}</span>` : '<span class="status-pill bg-brand-50 text-brand-700">พร้อมนำเข้า</span>'}</td></tr>`).join('')}</tbody>
-          <tfoot><tr><th>รวม ${valid.length} จังหวัดที่พร้อม</th><th class="num">${fmt(total)}</th><th class="num">${fmt(tot[CONFIG.DEFAULT_LAND] || 0)}</th><th colspan="5"></th></tr></tfoot></table></div>
+          <td class="text-xs">${pill(r)}</td></tr>`).join('')}</tbody>
+          <tfoot><tr><th>รวม ${valid.length} จังหวัดที่พร้อม</th><th class="num">${fmt(total)}</th><th class="num">${fmt(nFresh)}</th><th class="num">${fmt(nSame)}</th><th class="num">${fmt(nChanged)}</th><th class="num">${fmt(tot[CONFIG.DEFAULT_LAND] || 0)}</th><th colspan="5"></th></tr></tfoot></table></div>
         <p class="text-sm"><b>รวมรายประเภทพื้นที่:</b> ${landList(tot)}</p>
         ${results.filter(r => r.records.length).map(r => `<details class="rounded-xl border border-line text-sm"><summary class="cursor-pointer px-4 py-2.5 font-semibold">รายละเอียดจังหวัด${esc(r.name)}</summary><div class="space-y-3 px-4 pb-4">${provinceDetail(r)}</div></details>`).join('')}`;
     }
-    const btn = el('btn-import-save');
-    btn.disabled = !valid.length;
-    btn.textContent = valid.length > 1 ? `บันทึก ${valid.length} จังหวัด (${fmt(total)} จุด)` : valid.length ? `บันทึกจังหวัด${valid[0].name} (${fmt(total)} จุด)` : 'บันทึกเข้าฐานข้อมูล';
+    const upd = el('import-update-changed');
+    if (upd) upd.addEventListener('change', () => { imp.updateChanged = upd.checked; renderImportPreview(codes); });
+    const btn = el('btn-import-save'), where = valid.length > 1 ? `${valid.length} จังหวัด` : valid.length ? `จังหวัด${valid[0].name}` : '';
+    btn.disabled = !nSend;
+    btn.textContent = !valid.length ? 'บันทึกเข้าฐานข้อมูล' : upsertAll ? `บันทึก${valid.length > 1 ? ' ' : ''}${where} (${fmt(nSend)} จุด)` : !nSend ? 'ไม่มีข้อมูลใหม่ให้นำเข้า'
+      : nSend === nUpd ? `ปรับปรุงจุดที่ค่าเปลี่ยน ${fmt(nUpd)} จุด`
+      : `นำเข้าเฉพาะข้อมูลใหม่${valid.length > 1 ? ` ${plans.filter(p => p.send.length).length} จังหวัด` : ''} ${fmt(nSend - nUpd)} จุด${nUpd ? ` + ปรับปรุง ${fmt(nUpd)} จุด` : ''}`;
+    const blockedText = blocked.length ? ` · ข้าม ${blocked.length} จังหวัดที่ไม่ผ่าน (${blocked.map(b => b.name).join(', ')})` : '';
     if (!valid.length) setMsg(el('import-status'), 'ไม่มีจังหวัดที่ผ่านการตรวจสอบ จึงยังบันทึกไม่ได้', 'error');
-    else setMsg(el('import-status'), `แหล่งข้อมูล: ${SRC_LABEL[imp.source]} · ตรวจสอบผ่าน ${fmt(total)} จุด — กด "บันทึกเข้าฐานข้อมูล" เพื่อนำเข้า${blocked.length ? ` · ข้าม ${blocked.length} จังหวัดที่ไม่ผ่าน (${blocked.map(b => b.name).join(', ')})` : ''} ${o.mode === 'upsert' ? 'จุดที่มีอยู่แล้วจะถูกปรับปรุงด้วยไฟล์นี้' : 'ระบบไม่บันทึกจุดที่มีอยู่แล้วซ้ำ'}`, blocked.length ? 'warn' : 'success');
+    else if (upsertAll) setMsg(el('import-status'), `แหล่งข้อมูล: ${SRC_LABEL[imp.source]} · ตรวจสอบผ่าน ${fmt(total)} จุด (ใหม่ ${fmt(nFresh)} · มีแล้ว ${fmt(nSame + nChanged)}) — กด "บันทึกเข้าฐานข้อมูล" เพื่อนำเข้า จุดที่มีอยู่แล้วจะถูกปรับปรุงด้วยไฟล์นี้${blockedText}`, blocked.length ? 'warn' : 'success');
+    else if (!nSend) setMsg(el('import-status'), `แหล่งข้อมูล: ${SRC_LABEL[imp.source]} · ตรวจสอบผ่าน ${fmt(total)} จุด — ฐานข้อมูลเป็นปัจจุบันแล้ว: ทุกจุดในไฟล์มีอยู่แล้ว ไม่ต้องนำเข้า${nChanged ? ` (มี ${fmt(nChanged)} จุดที่ค่าต่างจากเดิม เลือก “ปรับปรุงจุดที่ค่าเปลี่ยน” หากต้องการใช้ค่าจากไฟล์นี้)` : ''}${blockedText}`, blocked.length ? 'warn' : 'success');
+    else setMsg(el('import-status'), `แหล่งข้อมูล: ${SRC_LABEL[imp.source]} · ตรวจสอบผ่าน ${fmt(total)} จุด · เทียบกับฐานข้อมูล: ข้อมูลใหม่ ${fmt(nFresh)} · มีแล้ว ${fmt(nSame)}${nChanged ? ` · ค่าเปลี่ยน ${fmt(nChanged)}` : ''}${dbFail ? ` · ตรวจไม่ได้ ${dbFail} จังหวัด (จะส่งทั้งหมดและตัดจุดซ้ำที่เซิร์ฟเวอร์)` : ''} — กดปุ่มด้านล่างเพื่อนำเข้าเฉพาะข้อมูลใหม่${blockedText}`, blocked.length || dbFail ? 'warn' : 'success');
   }
 
   async function saveImport() {
     if (!imp) return;
     const valid = [...imp.selected].map(c => imp.results[c]).filter(r => r && !r.error);
     if (!valid.length) return;
-    const o = imp.opts || importOpts(), upsert = o.mode === 'upsert';
-    const n = valid.reduce((a, r) => a + r.records.length, 0);
-    if (!await confirmBox(`นำเข้าข้อมูลจุดความร้อน ${fmt(n)} จุด (${SRC_LABEL[imp.source]} · ${rangeText(o)}) ${valid.length > 1 ? `จาก ${valid.length} จังหวัด` : `จังหวัด${valid[0].name}`} เข้าฐานข้อมูล? ${upsert ? 'จุดที่มีอยู่แล้วจะถูกปรับปรุงด้วยข้อมูลไฟล์นี้' : 'จุดที่มีอยู่แล้วจะไม่บันทึกซ้ำ'}`, { yes: 'นำเข้าข้อมูล' })) return;
+    const o = imp.opts || importOpts(), upsertAll = o.mode === 'upsert';
+    const plans = valid.map(r => ({ r, ...importPlan(r, o) })), n = plans.reduce((a, p) => a + p.send.length, 0);
+    if (!n) return;
+    const nUpd = upsertAll ? 0 : plans.reduce((a, p) => a + (p.mode === 'upsert' ? p.r.db.changed.length : 0), 0);
+    const nSame = plans.reduce((a, p) => a + (p.r.db && !p.r.db.error ? p.r.db.same + (p.mode === 'upsert' || upsertAll ? 0 : p.r.db.changed.length) : 0), 0);
+    const where = valid.length > 1 ? `จาก ${plans.filter(p => p.send.length).length} จังหวัด` : `จังหวัด${valid[0].name}`;
+    const question = upsertAll
+      ? `นำเข้าข้อมูลจุดความร้อน ${fmt(n)} จุด (${SRC_LABEL[imp.source]} · ${rangeText(o)}) ${where} เข้าฐานข้อมูล? จุดที่มีอยู่แล้วจะถูกปรับปรุงด้วยข้อมูลไฟล์นี้`
+      : `${n > nUpd ? `นำเข้าเฉพาะข้อมูลใหม่ ${fmt(n - nUpd)} จุด${nUpd ? ' และ' : ''}` : ''}${nUpd ? `ปรับปรุงจุดที่ค่าเปลี่ยน ${fmt(nUpd)} จุด` : ''} (${SRC_LABEL[imp.source]} · ${rangeText(o)}) ${where} เข้าฐานข้อมูล?${nSame ? ` จุดที่มีอยู่แล้ว ${fmt(nSame)} จุดจะไม่บันทึกซ้ำ` : ''}`;
+    if (!await confirmBox(question, { yes: 'นำเข้าข้อมูล' })) return;
     const btn = el('btn-import-save'), bar = el('import-progress'), fill = bar.firstElementChild, status = el('import-status');
     btn.disabled = true; bar.classList.remove('hidden'); fill.style.width = '0%';
     const grand = n, size = 2000, stamp = Date.now();
     let sent = 0; const done = [];
     try {
-      for (const r of valid) {
+      for (const { r, send, mode } of plans) {
+        if (!send.length) { done.push({ name: r.name, accepted: 0, updated: 0, duplicates: r.db?.same || 0, reconcile: null, ok: null, expect: 0, nothing: true }); continue; }
         const batchId = `${imp.source === 'FIRMS' ? 'F' : 'B'}-${r.code}-${stamp}`; let accepted = 0, updated = 0, duplicates = 0, reconcile = null;
-        for (let i = 0; i < r.records.length; i += size) {
-          const chunk = r.records.slice(i, i + size);
-          setMsg(status, `กำลังบันทึกจังหวัด${r.name} ${fmt(Math.min(i + size, r.records.length))}/${fmt(r.records.length)} จุด (${done.length + 1}/${valid.length} จังหวัด)…`, 'working');
-          const res = await Api.post('hs_import', { provinceCode: r.code, batchId, fileName: imp.fileName, rows: chunk, final: i + size >= r.records.length, source: imp.source, mode: o.mode,
-            note: [upsert ? 'upsert' : '', o.from || o.to ? [o.from ? `ตั้งแต่ ${o.from}` : '', o.to ? `ถึง ${o.to}` : ''].filter(Boolean).join(' ') : ''].filter(Boolean).join(' ') });
+        for (let i = 0; i < send.length; i += size) {
+          const chunk = send.slice(i, i + size);
+          setMsg(status, `กำลังบันทึกจังหวัด${r.name} ${fmt(Math.min(i + size, send.length))}/${fmt(send.length)} จุด (${done.length + 1}/${valid.length} จังหวัด)…`, 'working');
+          const res = await Api.post('hs_import', { provinceCode: r.code, batchId, fileName: imp.fileName, rows: chunk, final: i + size >= send.length, source: imp.source, mode,
+            note: [upsertAll ? 'upsert' : mode === 'upsert' ? 'ใหม่+ปรับปรุงค่าเปลี่ยน' : 'เฉพาะข้อมูลใหม่', o.from || o.to ? [o.from ? `ตั้งแต่ ${o.from}` : '', o.to ? `ถึง ${o.to}` : ''].filter(Boolean).join(' ') : ''].filter(Boolean).join(' ') });
           accepted += res.accepted; updated += res.updated || 0; duplicates += res.duplicates; sent += chunk.length;
           if (res.reconcile) reconcile = res.reconcile;
           fill.style.width = `${Math.round(sent * 100 / grand)}%`;
         }
-        // ตรวจยอดหลังนำเข้า: จำนวนจุดของชุดนี้ในฐานข้อมูล เทียบกับที่ตรวจผ่านจากไฟล์ (รายประเภทพื้นที่)
-        const expect = upsert ? r.records.length : accepted + 0;
-        const ok = reconcile ? reconcile.total === expect && (!upsert || Object.keys(r.byLand).every(l => (reconcile.byLand[l] || 0) === r.byLand[l])) : null;
-        done.push({ name: r.name, accepted, updated, duplicates, reconcile, ok, expect });
+        // ตรวจยอดหลังนำเข้า: จำนวนจุดของชุดนี้ในฐานข้อมูล เทียบกับจุดที่ส่งบันทึก (รายประเภทพื้นที่)
+        const sentLand = {}; send.forEach(x => { sentLand[x.land] = (sentLand[x.land] || 0) + 1; });
+        const expect = send.length;
+        const ok = reconcile ? reconcile.total === expect && Object.keys(sentLand).every(l => (reconcile.byLand[l] || 0) === sentLand[l]) : null;
+        done.push({ name: r.name, accepted, updated, duplicates: duplicates + (upsertAll || !r.db || r.db.error ? 0 : r.db.same + (mode === 'upsert' ? 0 : r.db.changed.length)), reconcile, ok, expect });
       }
       const acc = done.reduce((a, d) => a + d.accepted, 0), upd = done.reduce((a, d) => a + d.updated, 0), dup = done.reduce((a, d) => a + d.duplicates, 0);
       const bad = done.filter(d => d.ok === false);
       setMsg(status, `นำเข้าสำเร็จ: เพิ่มใหม่ ${fmt(acc)} จุด${upd ? ` · ปรับปรุงจุดเดิม ${fmt(upd)} จุด` : ''}${dup ? ` · มีอยู่แล้ว ${fmt(dup)} จุด (ไม่บันทึกซ้ำ)` : ''} จาก ${done.length} จังหวัด · ตรวจยอดกับฐานข้อมูล: ${bad.length ? `ไม่ตรง ${bad.length} จังหวัด (${bad.map(d => `${d.name} ฐานข้อมูล ${fmt(d.reconcile.total)} / ไฟล์ ${fmt(d.expect)}`).join(', ')})` : 'ตรงกันทุกจังหวัด'}`, bad.length ? 'warn' : 'success');
-      el('import-preview').innerHTML = `<div class="overflow-x-auto rounded-xl border border-line"><table class="data-table"><thead><tr><th>จังหวัด</th><th class="num">เพิ่มใหม่</th><th class="num">ปรับปรุง</th><th class="num">ข้าม (มีแล้ว)</th><th class="num">ในฐานข้อมูล (ชุดนี้)</th><th>ประเภทพื้นที่ในฐานข้อมูล</th><th>ตรวจยอด</th></tr></thead><tbody>${done.map(d => `<tr><td class="font-semibold">${esc(d.name)}</td><td class="num">${fmt(d.accepted)}</td><td class="num">${fmt(d.updated)}</td><td class="num">${fmt(d.duplicates)}</td><td class="num">${fmt(d.reconcile?.total)}</td><td class="text-xs">${d.reconcile ? landList(d.reconcile.byLand) : '-'}</td><td class="text-xs">${d.ok === null ? '-' : d.ok ? '<span class="text-brand-700">ตรงกัน</span>' : '<span class="text-red-700">ไม่ตรงกัน</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+      el('import-preview').innerHTML = `<div class="overflow-x-auto rounded-xl border border-line"><table class="data-table"><thead><tr><th>จังหวัด</th><th class="num">เพิ่มใหม่</th><th class="num">ปรับปรุง</th><th class="num">ข้าม (มีแล้ว)</th><th class="num">ในฐานข้อมูล (ชุดนี้)</th><th>ประเภทพื้นที่ในฐานข้อมูล</th><th>ตรวจยอด</th></tr></thead><tbody>${done.map(d => `<tr><td class="font-semibold">${esc(d.name)}</td><td class="num">${fmt(d.accepted)}</td><td class="num">${fmt(d.updated)}</td><td class="num">${fmt(d.duplicates)}</td><td class="num">${fmt(d.reconcile?.total)}</td><td class="text-xs">${d.reconcile ? landList(d.reconcile.byLand) : '-'}</td><td class="text-xs">${d.nothing ? '<span class="text-ink-soft">ไม่มีข้อมูลใหม่</span>' : d.ok === null ? '-' : d.ok ? '<span class="text-brand-700">ตรงกัน</span>' : '<span class="text-red-700">ไม่ตรงกัน</span>'}</td></tr>`).join('')}</tbody></table></div>`;
       toast(`นำเข้า HS ${done.length} จังหวัด รวม ${fmt(acc + upd)} จุด`);
       imp = null; el('import-file').value = ''; btn.textContent = 'บันทึกเข้าฐานข้อมูล';
       setMsg(el('console-status'), 'กำลังคำนวณระดับความเสี่ยงล่วงหน้าจากข้อมูลใหม่…', 'working');

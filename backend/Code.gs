@@ -154,6 +154,7 @@ function doPost(e) {
       case 'account_save': return json_(accountSave_(user, body));
       case 'account_status': return json_(accountStatus_(user, body));
       case 'account_delete': return json_(accountDelete_(user, body));
+      case 'hs_check': return json_(hsCheck_(user, body));
       case 'hs_import': return json_(hsImport_(user, body));
       case 'hs_batches': return json_(hsBatches_(user, body));
       case 'hs_delete_batch': return json_(hsDeleteBatch_(user, body));
@@ -414,7 +415,45 @@ function hsRowFrom_(r, batchId, at, source) {
     clean_(r.village), PLANT_TYPES.indexOf(r.plant) >= 0 ? r.plant : 'อื่น ๆ', Number(r.lat), Number(r.lng), batchId, at, source, clean_(r.sat) || satelliteFromId_(id), land];
 }
 
-/** นำเข้า HS: mode = 'skip' (ค่าเริ่มต้น: จุดที่มี hsID อยู่แล้วไม่บันทึกซ้ำ) | 'upsert' (ปรับปรุงจุดเดิมด้วยข้อมูลไฟล์ใหม่ และย้ายเข้าชุดข้อมูลนี้) */
+/* ---------- v3.10 ตรวจจุดที่มีอยู่แล้ว (ใช้ทั้งตอนตรวจไฟล์ hs_check และตอนบันทึก hs_import) ----------
+ * จุดเดียวกัน = (1) hsID ตรงกันและพิกัดห่างไม่เกิน HS_NEAR_DEG หรือ (2) แหล่งข้อมูล วันที่ เวลา (ถ้ามีทั้งสองฝั่ง) เดียวกัน และพิกัดห่างไม่เกิน HS_NEAR_DEG
+ * หรือ (3) hsID ตรงกันแต่พิกัดต่างกัน (ถือเป็นจุดเดิมที่ค่าเปลี่ยน) — ข้อ (2) กันกรณีไฟล์ไม่มี hsID และกรณีรหัสที่ชนกันได้ลำดับ -2/-3 ต่างจากรอบก่อน
+ * js/admin.js (matchExisting) ใช้กติกาเดียวกันนี้ */
+const HS_NEAR_DEG = 0.0005;   // ≈ 55 ม. — จุด VIIRS คนละจุดห่างกันอย่างน้อยราว 375 ม. จึงไม่จับคู่ผิดจุด
+function hsMatcher_(data) {
+  const byId = {}, byKey = {}, ent = [];
+  const add = (id, src, date, time, lat, lng, idx) => {
+    const e = { id: id, time: time, lat: Number(lat), lng: Number(lng), idx: idx }, k = src + '|' + date;
+    ent.push(e); if (id && byId[id] === undefined) byId[id] = e; (byKey[k] = byKey[k] || []).push(e);
+  };
+  data.forEach((r, i) => { if (r[0]) add(String(r[0]), rowSource_(r[13]), normalizeDate_(r[1]), normalizeTime_(r[2]), r[9], r[10], i); });
+  const near = (e, lat, lng) => Math.abs(e.lat - lat) <= HS_NEAR_DEG && Math.abs(e.lng - lng) <= HS_NEAR_DEG;
+  return {
+    /** row = แถวรูปแบบ HS_HEADERS · คืนรายการที่ตรงกัน { idx: แถวใน data หรือ -1 = จุดใหม่ที่เพิ่งเพิ่มในคำขอนี้ } หรือ null */
+    find: function (row) {
+      const id = String(row[0]), lat = Number(row[9]), lng = Number(row[10]), t = String(row[2] || ''), e = byId[id];
+      if (e && near(e, lat, lng)) return e;
+      const list = byKey[rowSource_(row[13]) + '|' + row[1]] || [];
+      for (let j = 0; j < list.length; j++) if ((!t || !list[j].time || list[j].time === t) && near(list[j], lat, lng)) return list[j];
+      return e || null;
+    },
+    add: function (row) { add(String(row[0]), rowSource_(row[13]), String(row[1]), String(row[2] || ''), row[9], row[10], -1); }
+  };
+}
+
+/** v3.10 ข้อมูลที่มีอยู่แล้วของจังหวัด (ทุกแหล่ง ทุกชุดข้อมูล) แบบกระชับ — ให้หน้า “นำเข้า HS” แยกจุดใหม่ / มีแล้ว / ค่าเปลี่ยน ก่อนบันทึก */
+function hsCheck_(user, b) {
+  const prov = requireProvince_(user, b.provinceCode);
+  const sh = hsSheet_(prov, false), off = inactiveBatches_();
+  const data = (sh && sh.getLastRow() > 1) ? sh.getRange(2, 1, sh.getLastRow() - 1, HS_HEADERS.length).getValues() : [];
+  return { ok: true, province: prov, nearDeg: HS_NEAR_DEG, checkedAt: now_(),
+    cols: ['id', 'date', 'time', 'dCode', 'sCode', 'village', 'plant', 'lat', 'lng', 'source', 'satellite', 'land', 'batchId', 'active'],
+    rows: data.filter(r => r[0]).map(r => [String(r[0]), normalizeDate_(r[1]), normalizeTime_(r[2]), String(r[3]), String(r[4]), String(r[7] || ''), String(r[8] || ''),
+      Number(r[9]), Number(r[10]), rowSource_(r[13]), String(r[14] || ''), rowLand_(r[15]), String(r[11]), off[String(r[11])] ? 0 : 1]) };
+}
+
+/** นำเข้า HS: mode = 'skip' (ค่าเริ่มต้น: นำเข้าเฉพาะจุดใหม่ จุดที่มีอยู่แล้วไม่บันทึกซ้ำ) | 'upsert' (ปรับปรุงจุดเดิมด้วยข้อมูลไฟล์ใหม่ และย้ายเข้าชุดข้อมูลนี้)
+ *  v3.10: ตรวจจุดเดิมด้วย hsMatcher_ (hsID หรือ วันที่+เวลา+พิกัด) · upsert คง hsID เดิมไว้ · ไม่สร้างชุดข้อมูลว่างเมื่อไม่มีจุดใหม่ */
 function hsImport_(user, b) {
   const prov = requireProvince_(user, b.provinceCode);
   const rows = Array.isArray(b.rows) ? b.rows : [];
@@ -428,23 +467,32 @@ function hsImport_(user, b) {
   try {
     const sh = hsSheet_(prov, true);
     const last = sh.getLastRow(), W = HS_HEADERS.length;
-    const data = last > 1 ? (upsert ? sh.getRange(2, 1, last - 1, W).getValues() : sh.getRange(2, 1, last - 1, 1).getValues()) : [];
-    const pos = {}; data.forEach((r, i) => { pos[String(r[0])] = i; });
+    const data = last > 1 ? sh.getRange(2, 1, last - 1, W).getValues() : [];
+    const match = hsMatcher_(data);
     const at = now_();
     let dup = 0, updated = 0, lo = Infinity, hi = -1;
-    const out = [], seen = {};
+    const out = [], seen = {}, touched = {};
     rows.forEach(r => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) || !isFinite(Number(r.lat)) || !isFinite(Number(r.lng))) return;
       const row = hsRowFrom_(r, batchId, at, source), id = row[0];
       if (seen[id]) { dup++; return; }
       seen[id] = 1;
-      if (pos[id] !== undefined) {
-        if (!upsert) { dup++; return; }
-        const i = pos[id]; data[i] = row; updated++; lo = Math.min(lo, i); hi = Math.max(hi, i);
+      const m = match.find(row);
+      if (m) {
+        if (!upsert || m.idx < 0 || touched[m.idx]) { dup++; return; }
+        const i = m.idx; row[0] = String(data[i][0]);   // คง hsID เดิม (กรณีจับคู่ด้วยวันที่+เวลา+พิกัด)
+        touched[i] = 1; data[i] = row; updated++; lo = Math.min(lo, i); hi = Math.max(hi, i);
         return;
       }
-      out.push(row);
+      out.push(row); match.add(row);
     });
+    const bt = findRow_('Batches', r => r.batchId === batchId);
+    if (!bt && !out.length && !updated) {
+      // ไม่มีจุดใหม่และยังไม่มีชุดข้อมูลนี้ → ไม่สร้างชุดข้อมูลว่าง
+      const res0 = { ok: true, batchId: '', accepted: 0, updated: 0, duplicates: dup, active: true, empty: true };
+      if (b.final !== false) { audit_(user, 'hs_import', batchId + ' [' + source + '] ไม่มีจุดใหม่ (มีแล้ว ' + dup + ') ' + (b.fileName || ''), prov); res0.reconcile = { total: 0, byLand: {} }; }
+      return res0;
+    }
     if (updated) {
       hsTextFormat_(sh, lo + 2, hi - lo + 1);
       sh.getRange(lo + 2, 1, hi - lo + 1, W).setValues(data.slice(lo, hi + 1));
@@ -456,7 +504,6 @@ function hsImport_(user, b) {
     }
 
     const dates = out.concat(updated ? data.slice(lo, hi + 1).filter(r => String(r[11]) === batchId && String(r[12]) === at) : []).map(r => String(r[1])).sort();
-    const bt = findRow_('Batches', r => r.batchId === batchId);
     if (bt) {
       updateRow_('Batches', bt._row, {
         accepted: Number(bt.accepted || 0) + out.length + updated, duplicates: Number(bt.duplicates || 0) + dup,
@@ -613,14 +660,17 @@ function publicHotspots_(prov, landIn) {
   if (cached) return JSON.parse(cached);
   const rows = hsActive_(prov, src);
   const out = { ok: true, province: prov, source: src, land: land, satellitePolicy: SAT_POLICY_TEXT, cols: ['date', 'time', 'dCode', 'sCode', 'dName', 'sName', 'village', 'plant', 'lat', 'lng', 'tsrc', 'land'],
-    rows: rows.filter(r => landMatch_(land, r[15])).map(r => {
-      const date = normalizeDate_(r[1]);
-      let time = normalizeTime_(r[2]), tsrc = '';
-      if (!time) { time = timeFromHsId_(r[0], date); if (time) tsrc = 'hsid'; }
-      return [date, time, String(r[3]), String(r[4]), r[5], r[6], r[7], r[8], Number(r[9]), Number(r[10]), tsrc, rowLand_(r[15])];
-    }) };
+    rows: rows.filter(r => landMatch_(land, r[15])).map(hsCompact_) };
   cachePut_(cache, key, JSON.stringify(out));
   return out;
+}
+
+/** แถว HS → รูปแบบกระชับของ publicHotspots_ (ใช้ร่วมกับ Public Data API: Api.gs) */
+function hsCompact_(r) {
+  const date = normalizeDate_(r[1]);
+  let time = normalizeTime_(r[2]), tsrc = '';
+  if (!time) { time = timeFromHsId_(r[0], date); if (time) tsrc = 'hsid'; }
+  return [date, time, String(r[3]), String(r[4]), r[5], r[6], r[7], r[8], Number(r[9]), Number(r[10]), tsrc, rowLand_(r[15])];
 }
 
 /* ---------- รูปแบบวันที่/เวลา HS (เวลาไทย Asia/Bangkok) ---------- */
