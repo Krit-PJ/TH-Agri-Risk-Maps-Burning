@@ -145,8 +145,12 @@ CSV มีแถว “ไม่ระบุพื้นที่” (ถ้า�
 
 ## API key (ข้อมูลคะแนนละเอียด)
 
-ผู้ดูแลระบบออก key จาก Apps Script Editor: `createApiKey('ชื่อหน่วยงาน')` (ดูใน Log), `listApiKeys()`, `revokeApiKey('key')`
-key เก็บใน Script Properties ไม่อยู่ใน GitHub ทุกการออก/ยกเลิกบันทึกใน AuditLog
+**v3.11:** Super Admin / Mini Super Admin ออกและยกเลิก key ได้ที่ **แผงผู้ดูแลระบบ → ตั้งค่าระบบ → การเชื่อมต่อระบบอื่น (API)**
+* ระบบแสดง key เต็ม **ครั้งเดียว** ตอนออก (ปุ่มคัดลอก + ตัวอย่างลิงก์) — หลังจากนั้นแสดงแบบปิดบางส่วน (`8a72c3…208c`) พร้อมผู้ออก วันที่ออก และ **ใช้ล่าสุด** (บันทึกไม่เกินชั่วโมงละครั้ง)
+* ทำ key หาย = ออก key ใหม่แล้วยกเลิก key เดิม · ยกเลิกแล้วมีผลทันที (`invalid key`)
+* ยังใช้ได้จาก Apps Script Editor: `createApiKey('ชื่อหน่วยงาน')`, `listApiKeys()`, `revokeApiKey('key')`
+* key เก็บใน Script Properties (`API_KEYS`) ไม่อยู่ใน GitHub หรือ Google Sheet · ทุกการออก/ยกเลิกบันทึกใน AuditLog (ดูได้ที่ บันทึกการใช้งาน → การดำเนินการ)
+* **ไม่ต้องใช้ key** สำหรับ `meta`, `provinces`, `hotspots`, `compare` และระดับ 4 ระดับของ `risk` — key เปิดเฉพาะคะแนนละเอียด องค์ประกอบ และเหตุผล
 
 ## ข้อควรทราบ
 

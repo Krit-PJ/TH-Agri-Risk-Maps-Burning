@@ -80,6 +80,12 @@ const Admin = (() => {
     el('btn-batch-off').addEventListener('click', () => toggleBatches(false));
     el('logins-days').addEventListener('change', loadLogins);
     el('logins-result').addEventListener('change', renderLogins);
+    document.querySelectorAll('[data-logview]').forEach(b => b.addEventListener('click', () => logView(b.dataset.logview)));
+    el('audit-days').addEventListener('change', loadAudit);
+    el('audit-group').addEventListener('change', renderAudit);
+    let auditT; el('audit-q').addEventListener('input', () => { clearTimeout(auditT); auditT = setTimeout(renderAudit, 200); });
+    el('form-apikey').addEventListener('submit', createApiKey);
+    document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => copyText(el(b.dataset.copy).value, b)));
     el('requests-filter').addEventListener('change', loadRequests);
     el('form-account').addEventListener('submit', saveAccount);
     el('btn-acc-cancel').addEventListener('click', resetAccountForm);
@@ -169,7 +175,15 @@ const Admin = (() => {
     document.querySelectorAll('#console [data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== tab));
     setMsg(el('console-status'), '');
     if (tab === 'compare' && isNational() && !el('compare-province').value && hooks.currentProvince?.()) el('compare-province').value = hooks.currentProvince();
-    ({ batches: loadBatches, requests: loadRequests, accounts: loadAccounts, audit: loadAudit, logins: loadLogins, settings: loadSettings }[tab])?.();
+    ({ batches: loadBatches, requests: loadRequests, accounts: loadAccounts, logs: () => logView(logViewCur), settings: loadSettings }[tab])?.();
+  }
+  /* v3.11 บันทึกการใช้งาน: การเข้าสู่ระบบ (LoginAttempts) | การดำเนินการ (AuditLog) */
+  let logViewCur = 'logins';
+  function logView(v) {
+    logViewCur = v;
+    document.querySelectorAll('[data-logview]').forEach(b => { b.classList.toggle('is-active', b.dataset.logview === v); b.setAttribute('aria-selected', String(b.dataset.logview === v)); });
+    document.querySelectorAll('[data-logpane]').forEach(p => p.classList.toggle('hidden', p.dataset.logpane !== v));
+    (v === 'audit' ? loadAudit : loadLogins)();
   }
   async function refreshBadge() {
     try { const r = await Api.post('requests_list', { status: 'pending' }); const b = el('badge-requests'); b.textContent = r.requests.length; b.classList.toggle('hidden', !r.requests.length); } catch { }
@@ -297,14 +311,68 @@ const Admin = (() => {
   }
 
   /* ---------- audit / settings ---------- */
+  const AUDIT_LABEL = { login: 'เข้าสู่ระบบ', register: 'ยื่นคำขอ', request_approve: 'อนุมัติคำขอ', request_reject: 'ไม่อนุมัติคำขอ', account_create: 'เพิ่มผู้ดูแล', account_update: 'แก้ไขผู้ดูแล', account_disabled: 'ระงับสิทธิ์', account_approved: 'เปิดสิทธิ์', account_delete: 'ลบสิทธิ์', hs_import: 'นำเข้า HS', hs_delete_batch: 'ลบชุดข้อมูล', hs_clear: 'ล้างข้อมูล HS', hs_batch_on: 'เปิดใช้งานชุดข้อมูล', hs_batch_off: 'ปิดใช้งานชุดข้อมูล', settings_save: 'ตั้งค่าระบบ', setup: 'ติดตั้งระบบ',
+    team_create: 'เพิ่มรายชื่อทีม', team_update: 'แก้ไขรายชื่อทีม', team_delete: 'ลบรายชื่อทีม', api_key_create: 'ออก API key', api_key_revoke: 'ยกเลิก API key' };
+  const auditGroup = a => /^hs_/.test(a) ? 'hs' : /^(account_|request_|register)/.test(a) ? 'account' : /^(settings|api_key|setup)/.test(a) ? 'settings' : /^team_/.test(a) ? 'team' : 'other';
+  let audit = null;
   async function loadAudit() {
     const box = el('audit-list'); box.innerHTML = '<span class="spinner"></span>';
-    const r = await run(() => Api.post('audit_list', { limit: 300 }));
+    const r = await run(() => Api.post('audit_list', { limit: 2000, days: Number(el('audit-days').value), excludeLogin: true }));
     if (!r) { box.innerHTML = ''; return; }
-    const label = { login: 'เข้าสู่ระบบ', register: 'ยื่นคำขอ', request_approve: 'อนุมัติคำขอ', request_reject: 'ไม่อนุมัติคำขอ', account_create: 'เพิ่มผู้ดูแล', account_update: 'แก้ไขผู้ดูแล', account_disabled: 'ระงับสิทธิ์', account_approved: 'เปิดสิทธิ์', account_delete: 'ลบสิทธิ์', hs_import: 'นำเข้า HS', hs_delete_batch: 'ลบชุดข้อมูล', hs_clear: 'ล้างข้อมูล HS', hs_batch_on: 'เปิดใช้งานชุดข้อมูล', hs_batch_off: 'ปิดใช้งานชุดข้อมูล', settings_save: 'ตั้งค่าระบบ', setup: 'ติดตั้งระบบ' };
-    box.innerHTML = r.logs.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>เวลา</th><th>ผู้ดำเนินการ</th><th>รายการ</th><th>จังหวัด</th><th>รายละเอียด</th></tr></thead><tbody>${r.logs.map(l => `<tr><td class="whitespace-nowrap text-xs">${dt(l.time)}</td><td>${esc(l.actor)}</td><td>${esc(label[l.action] || l.action)}</td><td>${esc(l.provinceCode ? provName(String(l.provinceCode).padStart(2, '0')) : '-')}</td><td class="text-xs text-ink-soft">${esc(l.detail)}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีประวัติ');
+    audit = r; renderAudit();
+  }
+  function renderAudit() {
+    if (!audit) return;
+    const g = el('audit-group').value, q = el('audit-q').value.trim().toLowerCase();
+    const rows = audit.logs.filter(l => (!g || auditGroup(l.action) === g) && (!q || `${l.actor} ${l.detail} ${AUDIT_LABEL[l.action] || l.action}`.toLowerCase().includes(q)));
+    el('audit-summary').textContent = `${fmt(rows.length)} รายการ${rows.length !== audit.logs.length ? ` จาก ${fmt(audit.logs.length)}` : ''} ${audit.days ? `ใน ${audit.days} วัน` : 'ทั้งหมด'}${audit.total > audit.logs.length ? ` (แสดงล่าสุด ${fmt(audit.logs.length)} จาก ${fmt(audit.total)})` : ''}`;
+    el('audit-list').innerHTML = rows.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>เวลา</th><th>ผู้ดำเนินการ</th><th>รายการ</th><th>จังหวัด</th><th>รายละเอียด</th></tr></thead><tbody>${rows.map(l => `<tr><td class="whitespace-nowrap text-xs">${dt(l.time)}</td><td>${esc(l.actor)}</td><td>${esc(AUDIT_LABEL[l.action] || l.action)}</td><td>${esc(l.provinceCode ? provName(String(l.provinceCode).padStart(2, '0')) : '-')}</td><td class="text-xs text-ink-soft">${esc(l.detail)}</td></tr>`).join('')}</tbody></table></div>` : empty('ไม่มีรายการในช่วงนี้');
+  }
+
+  /* ---------- v3.11 การเชื่อมต่อระบบอื่น (API) + API key ---------- */
+  async function copyText(text, btn) {
+    try { await navigator.clipboard.writeText(text); } catch { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    if (btn) { const o = btn.textContent; btn.textContent = 'คัดลอกแล้ว'; setTimeout(() => { btn.textContent = o; }, 1500); }
+  }
+  function renderApiInfo() {
+    const base = `${CONFIG.API_URL}?action=api`, code = hooks.currentProvince?.() || '62';
+    el('api-base').value = base;
+    const ex = [['ข้อมูลระบบ / เวอร์ชัน', '&fn=meta'], ['จังหวัดที่มีข้อมูล (CSV)', '&fn=provinces&format=csv'], ['ระดับความเสี่ยงรายตำบล (CSV)', `&fn=risk&province=${code}&level=subdistrict&format=csv`],
+      ['ตารางเปรียบเทียบ HS รายอำเภอ (CSV)', `&fn=compare&province=${code}&format=csv`], ['จุดความร้อนเฉพาะที่นำเข้าใหม่', `&fn=hotspots&province=${code}&land=ALL&since=${new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10)}`]];
+    el('api-examples').innerHTML = `<span class="field-label">ตัวอย่างลิงก์ (จังหวัด${esc(provName(code))})</span>` + ex.map(([l, q], i) => `<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:flex-nowrap"><span class="w-full shrink-0 text-ink-soft sm:w-48">${l}</span><input id="api-ex-${i}" class="field-sm min-w-0 flex-1 font-mono text-[11px]" readonly value="${esc(base + q)}"/><button type="button" class="btn-ghost btn-sm shrink-0 whitespace-nowrap" data-copy-ex="api-ex-${i}">คัดลอก</button></div>`).join('');
+    el('api-examples').querySelectorAll('[data-copy-ex]').forEach(b => b.addEventListener('click', () => copyText(el(b.dataset.copyEx).value, b)));
+  }
+  async function loadApiKeys() {
+    const box = el('apikey-list'); box.innerHTML = '<span class="spinner"></span>';
+    const r = await run(() => Api.post('apikey_list', {}));
+    if (!r) { box.innerHTML = ''; return; }
+    box.innerHTML = r.keys.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>หน่วยงาน / ระบบ</th><th>key</th><th>ออกเมื่อ</th><th>ออกโดย</th><th>ใช้ล่าสุด</th><th></th></tr></thead><tbody>${r.keys.map(k => `<tr>
+        <td class="font-semibold">${esc(k.name)}</td><td class="font-mono text-xs">${esc(k.masked)}</td><td class="whitespace-nowrap text-xs">${k.created ? dt(k.created) : '-'}</td><td class="text-xs">${esc(k.createdBy)}</td>
+        <td class="whitespace-nowrap text-xs">${k.lastUsed ? dt(k.lastUsed) : '<span class="text-ink-mute">ยังไม่เคยใช้</span>'}</td>
+        <td class="text-right"><button type="button" class="btn-ghost btn-sm whitespace-nowrap text-red-700" data-revoke="${esc(k.id)}" data-name="${esc(k.name)}">ยกเลิก</button></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มี API key');
+    box.querySelectorAll('[data-revoke]').forEach(b => b.addEventListener('click', async () => {
+      if (!await confirmBox(`ยกเลิก API key ของ "${b.dataset.name}"? ระบบที่ใช้ key นี้จะดึงคะแนนละเอียดไม่ได้ทันที (ข้อมูลที่ไม่ต้องใช้ key ยังดึงได้ตามปกติ) และย้อนกลับไม่ได้`, { yes: 'ยกเลิก key' })) return;
+      if (await run(() => Api.post('apikey_revoke', { id: b.dataset.revoke }), `ยกเลิก key ของ ${b.dataset.name} แล้ว`)) { el('apikey-new').classList.add('hidden'); loadApiKeys(); }
+    }));
+  }
+  async function createApiKey(e) {
+    e.preventDefault();
+    const name = el('apikey-name').value.trim(); if (!name) return;
+    if (!await confirmBox(`ออก API key ใหม่ให้ "${name}"? ผู้ที่มี key จะดูคะแนนละเอียด องค์ประกอบ และเหตุผลของระดับความเสี่ยงได้`, { yes: 'ออก key' })) return;
+    const r = await run(() => Api.post('apikey_create', { name }), `ออก key ให้ ${name} แล้ว — คัดลอกเก็บไว้ทันที ระบบจะไม่แสดง key เต็มอีก`);
+    if (!r) return;
+    const box = el('apikey-new'), code = hooks.currentProvince?.() || '62';
+    box.innerHTML = `<div class="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+        <p class="font-semibold text-amber-900">API key ของ ${esc(r.name)} — แสดงครั้งเดียว กรุณาคัดลอกเก็บไว้</p>
+        <div class="flex gap-2"><input id="apikey-full" class="field w-full font-mono text-xs" readonly value="${esc(r.key)}"/><button type="button" class="btn-primary btn-sm shrink-0 whitespace-nowrap" data-copy-new="apikey-full">คัดลอก key</button></div>
+        <div class="flex gap-2"><input id="apikey-url" class="field w-full font-mono text-[11px]" readonly value="${esc(`${CONFIG.API_URL}?action=api&fn=risk&province=${code}&level=subdistrict&key=${r.key}`)}"/><button type="button" class="btn-ghost btn-sm shrink-0 whitespace-nowrap" data-copy-new="apikey-url">คัดลอกตัวอย่างลิงก์</button></div>
+        <p class="text-xs text-amber-900">ส่ง key ให้หน่วยงานผ่านช่องทางที่ปลอดภัย ไม่เผยแพร่สาธารณะ · ใส่ต่อท้ายลิงก์ด้วย <code>&amp;key=</code></p></div>`;
+    box.classList.remove('hidden');
+    box.querySelectorAll('[data-copy-new]').forEach(b => b.addEventListener('click', () => copyText(el(b.dataset.copyNew).value, b)));
+    el('apikey-name').value = ''; loadApiKeys();
   }
   async function loadSettings() {
+    renderApiInfo(); el('apikey-new').classList.add('hidden'); loadApiKeys();
     try {
       const r = await Api.get('settings');
       el('set-guide').value = r.settings.guideUrl || '';

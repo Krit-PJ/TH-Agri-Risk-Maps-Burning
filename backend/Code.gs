@@ -165,6 +165,9 @@ function doPost(e) {
       case 'risk_detail': requireProvince_(user, body.province); return json_(riskForProvince_(body.province, body.end, true, body.land));
       case 'settings_save': return json_(settingsSave_(user, body));
       case 'audit_list': return json_(auditList_(user, body));
+      case 'apikey_list': return json_(apiKeyList_(user));
+      case 'apikey_create': return json_(apiKeyCreate_(user, body));
+      case 'apikey_revoke': return json_(apiKeyRevoke_(user, body));
       case 'login_report': return json_(loginReport_(user, body));
       case 'team_save': return json_(teamSave_(user, body));
       case 'team_delete': return json_(teamDelete_(user, body));
@@ -865,10 +868,13 @@ function settingsSave_(user, b) {
   audit_(user, 'settings_save', changed.join(' ') || '-');
   return { ok: true };
 }
+/** ประวัติการดำเนินการ (AuditLog) · v3.11: กรองช่วงเวลา (days) และตัดการเข้าสู่ระบบ (excludeLogin — ดูได้ที่มุมมอง "การเข้าสู่ระบบ") · สิทธิ์การมองเห็นเดิม */
 function auditList_(user, b) {
-  const limit = Math.min(Number(b.limit) || 200, 1000);
-  const rows = readAll_('AuditLog').filter(r => inScope_(user, r.provinceCode) || (user.role === 'admin' && r.actor === user.name));
-  return { ok: true, logs: rows.slice(-limit).reverse().map(stripRow_) };
+  const limit = Math.min(Number(b.limit) || 200, 2000), days = Math.min(Math.max(Number(b.days) || 0, 0), 3650);
+  const since = days ? Utilities.formatDate(new Date(Date.now() - days * 864e5), 'Asia/Bangkok', "yyyy-MM-dd'T'HH:mm:ss") : '';
+  const rows = readAll_('AuditLog').filter(r => (inScope_(user, r.provinceCode) || (user.role === 'admin' && r.actor === user.name))
+    && (!since || String(r.time) >= since) && !(b.excludeLogin && r.action === 'login'));
+  return { ok: true, days: days, total: rows.length, logs: rows.slice(-limit).reverse().map(stripRow_) };
 }
 function audit_(user, action, detail, prov) {
   try { appendObj_('AuditLog', { time: now_(), actor: user.name || user.sub, role: user.role, provinceCode: prov || (user.prov === '*' ? '' : (user.prov || '')), action: action, detail: String(detail || '').slice(0, 500) }); } catch (_) { }

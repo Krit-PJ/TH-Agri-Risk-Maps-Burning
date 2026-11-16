@@ -9,13 +9,29 @@
  *       ตาราง “เปรียบเทียบ HS” และการ์ดสรุปเดียวกับหน้าเว็บ (ช่วงเดียวกันปีก่อน · ช่วงที่เลือก · เพิ่ม/ลด · ระดับความเสี่ยง)
  * ทุก fn ใช้ข้อมูลชุดเดียวกับหน้าเว็บ: แหล่งข้อมูลหลัก · ชุดที่เปิดใช้งาน · นโยบายดาวเทียม (hsActive_) · สูตรที่ตั้งค่า · ช่วงเริ่มต้น = ปีงบล่าสุดที่ครบแล้ว
  * ไม่มี key: ระดับความเสี่ยง (4 ระดับ) + จำนวนจุดปีงบปัจจุบัน · มี key ที่ออกโดยผู้ดูแล: คะแนน 0–100 องค์ประกอบ และเหตุผล
- * key เก็บใน Script Properties (API_KEYS) — ออก/ดู/ยกเลิกจาก Editor: createApiKey('ชื่อหน่วยงาน'), listApiKeys(), revokeApiKey('key')
+ * key เก็บใน Script Properties (API_KEYS) — ออก/ดู/ยกเลิกที่แผงผู้ดูแล → ตั้งค่าระบบ (v3.11) หรือจาก Editor: createApiKey('ชื่อหน่วยงาน'), listApiKeys(), revokeApiKey('key')
  * ผลลัพธ์เป็นข้อมูลล่าสุดในฐานข้อมูลเสมอ (แคชจะถูกล้างทันทีเมื่อมีการนำเข้า/เปิด-ปิดชุดข้อมูล/เปลี่ยนตั้งค่า) */
 const API_VERSION = '1.4';   // 1.4 (v3.10): hotspots id/importedAt + since (ดึงเฉพาะข้อมูลใหม่) · 1.3 (v3.9.3): fn=compare (ตารางเปรียบเทียบเดียวกับหน้าเว็บ) · ตัวกรอง district/subdistrict/crop · 1.2: ABRI-2Y ค่าเริ่มต้น
 const API_DOCS = 'https://github.com/Krit-PJ/TH-Agri-Risk-Maps-Burning/blob/main/docs/API.md';
 
 function apiKeys_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('API_KEYS') || '{}'); } catch (e) { return {}; } }
-function apiKeyName_(k) { const s = String(k || ''); if (!/^[a-f0-9]{32}$/.test(s)) return ''; const m = apiKeys_()[s]; return m ? m.name : ''; }
+function apiKeyName_(k) {
+  const s = String(k || ''); if (!/^[a-f0-9]{32}$/.test(s)) return '';
+  const m = apiKeys_()[s]; if (!m) return '';
+  apiKeyTouch_(s);
+  return m.name;
+}
+/** รหัสอ้างอิง key (ไม่เปิดเผย key จริง) = SHA-256 12 ตัวแรก */
+function apiKeyId_(k) { return sha256_(k).slice(0, 12); }
+/** บันทึก "ใช้ล่าสุด" แยก property ต่อ key (ไม่แก้ API_KEYS จึงไม่ชนกับการออก/ยกเลิก key) · เขียนไม่เกินชั่วโมงละครั้งต่อ key */
+function apiKeyTouch_(k) {
+  try {
+    const id = apiKeyId_(k), c = CacheService.getScriptCache();
+    if (c.get('aku:' + id)) return;
+    c.put('aku:' + id, '1', 3600);
+    PropertiesService.getScriptProperties().setProperty('API_KEY_USED_' + id, now_());
+  } catch (e) { }
+}
 
 function apiGet_(p) {
   const fn = String(p.fn || 'meta').toLowerCase(), fmt = String(p.format || 'json').toLowerCase() === 'csv' ? 'csv' : 'json';
@@ -188,7 +204,44 @@ function apiCsv_(header, rows) {
   return ContentService.createTextOutput(txt).setMimeType(ContentService.MimeType.CSV);
 }
 
-/* ---------- จัดการ API key (เรียกจาก Apps Script Editor) ---------- */
+/* ---------- v3.11 จัดการ API key จากแผงผู้ดูแล → ตั้งค่าระบบ (Super Admin / Mini Super Admin) ----------
+ * แสดง key เต็มครั้งเดียวตอนออก · รายการแสดงแบบปิดบางส่วน · ยกเลิกด้วยรหัสอ้างอิง (id) · ทุกการออก/ยกเลิกบันทึกใน AuditLog */
+function apiKeyList_(user) {
+  requireNational_(user);
+  const all = apiKeys_(), props = PropertiesService.getScriptProperties();
+  return { ok: true, keys: Object.keys(all).map(k => { const id = apiKeyId_(k); return { id: id, name: all[k].name, created: all[k].created || '', createdBy: all[k].createdBy || 'Apps Script Editor',
+    masked: k.slice(0, 6) + '…' + k.slice(-4), lastUsed: props.getProperty('API_KEY_USED_' + id) || '' }; }).sort((a, b) => String(b.created).localeCompare(String(a.created))) };
+}
+function apiKeyCreate_(user, b) {
+  requireNational_(user);
+  const n = clean_(b.name).slice(0, 80);
+  if (!n) throw new Error('กรุณาระบุชื่อหน่วยงาน/ระบบที่จะใช้ key');
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const all = apiKeys_();
+    if (Object.keys(all).length >= 50) throw new Error('มี key ครบ 50 รายการแล้ว กรุณายกเลิก key ที่ไม่ใช้ก่อน');
+    const k = Utilities.getUuid().replace(/-/g, '');
+    all[k] = { name: n, created: now_(), createdBy: user.name || user.sub };
+    PropertiesService.getScriptProperties().setProperty('API_KEYS', JSON.stringify(all));
+    audit_(user, 'api_key_create', n + ' (' + k.slice(0, 6) + '…' + k.slice(-4) + ')');
+    return { ok: true, key: k, id: apiKeyId_(k), name: n };
+  } finally { lock.releaseLock(); }
+}
+function apiKeyRevoke_(user, b) {
+  requireNational_(user);
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const all = apiKeys_(), k = Object.keys(all).find(x => apiKeyId_(x) === String(b.id || ''));
+    if (!k) throw new Error('ไม่พบ key นี้ (อาจถูกยกเลิกไปแล้ว)');
+    const n = all[k].name; delete all[k];
+    const props = PropertiesService.getScriptProperties();
+    props.setProperty('API_KEYS', JSON.stringify(all)); props.deleteProperty('API_KEY_USED_' + apiKeyId_(k));
+    audit_(user, 'api_key_revoke', n + ' (' + k.slice(0, 6) + '…' + k.slice(-4) + ')');
+    return { ok: true };
+  } finally { lock.releaseLock(); }
+}
+
+/* ---------- จัดการ API key จาก Apps Script Editor (ยังใช้ได้) ---------- */
 function createApiKey(name) {
   const n = String(name || '').trim() || 'unnamed';
   const k = Utilities.getUuid().replace(/-/g, '') ;

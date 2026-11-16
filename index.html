@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.10.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.11.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -318,8 +318,7 @@
         <button type="button" class="tab-line" data-tab="compare">เปรียบเทียบแหล่งข้อมูล</button>
         <button type="button" class="tab-line" data-tab="requests">คำขอใช้งาน <span id="badge-requests" class="badge hidden">0</span></button>
         <button type="button" class="tab-line" data-tab="accounts">ผู้ดูแลระบบ</button>
-        <button type="button" class="tab-line" data-tab="logins">รายงานการเข้าใช้</button>
-        <button type="button" class="tab-line" data-tab="audit">ประวัติการใช้งาน</button>
+        <button type="button" class="tab-line" data-tab="logs">บันทึกการใช้งาน</button>
         <button type="button" class="tab-line national-only hidden" data-tab="settings">ตั้งค่าระบบ</button>
       </div>
     </div>
@@ -405,8 +404,14 @@
         <div id="accounts-list"></div>
       </section>
 
-      <!-- Login attempts -->
-      <section data-pane="logins" class="hidden space-y-4">
+      <!-- v3.11 บันทึกการใช้งาน = การเข้าสู่ระบบ (LoginAttempts) + การดำเนินการ (AuditLog) -->
+      <section data-pane="logs" class="hidden space-y-4">
+        <div class="flex flex-wrap items-center gap-2" role="tablist" aria-label="มุมมองบันทึกการใช้งาน">
+          <button type="button" class="chip is-active" data-logview="logins" role="tab" aria-selected="true">การเข้าสู่ระบบ</button>
+          <button type="button" class="chip" data-logview="audit" role="tab" aria-selected="false">การดำเนินการ</button>
+          <p class="text-xs text-ink-soft">การเข้าสู่ระบบ = ทุกครั้งที่มีการกดเข้าสู่ระบบ (สำเร็จ/ไม่สำเร็จ) · การดำเนินการ = สิ่งที่ผู้ดูแลทำหลังเข้าสู่ระบบ (นำเข้า ชุดข้อมูล ผู้ดูแล ตั้งค่า API key)</p>
+        </div>
+      <div data-logpane="logins" class="space-y-4">
         <div class="flex flex-wrap items-end justify-between gap-2">
           <div><h3 class="text-base font-bold">รายงานการพยายามเข้าใช้งาน</h3><p id="logins-scope" class="text-sm text-ink-soft">บันทึกทุกครั้งที่มีการกดเข้าสู่ระบบ รวมหมายเลขที่ไม่มีในระบบ (ไม่บันทึกรหัสผ่าน)</p></div>
           <div class="flex gap-2">
@@ -417,12 +422,19 @@
         <div id="logins-summary" class="grid grid-cols-2 gap-2 sm:grid-cols-4"></div>
         <div id="logins-unknown" class="national-only hidden"></div>
         <div id="logins-list"></div>
-      </section>
-
-      <!-- Audit -->
-      <section data-pane="audit" class="hidden space-y-3">
-        <h3 class="text-base font-bold">ประวัติการใช้งาน</h3>
+      </div>
+      <div data-logpane="audit" class="hidden space-y-3">
+        <div class="flex flex-wrap items-end justify-between gap-2">
+          <div><h3 class="text-base font-bold">ประวัติการดำเนินการ</h3><p class="text-sm text-ink-soft">ใครทำอะไร เมื่อไร (การเข้าสู่ระบบดูได้ที่มุมมอง “การเข้าสู่ระบบ”)</p></div>
+          <div class="flex flex-wrap gap-2">
+            <select id="audit-days" class="field-sm" aria-label="ช่วงเวลา"><option value="7">7 วัน</option><option value="30" selected>30 วัน</option><option value="90">90 วัน</option><option value="365">1 ปี</option><option value="0">ทั้งหมด</option></select>
+            <select id="audit-group" class="field-sm" aria-label="ประเภทรายการ"><option value="">ทุกประเภท</option><option value="hs">ข้อมูล HS / ชุดข้อมูล</option><option value="account">ผู้ดูแลและคำขอ</option><option value="settings">ตั้งค่าระบบ / API key</option><option value="team">ทีมผู้พัฒนา</option></select>
+            <input id="audit-q" class="field-sm" type="search" placeholder="ค้นหาผู้ดำเนินการ/รายละเอียด" aria-label="ค้นหา"/>
+          </div>
+        </div>
+        <div id="audit-summary" class="text-sm text-ink-soft"></div>
         <div id="audit-list"></div>
+      </div>
       </section>
 
       <!-- Settings (super only) -->
@@ -448,6 +460,30 @@
           </fieldset>
           <button type="submit" class="btn-primary">บันทึกการตั้งค่า</button>
         </form>
+
+        <!-- v3.11 การเชื่อมต่อระบบอื่น (Public Data API) -->
+        <div id="api-panel" class="space-y-3 rounded-xl border border-line p-3">
+          <div>
+            <h4 class="text-sm font-bold">การเชื่อมต่อระบบอื่น (Public Data API)</h4>
+            <p class="text-xs text-ink-soft">ข้อมูลชุดเดียวกับหน้าเว็บ แบบ JSON/CSV ใช้กับเว็บอื่น Excel/Power Query Google Sheets (IMPORTDATA) Python และ R — <b>ไม่ต้องใช้ key</b> สำหรับจุดความร้อน ตารางเปรียบเทียบ และระดับความเสี่ยง 4 ระดับ · <b>API key</b> ใช้เปิดคะแนนละเอียด องค์ประกอบ และเหตุผล (fn=risk)</p>
+          </div>
+          <div>
+            <span class="field-label">ลิงก์ API</span>
+            <div class="flex gap-2"><input id="api-base" class="field w-full font-mono text-xs" readonly/><button type="button" class="btn-ghost btn-sm shrink-0 whitespace-nowrap" data-copy="api-base">คัดลอก</button></div>
+          </div>
+          <div id="api-examples" class="space-y-1.5"></div>
+          <p class="text-xs"><a id="api-docs" class="font-semibold text-brand-700 underline" href="https://github.com/Krit-PJ/TH-Agri-Risk-Maps-Burning/blob/main/docs/API.md" target="_blank" rel="noopener">เอกสาร API ฉบับเต็ม (docs/API.md)</a></p>
+          <div class="border-t border-line pt-3">
+            <h4 class="text-sm font-bold">API key</h4>
+            <form id="form-apikey" class="mt-2 flex flex-wrap items-end gap-2">
+              <div class="min-w-[14rem] flex-1"><label class="field-label" for="apikey-name">ชื่อหน่วยงาน / ระบบที่จะใช้ key</label><input id="apikey-name" class="field w-full" maxlength="80" placeholder="เช่น ศูนย์ข้อมูลเกษตร จ.กำแพงเพชร" required/></div>
+              <button type="submit" class="btn-primary">ออก key ใหม่</button>
+            </form>
+            <div id="apikey-new" class="mt-3 hidden"></div>
+            <div id="apikey-list" class="mt-3"></div>
+            <p class="mt-2 text-xs text-ink-soft">ระบบแสดง key เต็ม<b>ครั้งเดียว</b>ตอนออก (คัดลอกเก็บไว้ทันที) · หลังจากนั้นแสดงแบบปิดบางส่วน ถ้าทำหายให้ออก key ใหม่แล้วยกเลิก key เดิม · การออก/ยกเลิกบันทึกในบันทึกการใช้งาน → การดำเนินการ</p>
+          </div>
+        </div>
       </section>
       <p id="console-status" class="mt-4 text-sm" role="status" aria-live="polite"></p>
     </div>
@@ -510,13 +546,13 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.10.0"></script>
-<script src="js/api.js?v=3.10.0"></script>
-<script src="js/geo.js?v=3.10.0"></script>
-<script src="js/map.js?v=3.10.0"></script>
-<script src="js/dashboard.js?v=3.10.0"></script>
-<script src="js/report.js?v=3.10.0"></script>
-<script src="js/admin.js?v=3.10.0"></script>
-<script src="js/app.js?v=3.10.0"></script>
+<script src="js/config.js?v=3.11.0"></script>
+<script src="js/api.js?v=3.11.0"></script>
+<script src="js/geo.js?v=3.11.0"></script>
+<script src="js/map.js?v=3.11.0"></script>
+<script src="js/dashboard.js?v=3.11.0"></script>
+<script src="js/report.js?v=3.11.0"></script>
+<script src="js/admin.js?v=3.11.0"></script>
+<script src="js/app.js?v=3.11.0"></script>
 </body>
 </html>
