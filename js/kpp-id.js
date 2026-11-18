@@ -58,8 +58,20 @@
     const br = /Edg\//.test(ua) ? 'Edge' : /Line\//.test(ua) ? 'LINE' : /FBAN|FBAV/.test(ua) ? 'Facebook' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
     return br + ' / ' + os;
   }
-  async function login(p, o) { o = o || {}; const r = await post('id_login', { phone: phone(p), system: o.system || 'ARM', remember: !!o.remember, device: device() }); save(r); return r; }
-  async function register(d, o) { o = o || {}; const r = await post('id_register', Object.assign({}, d, { phone: phone(d.phone), system: o.system || 'ARM', remember: !!o.remember, device: device() })); save(r); return r; }
+  // 3.12.2: o.aud = ระบบที่จะเข้าต่อ → คำตอบมี r.ticket มาด้วย (ไม่ต้องเรียก ticket() อีกรอบ) ตั๋วไม่ถูกเก็บในเครื่อง
+  async function login(p, o) { o = o || {}; const r = await post('id_login', { phone: phone(p), system: o.system || 'ARM', remember: !!o.remember, device: device(), aud: o.aud || '' }); save(r); return r; }
+  async function register(d, o) { o = o || {}; const r = await post('id_register', Object.assign({}, d, { phone: phone(d.phone), system: o.system || 'ARM', remember: !!o.remember, device: device(), aud: o.aud || '' })); save(r); return r; }
+  /** ตั๋วจากคำตอบ login/register ถ้ามี (ใช้ได้ครั้งเดียว) ไม่มีก็ขอใหม่ */
+  async function ticketFrom(r, aud) {
+    if (r && r.ticket) { const t = { ok: true, ticket: r.ticket, expiresIn: r.expiresIn }; delete r.ticket; return t; }
+    return ticket(aud);
+  }
+  /** ปลุก Apps Script ของ Agri-Risk ล่วงหน้า (เช่น ตอนเปิดกล่องเข้าสู่ระบบ) ลดเวลารอครั้งแรก — ครั้งเดียวต่อ 5 นาที */
+  let warmAt = 0;
+  function warm() {
+    if (Date.now() - warmAt < 300000) return; warmAt = Date.now();
+    try { fetch(IDP_URL + '?action=ping', { cache: 'no-store' }).catch(() => { }); } catch (e) { }
+  }
   async function ticket(aud) { const s = current(); if (!s) throw new Error('กรุณาเข้าสู่ระบบ'); return post('id_ticket', { idToken: s.token, aud }); }
   async function me() { const s = current(); if (!s) return null; const r = await post('id_me', { idToken: s.token }); save({ token: s.token, exp: s.exp, person: r.person }); return r; }
   async function notMe() { const s = current(); if (!s) return; try { await post('id_not_me', { idToken: s.token }); } finally { clear(); } }
@@ -131,6 +143,7 @@
    *   askPosition: แสดงช่องตำแหน่ง/หน่วยงาน (เจ้าหน้าที่)
    */
   function open(o) {
+    warm();
     o = o || {}; css();
     const system = SYSTEMS[String(o.system || '').toUpperCase()] ? String(o.system).toUpperCase() : 'ARM';
     const opener = document.activeElement;
@@ -180,7 +193,7 @@
       const p = phone(fPhone.phone.value);
       if (!/^0\d{8,9}$/.test(p)) return msg(fPhone, 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก เช่น 0812345678', 'is-err');
       const btn = fPhone.querySelector('.kppid-btn'); btn.disabled = true; msg(fPhone, 'กำลังตรวจสอบ…');
-      try { finish(await login(p, { system, remember: remember() })); }
+      try { finish(await login(p, { system, remember: remember(), aud: o.aud })); }
       catch (err) {
         if (err.code === 'not_found') { fReg.querySelector('[data-show-phone]').textContent = p; msg(fPhone, ''); show('register'); }
         else msg(fPhone, err.message, 'is-err');
@@ -195,11 +208,11 @@
       if (!d.provinceCode) return msg(fReg, 'กรุณาเลือกจังหวัด', 'is-err');
       if (!d.consent) return msg(fReg, 'กรุณาอ่านและยอมรับเงื่อนไขการใช้ข้อมูล', 'is-err');
       const btn = fReg.querySelector('.kppid-btn'); btn.disabled = true; msg(fReg, 'กำลังลงทะเบียน…');
-      try { finish(await register(d, { system, remember: remember() })); } catch (err) { msg(fReg, err.message, 'is-err'); } finally { btn.disabled = false; }
+      try { finish(await register(d, { system, remember: remember(), aud: o.aud })); } catch (err) { msg(fReg, err.message, 'is-err'); } finally { btn.disabled = false; }
     });
     box.focus && setTimeout(() => fPhone.phone.focus(), 30);
     return { close };
   }
 
-  window.KPP_ID = { url: IDP_URL, systems: SYSTEMS, provinces: PROVINCES, consent: CONSENT, current, save, clear, login, register, ticket, me, notMe, logout, logoutAll, open, prevHtml, bindPrev, device, phone };
+  window.KPP_ID = { url: IDP_URL, systems: SYSTEMS, provinces: PROVINCES, consent: CONSENT, current, save, clear, login, register, ticket, ticketFrom, warm, me, notMe, logout, logoutAll, open, prevHtml, bindPrev, device, phone };
 })();
