@@ -158,3 +158,27 @@ CSV มีแถว “ไม่ระบุพื้นที่” (ถ้า�
 * จุดความร้อนคือการตรวจพบความร้อนจากดาวเทียม ไม่ใช่จำนวนเหตุการณ์เผาหรือจำนวนแปลง
 * อ้างอิงที่มา: “ระบบ Agri-Risk Map Burning (กรมส่งเสริมการเกษตร)” พร้อมวันที่ `generatedAt`
 * วิธีคำนวณ: คู่มือ `docs/Agri-Risk-Manual.pdf` หัวข้อ 4–7
+
+## ตัวตนกลาง (SSO) สำหรับระบบที่เชื่อมโยง (v3.12)
+
+ใช้โดย Green Gain Hub และ KPP Smart Agri-Materials — ส่งแบบ `POST` (Content-Type `text/plain`) ไปที่ลิงก์ `/exec` เดียวกัน · ไม่ต้องใช้ API key
+
+| action | เรียกจาก | ส่ง | ได้ |
+|---|---|---|---|
+| `id_login` | หน้าเว็บ (`js/kpp-id.js`) | `phone, system (ARM/GGH/SAM), remember, device` | `token, exp, person, prevLogin` หรือ `code: not_found` |
+| `id_register` | หน้าเว็บ | `phone, fullName, position, affiliation, provinceCode, districtName, consent:true, system` | เหมือน `id_login` |
+| `id_ticket` | หน้าเว็บ | `idToken, aud` | `ticket` (อายุ 120 วินาที ใช้ได้ครั้งเดียว) |
+| `id_redeem` | **Apps Script ของระบบปลายทาง** (UrlFetchApp) | `ticket, aud` | `person {personId, phone, fullName, position, affiliation, provinceCode, provinceName, districtName, systems}` |
+| `id_me` / `id_not_me` / `id_logout_all` | หน้าเว็บ | `idToken` | ข้อมูลตนเอง / ระงับทุกระบบ / ออกทุกเครื่อง |
+
+ลำดับที่ระบบปลายทางทำ: หน้าเว็บเรียก `KPP_ID.ticket('GGH')` → ส่งตั๋วให้ Apps Script ของตน → Apps Script เรียก `id_redeem` → จับคู่ `person.phone` กับชีตบัญชีของตนเพื่อกำหนดสิทธิ์ → ออก session ของตนเองตามเดิม
+
+```js
+// Apps Script ของระบบปลายทาง
+const r = JSON.parse(UrlFetchApp.fetch(IDP_URL, { method: 'post', contentType: 'text/plain', payload: JSON.stringify({ action: 'id_redeem', ticket: ticket, aud: 'GGH' }), muteHttpExceptions: true }).getContentText());
+if (!r.ok) throw new Error(r.error);
+// r.person.phone → หาบัญชีในชีตของระบบนี้
+```
+
+`SSO_MODE` = `off` ปิด endpoint ทั้งหมดนี้ (ระบบปลายทางต้องกลับไปใช้ทางเข้าเดิม)
+
