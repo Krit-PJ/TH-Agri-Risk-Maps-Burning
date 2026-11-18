@@ -11,7 +11,8 @@ const Admin = (() => {
   function isSuper() { return user()?.role === 'superadmin'; }
   /** Super Admin และ Mini Super Admin: ขอบเขตทุกจังหวัด */
   function isNational() { return ['superadmin', 'minisuper'].includes(user()?.role); }
-  const ROLE_LABEL = { superadmin: 'Super Admin', minisuper: 'Mini Super Admin', admin: 'Admin' };
+  const ROLE_LABEL = { superadmin: 'Super Admin', minisuper: 'Mini Super Admin', admin: 'Admin', sso: 'ตัวตนกลาง (SSO)' };
+  const SYS_LABEL = { ARM: 'Agri-Risk', GGH: 'Green Gain Hub', SAM: 'Smart Agri' };
   function setMsg(node, text, type = '') {
     if (!node) return;
     node.textContent = text;
@@ -53,6 +54,13 @@ const Admin = (() => {
     el('btn-hide-register').addEventListener('click', () => showPane('admin'));
     el('form-admin').addEventListener('submit', loginAdmin);
     el('form-super').addEventListener('submit', loginSuper);
+    el('form-mini').addEventListener('submit', loginMini);
+    el('form-mypass').addEventListener('submit', changeMyPassword);
+    el('form-sso').addEventListener('submit', saveSsoMode);
+    el('acc-role').addEventListener('change', syncCredFields);
+    el('people-status').addEventListener('change', renderPeople);
+    let peopleT; el('people-q').addEventListener('input', () => { clearTimeout(peopleT); peopleT = setTimeout(renderPeople, 200); });
+    el('btn-people-full').addEventListener('click', () => loadPeople(true));
     el('form-register').addEventListener('submit', register);
     ['admin-phone', 'reg-phone', 'acc-phone'].forEach(id => el(id).addEventListener('input', e => { e.target.value = e.target.value.replace(/[^\d-]/g, ''); }));
 
@@ -93,6 +101,23 @@ const Admin = (() => {
     el('form-settings').addEventListener('submit', saveSettings);
     document.addEventListener('agri-risk:auth-changed', updateUI);
     updateUI();
+    ssoAutoLogin();
+  }
+  /* v3.12 เข้าจากระบบอื่นในเครื่องเดียวกัน: มีตัวตนกลางอยู่แล้ว → เข้า Agri-Risk ให้อัตโนมัติ (เฉพาะผู้มีสิทธิ์ Admin) */
+  async function ssoAutoLogin() {
+    if (user() || !window.KPP_ID || !KPP_ID.current() || !Api.configured()) return;
+    const flag = 'agri-risk-sso-tried', id = KPP_ID.current();
+    try { if (sessionStorage.getItem(flag) === String(id.at)) return; sessionStorage.setItem(flag, String(id.at)); } catch { }
+    try {
+      const r = await Api.post('login_sso', { idToken: id.token, device: deviceLabel() }, false);
+      Api.saveSession(r.token, r.user); toast(`เข้าสู่ระบบแล้ว: ${r.user.name} (จากตัวตนกลาง)`);
+    } catch { /* ไม่มีสิทธิ์ Admin ใน Agri-Risk หรือเป็น Mini/Super — ใช้ทางเข้าปกติ */ }
+  }
+  function showPrevLogin(prev) {
+    const box = el('sso-prev');
+    if (!prev || !window.KPP_ID) { box.classList.add('hidden'); return; }
+    box.innerHTML = KPP_ID.prevHtml(prev); box.classList.remove('hidden');
+    KPP_ID.bindPrev(box, suspended => { if (suspended) { Api.clearSession(); updateUI(); setTimeout(() => el('console').classList.add('hidden'), 2500); } else box.classList.add('hidden'); });
   }
   function toggleDrop(menu, btn) { const open = menu.classList.toggle('hidden') === false; btn.setAttribute('aria-expanded', String(open)); }
 
@@ -108,7 +133,7 @@ const Admin = (() => {
   }
   function showPane(p) {
     document.querySelectorAll('[data-login-pane]').forEach(f => f.classList.toggle('hidden', f.dataset.loginPane !== p));
-    setTimeout(() => ({ admin: el('admin-phone'), super: el('super-user'), register: el('reg-phone') }[p])?.focus(), 0);
+    setTimeout(() => ({ admin: el('admin-phone'), mini: el('mini-user'), super: el('super-user'), register: el('reg-phone') }[p])?.focus(), 0);
   }
   async function loginAdmin(e) {
     e.preventDefault();
@@ -117,7 +142,10 @@ const Admin = (() => {
     setMsg(el('login-status'), 'กำลังตรวจสอบ…', 'working');
     try {
       const r = await Api.post('login_admin', { phone, device: deviceLabel() }, false);
+      if (r.id && window.KPP_ID) KPP_ID.save(r.id);   // v3.12 ตัวตนกลาง: เปิด GGH / Smart Agri ได้โดยไม่ต้องเข้าใหม่
       Api.saveSession(r.token, r.user); el('form-admin').reset(); afterLogin();
+      if (r.id) showPrevLogin(r.id.prevLogin);
+      if (r.user.needCredentials) toast('Mini Super Admin: กรุณาให้ Super Admin ตั้งชื่อผู้ใช้และรหัสผ่าน ต่อไปจะเข้าด้วยเบอร์โทรไม่ได้', 'error');
     } catch (err) { setMsg(el('login-status'), err.message, 'error'); }
   }
   async function loginSuper(e) {
@@ -127,6 +155,20 @@ const Admin = (() => {
       const r = await Api.post('login_super', { username: el('super-user').value.trim(), password: el('super-pass').value, device: deviceLabel() }, false);
       Api.saveSession(r.token, r.user); el('form-super').reset(); afterLogin();
     } catch (err) { setMsg(el('login-status'), err.message, 'error'); }
+  }
+  async function loginMini(e) {
+    e.preventDefault();
+    setMsg(el('login-status'), 'กำลังตรวจสอบ…', 'working');
+    try {
+      const r = await Api.post('login_mini', { username: el('mini-user').value.trim(), password: el('mini-pass').value, device: deviceLabel() }, false);
+      Api.saveSession(r.token, r.user); el('form-mini').reset(); afterLogin();
+    } catch (err) { setMsg(el('login-status'), err.message, 'error'); }
+  }
+  async function changeMyPassword(e) {
+    e.preventDefault();
+    const pw = el('mypass-new').value;
+    if (pw.length < 8 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return setMsg(el('console-status'), 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัว มีทั้งตัวอักษรและตัวเลข', 'error');
+    if (await run(() => Api.post('account_password', { current: el('mypass-current').value, password: pw }), 'เปลี่ยนรหัสผ่านแล้ว')) el('form-mypass').reset();
   }
   function afterLogin() {
     el('login-modal').classList.add('hidden');
@@ -145,7 +187,7 @@ const Admin = (() => {
       setMsg(el('login-status'), 'ส่งคำขอแล้ว ระบบจะเปิดสิทธิ์เมื่อผู้ดูแลอนุมัติ จากนั้นเข้าสู่ระบบด้วยเบอร์โทรศัพท์นี้', 'success');
     } catch (err) { setMsg(el('login-status'), err.message, 'error'); }
   }
-  function logout() { Api.clearSession(); el('console').classList.add('hidden'); updateUI(); toast('ออกจากระบบแล้ว'); }
+  function logout() { Api.clearSession(); if (window.KPP_ID) KPP_ID.logout(); el('sso-prev').classList.add('hidden'); el('console').classList.add('hidden'); updateUI(); toast('ออกจากระบบแล้ว (ทุกระบบในเครื่องนี้)'); }
 
   function updateUI() {
     const u = user();
@@ -153,6 +195,8 @@ const Admin = (() => {
     el('user-menu').classList.toggle('hidden', !u);
     document.querySelectorAll('.national-only').forEach(n => n.classList.toggle('hidden', !isNational()));
     document.querySelectorAll('.super-only').forEach(n => n.classList.toggle('hidden', !isSuper()));
+    document.querySelectorAll('.mini-only').forEach(n => n.classList.toggle('hidden', u?.role !== 'minisuper'));
+    syncCredFields();
     if (!u) return;
     el('user-initial').textContent = { superadmin: 'S', minisuper: 'M', admin: 'A' }[u.role] || 'A';
     el('user-label').textContent = u.name;
@@ -175,7 +219,7 @@ const Admin = (() => {
     document.querySelectorAll('#console [data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== tab));
     setMsg(el('console-status'), '');
     if (tab === 'compare' && isNational() && !el('compare-province').value && hooks.currentProvince?.()) el('compare-province').value = hooks.currentProvince();
-    ({ batches: loadBatches, requests: loadRequests, accounts: loadAccounts, logs: () => logView(logViewCur), settings: loadSettings }[tab])?.();
+    ({ batches: loadBatches, requests: loadRequests, accounts: loadAccounts, people: () => loadPeople(false), logs: () => logView(logViewCur), settings: loadSettings }[tab])?.();
   }
   /* v3.11 บันทึกการใช้งาน: การเข้าสู่ระบบ (LoginAttempts) | การดำเนินการ (AuditLog) */
   let logViewCur = 'logins';
@@ -223,7 +267,7 @@ const Admin = (() => {
     accounts = r.accounts.sort((a, b) => (a.role === 'minisuper' ? 0 : 1) - (b.role === 'minisuper' ? 0 : 1) || String(a.provinceName).localeCompare(String(b.provinceName), 'th') || String(a.accountId).localeCompare(String(b.accountId)));
     box.innerHTML = accounts.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>ชื่อ</th><th>บทบาท</th><th>เบอร์โทร</th><th>จังหวัด</th><th>สถานะ</th><th>เข้าใช้ล่าสุด</th><th></th></tr></thead><tbody>${accounts.map(a => `<tr>
       <td><p class="font-semibold">${esc(a.fullName)}</p><p class="text-xs text-ink-soft">${esc(a.position || '')} ${esc(a.affiliation || '')}</p></td>
-      <td>${a.role === 'minisuper' ? '<span class="status-pill bg-indigo-50 text-indigo-700">Mini Super Admin</span>' : '<span class="status-pill bg-paper text-ink-soft">Admin</span>'}</td>
+      <td>${a.role === 'minisuper' ? `<span class="status-pill bg-indigo-50 text-indigo-700">Mini Super Admin</span><p class="mt-1 text-xs ${a.hasPassword ? 'text-ink-soft' : 'text-amber-700'}">${a.hasPassword ? 'ชื่อผู้ใช้: ' + esc(a.username) : 'ยังไม่ตั้งชื่อผู้ใช้/รหัสผ่าน'}</p>` : '<span class="status-pill bg-paper text-ink-soft">Admin</span>'}</td>
       <td class="tabular-nums">${esc(a.phone)}</td><td>${esc(a.provinceName)}</td><td>${statusPill(a.status)}</td><td class="text-xs">${dt(a.lastLoginAt)}</td>
       <td class="whitespace-nowrap text-right">${a.accountId === user().sub ? '<span class="text-xs text-ink-mute">บัญชีของท่าน</span>' : (a.role === 'minisuper' && !isSuper()) ? '<span class="text-xs text-ink-mute">จัดการได้เฉพาะ Super Admin</span>' : `
         <button class="btn-ghost btn-sm" data-acc-edit="${esc(a.accountId)}">แก้ไข</button>
@@ -243,10 +287,11 @@ const Admin = (() => {
     const a = accounts.find(x => x.accountId === id); if (!a) return;
     el('acc-id').value = a.accountId; el('acc-phone').value = a.phone; el('acc-name').value = a.fullName; el('acc-position').value = a.position || '';
     el('acc-affiliation').value = a.affiliation || ''; el('acc-province').value = a.provinceCode; el('acc-role').value = a.role === 'minisuper' ? 'minisuper' : 'admin';
+    el('acc-username').value = a.username || ''; el('acc-password').value = ''; el('acc-password').placeholder = a.hasPassword ? 'เว้นว่าง = คงรหัสเดิม' : 'ตั้งรหัสผ่านเริ่มต้น'; syncCredFields();
     el('btn-acc-save').textContent = 'บันทึกการแก้ไข'; el('btn-acc-cancel').classList.remove('hidden'); el('acc-phone').focus();
   }
   function resetAccountForm() {
-    el('form-account').reset(); el('acc-id').value = ''; el('btn-acc-save').textContent = 'เพิ่มผู้ดูแล'; el('btn-acc-cancel').classList.add('hidden');
+    el('form-account').reset(); el('acc-id').value = ''; el('btn-acc-save').textContent = 'เพิ่มผู้ดูแล'; el('btn-acc-cancel').classList.add('hidden'); el('acc-password').placeholder = ''; syncCredFields();
     if (!isNational()) el('acc-province').value = user().prov;
   }
   async function saveAccount(e) {
@@ -254,7 +299,49 @@ const Admin = (() => {
     const body = { accountId: el('acc-id').value, phone: Api.normalizePhone(el('acc-phone').value), fullName: el('acc-name').value, position: el('acc-position').value, affiliation: el('acc-affiliation').value, provinceCode: isNational() ? el('acc-province').value : user().prov, role: isSuper() ? el('acc-role').value : 'admin' };
     if (!/^0\d{8,9}$/.test(body.phone)) return setMsg(el('console-status'), 'เบอร์โทรศัพท์ไม่ถูกต้อง', 'error');
     if (!body.provinceCode) return setMsg(el('console-status'), 'กรุณาเลือกจังหวัด', 'error');
+    if (body.role === 'minisuper') { body.username = el('acc-username').value.trim(); body.password = el('acc-password').value; }
     if (await run(() => Api.post('account_save', body), body.accountId ? 'บันทึกการแก้ไขแล้ว' : `เพิ่ม ${ROLE_LABEL[body.role]} แล้ว`)) { resetAccountForm(); loadAccounts(); }
+  }
+
+  /** v3.12 ช่องชื่อผู้ใช้/รหัสผ่าน แสดงเมื่อ Super Admin เลือกบทบาท Mini Super Admin */
+  function syncCredFields() { el('acc-cred').classList.toggle('hidden', !(isSuper() && el('acc-role').value === 'minisuper')); }
+
+  /* ---------- v3.12 ตัวตนกลาง (SSO) ---------- */
+  let people = null;
+  async function loadPeople(full) {
+    if (full && !await confirmBox('แสดงเบอร์โทรเต็มของทุกคนในรายการ? การดูเบอร์เต็มจะถูกบันทึกในบันทึกการใช้งาน', { yes: 'แสดงเบอร์เต็ม' })) return;
+    const box = el('people-list'); box.innerHTML = '<span class="spinner"></span>';
+    const r = await run(() => Api.post('id_people_list', { full: !!full }));
+    if (!r) { box.innerHTML = ''; return; }
+    people = r; el('sso-mode').value = r.mode || 'optional'; renderPeople();
+  }
+  function renderPeople() {
+    if (!people) return;
+    const q = el('people-q').value.trim().toLowerCase(), st = el('people-status').value, all = people.people;
+    const rows = all.filter(p => (!st || p.status === st) && (!q || `${p.fullName} ${p.phone} ${p.affiliation} ${p.districtName} ${p.provinceName}`.toLowerCase().includes(q)))
+      .sort((a, b) => String(b.lastLoginAt || b.createdAt).localeCompare(String(a.lastLoginAt || a.createdAt)));
+    const count = s => all.filter(p => p.systems.includes(s)).length;
+    el('people-summary').innerHTML = [[fmt(all.length), 'ตัวตนทั้งหมด'], [fmt(count('GGH')), 'ใช้ Green Gain Hub'], [fmt(count('SAM')), 'ใช้ Smart Agri'], [fmt(all.filter(p => p.status === 'suspended').length), 'ถูกระงับ']]
+      .map(([v, l]) => `<div class="rounded-lg bg-paper p-2.5"><div class="text-lg font-bold">${v}</div><div class="text-xs text-ink-soft">${l}</div></div>`).join('');
+    el('people-list').innerHTML = rows.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>ชื่อ</th><th>เบอร์โทร</th><th>จังหวัด / อำเภอ</th><th>ระบบที่ใช้</th><th>สถานะ</th><th>เข้าใช้ล่าสุด</th><th></th></tr></thead><tbody>${rows.map(p => `<tr>
+      <td><p class="font-semibold">${esc(p.fullName)}</p><p class="text-xs text-ink-soft">${esc([p.position, p.affiliation].filter(Boolean).join(' · ') || '-')}</p></td>
+      <td class="tabular-nums">${esc(p.phone)}</td><td>${esc(p.provinceName || '-')}${p.districtName ? ` / ${esc(p.districtName)}` : ''}</td>
+      <td class="text-xs">${p.systems.map(s => esc(SYS_LABEL[s] || s)).join(', ') || '-'}</td>
+      <td>${p.status === 'active' ? '<span class="status-pill bg-brand-50 text-brand-700">ใช้งาน</span>' : `<span class="status-pill bg-red-50 text-red-700">ระงับ</span>${p.statusNote ? `<p class="mt-1 max-w-[14rem] text-xs text-ink-soft">${esc(p.statusNote)}</p>` : ''}`}</td>
+      <td class="whitespace-nowrap text-xs">${dt(p.lastLoginAt)}${p.lastSystem ? `<br><span class="text-ink-mute">${esc(SYS_LABEL[p.lastSystem] || p.lastSystem)}</span>` : ''}</td>
+      <td class="text-right"><button type="button" class="btn-ghost btn-sm whitespace-nowrap ${p.status === 'active' ? 'text-red-700' : ''}" data-person="${esc(p.personId)}" data-to="${p.status === 'active' ? 'suspended' : 'active'}">${p.status === 'active' ? 'ระงับทุกระบบ' : 'เปิดใช้'}</button></td></tr>`).join('')}</tbody></table></div>` : empty('ไม่พบรายการ');
+    el('people-list').querySelectorAll('[data-person]').forEach(b => b.addEventListener('click', async () => {
+      const p = people.people.find(x => x.personId === b.dataset.person), suspend = b.dataset.to === 'suspended';
+      if (!await confirmBox(suspend ? `ระงับ ${p.fullName}? จะออกจาก Agri-Risk, Green Gain Hub และ Smart Agri ทันที` : `เปิดใช้ ${p.fullName} อีกครั้ง?`, { yes: suspend ? 'ระงับ' : 'เปิดใช้' })) return;
+      if (await run(() => Api.post('id_person_status', { personId: p.personId, status: b.dataset.to }), suspend ? 'ระงับแล้ว' : 'เปิดใช้แล้ว')) loadPeople(false);
+    }));
+  }
+  async function saveSsoMode(e) {
+    e.preventDefault();
+    const mode = el('sso-mode').value;
+    const warn = { off: 'ปิดตัวตนกลางชั่วคราว? ทุกระบบกลับไปใช้ทางเข้าเดิม', required: 'บังคับใช้ตัวตนกลาง? ระบบที่เชื่อมแล้วจะปิดทางเข้าเดิม (ยกเว้น Mini/Super Admin)', optional: 'เปิดใช้ตัวตนกลางแบบมีทางเข้าเดิมสำรอง?' }[mode];
+    if (!await confirmBox(warn, { yes: 'บันทึก' })) return;
+    await run(() => Api.post('sso_mode_save', { mode }), 'บันทึกการตั้งค่าตัวตนกลางแล้ว');
   }
 
   /* ---------- batches ---------- */
@@ -312,8 +399,9 @@ const Admin = (() => {
 
   /* ---------- audit / settings ---------- */
   const AUDIT_LABEL = { login: 'เข้าสู่ระบบ', register: 'ยื่นคำขอ', request_approve: 'อนุมัติคำขอ', request_reject: 'ไม่อนุมัติคำขอ', account_create: 'เพิ่มผู้ดูแล', account_update: 'แก้ไขผู้ดูแล', account_disabled: 'ระงับสิทธิ์', account_approved: 'เปิดสิทธิ์', account_delete: 'ลบสิทธิ์', hs_import: 'นำเข้า HS', hs_delete_batch: 'ลบชุดข้อมูล', hs_clear: 'ล้างข้อมูล HS', hs_batch_on: 'เปิดใช้งานชุดข้อมูล', hs_batch_off: 'ปิดใช้งานชุดข้อมูล', settings_save: 'ตั้งค่าระบบ', setup: 'ติดตั้งระบบ',
-    team_create: 'เพิ่มรายชื่อทีม', team_update: 'แก้ไขรายชื่อทีม', team_delete: 'ลบรายชื่อทีม', api_key_create: 'ออก API key', api_key_revoke: 'ยกเลิก API key' };
-  const auditGroup = a => /^hs_/.test(a) ? 'hs' : /^(account_|request_|register)/.test(a) ? 'account' : /^(settings|api_key|setup)/.test(a) ? 'settings' : /^team_/.test(a) ? 'team' : 'other';
+    team_create: 'เพิ่มรายชื่อทีม', team_update: 'แก้ไขรายชื่อทีม', team_delete: 'ลบรายชื่อทีม', api_key_create: 'ออก API key', api_key_revoke: 'ยกเลิก API key',
+    id_register: 'ลงทะเบียนตัวตนกลาง', id_not_me: 'เจ้าของแจ้ง "ไม่ใช่ฉัน"', id_suspend: 'ระงับตัวตนกลาง', id_activate: 'เปิดใช้ตัวตนกลาง', id_people_view_full: 'ดูเบอร์เต็ม (ตัวตนกลาง)', account_password: 'เปลี่ยนรหัสผ่าน Mini' };
+  const auditGroup = a => /^hs_/.test(a) ? 'hs' : /^(account_|request_|register|id_)/.test(a) ? 'account' : /^(settings|api_key|setup)/.test(a) ? 'settings' : /^team_/.test(a) ? 'team' : 'other';
   let audit = null;
   async function loadAudit() {
     const box = el('audit-list'); box.innerHTML = '<span class="spinner"></span>';

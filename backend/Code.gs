@@ -33,7 +33,7 @@ const AGRI_LANDS = ['พื้นที่เกษตร', 'เขต สปก
 const PROVINCES = {"10":"กรุงเทพมหานคร","11":"สมุทรปราการ","12":"นนทบุรี","13":"ปทุมธานี","14":"พระนครศรีอยุธยา","15":"อ่างทอง","16":"ลพบุรี","17":"สิงห์บุรี","18":"ชัยนาท","19":"สระบุรี","20":"ชลบุรี","21":"ระยอง","22":"จันทบุรี","23":"ตราด","24":"ฉะเชิงเทรา","25":"ปราจีนบุรี","26":"นครนายก","27":"สระแก้ว","30":"นครราชสีมา","31":"บุรีรัมย์","32":"สุรินทร์","33":"ศรีสะเกษ","34":"อุบลราชธานี","35":"ยโสธร","36":"ชัยภูมิ","37":"อำนาจเจริญ","38":"บึงกาฬ","39":"หนองบัวลำภู","40":"ขอนแก่น","41":"อุดรธานี","42":"เลย","43":"หนองคาย","44":"มหาสารคาม","45":"ร้อยเอ็ด","46":"กาฬสินธุ์","47":"สกลนคร","48":"นครพนม","49":"มุกดาหาร","50":"เชียงใหม่","51":"ลำพูน","52":"ลำปาง","53":"อุตรดิตถ์","54":"แพร่","55":"น่าน","56":"พะเยา","57":"เชียงราย","58":"แม่ฮ่องสอน","60":"นครสวรรค์","61":"อุทัยธานี","62":"กำแพงเพชร","63":"ตาก","64":"สุโขทัย","65":"พิษณุโลก","66":"พิจิตร","67":"เพชรบูรณ์","70":"ราชบุรี","71":"กาญจนบุรี","72":"สุพรรณบุรี","73":"นครปฐม","74":"สมุทรสาคร","75":"สมุทรสงคราม","76":"เพชรบุรี","77":"ประจวบคีรีขันธ์","80":"นครศรีธรรมราช","81":"กระบี่","82":"พังงา","83":"ภูเก็ต","84":"สุราษฎร์ธานี","85":"ระนอง","86":"ชุมพร","90":"สงขลา","91":"สตูล","92":"ตรัง","93":"พัทลุง","94":"ปัตตานี","95":"ยะลา","96":"นราธิวาส"};
 
 const SHEETS = {
-  Accounts: ['accountId', 'phone', 'fullName', 'position', 'affiliation', 'provinceCode', 'provinceName', 'role', 'status', 'createdAt', 'approvedAt', 'approvedBy', 'lastLoginAt'],
+  Accounts: ['accountId', 'phone', 'fullName', 'position', 'affiliation', 'provinceCode', 'provinceName', 'role', 'status', 'createdAt', 'approvedAt', 'approvedBy', 'lastLoginAt', 'username', 'passHash', 'passSalt'],
   Requests: ['requestId', 'phone', 'fullName', 'position', 'affiliation', 'provinceCode', 'provinceName', 'note', 'status', 'createdAt', 'decidedAt', 'decidedBy', 'reason'],
   ProvinceSummary: ['provinceCode', 'provinceName', 'hsCount', 'firstDate', 'lastDate', 'updatedAt'],
   Batches: ['batchId', 'provinceCode', 'fileName', 'accepted', 'duplicates', 'firstDate', 'lastDate', 'importedBy', 'importedAt', 'note', 'source', 'active'],
@@ -41,20 +41,23 @@ const SHEETS = {
   Settings: ['key', 'value'],
   AuditLog: ['time', 'actor', 'role', 'provinceCode', 'action', 'detail'],
   LoginAttempts: ['time', 'role', 'identifier', 'result', 'accountId', 'fullName', 'provinceCode', 'provinceName', 'device'],
-  Team: ['memberId', 'sortOrder', 'photo', 'fullName', 'role', 'roleOther', 'position', 'affiliation', 'provinceCode', 'provinceName', 'education', 'expertise', 'links', 'createdAt', 'updatedAt', 'updatedBy']
+  Team: ['memberId', 'sortOrder', 'photo', 'fullName', 'role', 'roleOther', 'position', 'affiliation', 'provinceCode', 'provinceName', 'education', 'expertise', 'links', 'createdAt', 'updatedAt', 'updatedBy'],
+  // v3.12 ตัวตนกลาง (SSO) ใช้ร่วมกับ Green Gain Hub และ KPP Smart Agri-Materials — ดู Identity.gs
+  People: ['personId', 'phone', 'fullName', 'position', 'affiliation', 'provinceCode', 'provinceName', 'districtName', 'status', 'statusNote', 'tokenVer', 'consentAt', 'createdAt', 'createdVia', 'lastLoginAt', 'lastDevice', 'lastSystem', 'prevLoginAt', 'prevDevice', 'prevSystem', 'systems']
 };
 // คอลัมน์ข้อความที่ต้องคงเลข 0 นำหน้า (กัน Google Sheet ตัดเลข 0)
 const TEXT_COLUMNS = {
-  Accounts: ['accountId', 'phone', 'provinceCode'],
+  Accounts: ['accountId', 'phone', 'provinceCode', 'username', 'passHash', 'passSalt'],
   Requests: ['requestId', 'phone', 'provinceCode'],
   ProvinceSummary: ['provinceCode', 'firstDate', 'lastDate'],
   Batches: ['batchId', 'provinceCode', 'firstDate', 'lastDate'],
   Counter: ['date'],
   Settings: ['key', 'value'],
   LoginAttempts: ['identifier', 'accountId', 'provinceCode'],
-  Team: ['memberId', 'provinceCode', 'photo', 'links']
+  Team: ['memberId', 'provinceCode', 'photo', 'links'],
+  People: ['personId', 'phone', 'provinceCode']
 };
-const SETUP_VERSION = '3.9.1';
+const SETUP_VERSION = '3.12.0';
 const TEAM_ROLES = ['ผู้พัฒนาระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];
 const ACCOUNT_ROLES = { admin: 'Admin', minisuper: 'Mini Super Admin' };
 const LOGIN_RESULTS = { success: 'สำเร็จ', not_found: 'ไม่มีหมายเลขในระบบ', pending: 'รออนุมัติ', disabled: 'บัญชีถูกระงับ', invalid: 'รูปแบบไม่ถูกต้อง', wrong_credentials: 'ชื่อผู้ใช้/รหัสผ่านไม่ถูกต้อง' };
@@ -72,6 +75,7 @@ function setup() {
 
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('TOKEN_SECRET')) props.setProperty('TOKEN_SECRET', Utilities.getUuid() + Utilities.getUuid());
+  if (!props.getProperty('SSO_MODE')) props.setProperty('SSO_MODE', 'optional');
   const sec = initSecrets_();
   if (!props.getProperty('SUPER_HASH') && sec.superUser && sec.superPassword) setSuperAdmin(sec.superUser, sec.superPassword);
 
@@ -144,6 +148,16 @@ function doPost(e) {
     if (a === 'login_admin') return json_(loginAdmin_(body));
     if (a === 'login_super') return json_(loginSuper_(body));
     if (a === 'register') return json_(register_(body));
+    if (a === 'login_mini') return json_(loginMini_(body));
+    // v3.12 ตัวตนกลาง (Identity.gs) — ไม่ใช้ token ของ Agri-Risk
+    if (a === 'id_login') return json_(idLogin_(body));
+    if (a === 'id_register') return json_(idRegister_(body));
+    if (a === 'id_me') return json_(idMe_(body));
+    if (a === 'id_ticket') return json_(idTicket_(body));
+    if (a === 'id_redeem') return json_(idRedeem_(body));
+    if (a === 'id_not_me') return json_(idNotMe_(body));
+    if (a === 'id_logout_all') return json_(idLogoutAll_(body));
+    if (a === 'login_sso') return json_(loginSso_(body));
 
     const user = verifyToken_(body.token);
     switch (a) {
@@ -171,6 +185,10 @@ function doPost(e) {
       case 'login_report': return json_(loginReport_(user, body));
       case 'team_save': return json_(teamSave_(user, body));
       case 'team_delete': return json_(teamDelete_(user, body));
+      case 'account_password': return json_(accountPassword_(user, body));
+      case 'id_people_list': return json_(idPeopleList_(user, body));
+      case 'id_person_status': return json_(idPersonStatus_(user, body));
+      case 'sso_mode_save': return json_(ssoModeSave_(user, body));
       default: return json_({ ok: false, error: 'unknown action' });
     }
   } catch (err) { return json_({ ok: false, error: String(err.message || err) }); }
@@ -189,11 +207,19 @@ function loginAdmin_(b) {
   }
   const lrole = acc.role === 'minisuper' ? 'minisuper' : 'admin';
   if (acc.status !== 'approved') { logAttempt_(lrole, phone, 'disabled', acc, device); throw new Error('บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ'); }
+  // v3.12 Mini Super Admin ที่ตั้งชื่อผู้ใช้/รหัสผ่านแล้ว เข้าด้วยเบอร์โทรไม่ได้
+  if (lrole === 'minisuper' && acc.passHash) { logAttempt_(lrole, phone, 'wrong_credentials', acc, device); throw new Error('บัญชี Mini Super Admin เข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน (แท็บ Mini Super Admin)'); }
   logAttempt_(lrole, phone, 'success', acc, device);
   updateRow_('Accounts', acc._row, { lastLoginAt: now_() });
   const user = accountUser_(acc);
+  if (lrole === 'minisuper') user.needCredentials = true;
   audit_(user, 'login', user.role + ' login', user.role === 'minisuper' ? String(acc.provinceCode) : '');
-  return { ok: true, token: signToken_(user), user: user };
+  const out = { ok: true, token: signToken_(user), user: user };
+  // v3.12 Admin (เบอร์โทร) ได้ตัวตนกลางพร้อมกัน เพื่อเปิด Green Gain Hub / Smart Agri ได้โดยไม่ต้องเข้าใหม่
+  if (lrole === 'admin' && ssoMode_() !== 'off') {
+    try { const p = idFromAccount_(acc); const id = idIssue_(p, 'ARM', device, false); out.id = { token: id.token, exp: id.exp, person: id.person, prevLogin: id.prevLogin }; } catch (e) { /* ตัวตนกลางล้มเหลวไม่กระทบการเข้า Agri-Risk */ }
+  }
+  return out;
 }
 
 function loginSuper_(b) {
@@ -299,7 +325,11 @@ function requestDecide_(user, b) {
 
 function accountsList_(user) {
   const rows = readAll_('Accounts').filter(r => inScope_(user, r.provinceCode));
-  return { ok: true, accounts: rows.map(stripRow_).map(r => Object.assign(r, { phone: normalizePhone_(r.phone) })) };
+  return { ok: true, accounts: rows.map(stripRow_).map(r => {
+    const o = Object.assign(r, { phone: normalizePhone_(r.phone), hasPassword: !!r.passHash });
+    delete o.passHash; delete o.passSalt;
+    return o;
+  }) };
 }
 
 function accountSave_(user, b) {
@@ -320,10 +350,14 @@ function accountSave_(user, b) {
       requireProvince_(user, acc.provinceCode);
       requireRoleManager_(user, acc.role);
       if (acc.accountId === user.sub && role !== acc.role) throw new Error('ไม่สามารถเปลี่ยนบทบาทของตนเองได้');
+      // v3.12 Mini Super Admin: ชื่อผู้ใช้ + รหัสผ่าน (Super Admin กำหนด; เว้นรหัสผ่านว่าง = คงเดิม)
+      if (role === 'minisuper' && (b.username || b.password || !acc.passHash)) Object.assign(data, miniCredentials_(acc, b.username || acc.username, b.password));
+      if (role === 'admin') Object.assign(data, { username: '', passHash: '', passSalt: '' });
       updateRow_('Accounts', acc._row, data);
       audit_(user, 'account_update', b.accountId + ' (' + ACCOUNT_ROLES[role] + ')', prov);
     } else {
       const id = nextAccountId_(prov);
+      if (role === 'minisuper') Object.assign(data, miniCredentials_(null, b.username, b.password));
       appendObj_('Accounts', Object.assign(data, { accountId: id, status: 'approved', createdAt: now_(), approvedAt: now_(), approvedBy: user.name, lastLoginAt: '' }));
       audit_(user, 'account_create', id + ' (' + ACCOUNT_ROLES[role] + ')', prov);
     }
@@ -770,7 +804,7 @@ function loginReport_(user, b) {
   const since = Utilities.formatDate(new Date(Date.now() - days * 864e5), 'Asia/Bangkok', "yyyy-MM-dd'T'HH:mm:ss");
   const all = readAll_('LoginAttempts').filter(r => String(r.time) >= since).map(stripRow_);
   const rows = all.filter(r => user.role === 'superadmin' || (user.role === 'minisuper' && r.role !== 'superadmin') || (r.role === 'admin' && String(r.provinceCode) === user.prov))
-    .map(r => Object.assign(r, { identifier: r.role !== 'superadmin' ? normalizePhone_(r.identifier) || r.identifier : r.identifier, resultLabel: LOGIN_RESULTS[r.result] || r.result }));
+    .map(r => Object.assign(r, { identifier: r.role !== 'superadmin' && /^[\d\s+-]+$/.test(String(r.identifier)) ? normalizePhone_(r.identifier) || r.identifier : r.identifier, resultLabel: LOGIN_RESULTS[r.result] || r.result }));
   const unknownMap = {};
   if (isNational_(user)) {
     all.filter(r => r.result === 'not_found').forEach(r => {
@@ -779,7 +813,7 @@ function loginReport_(user, b) {
       u.attempts++; if (String(r.time) < String(u.firstAt)) u.firstAt = r.time; if (String(r.time) > String(u.lastAt)) u.lastAt = r.time;
     });
     // ตัดหมายเลขที่ภายหลังได้รับสิทธิ์แล้ว
-    const known = new Set(readAll_('Accounts').map(r => normalizePhone_(r.phone)));
+    const known = new Set(readAll_('Accounts').map(r => normalizePhone_(r.phone)).concat(readAll_('People').map(r => normalizePhone_(r.phone))));
     Object.keys(unknownMap).forEach(k => { if (known.has(k)) delete unknownMap[k]; });
   }
   const summary = {};

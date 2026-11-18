@@ -205,7 +205,7 @@ const Team = (() => {
   }
 
   /* ---------------- login (shares session with main page) ---------------- */
-  function openLogin() { el('login-modal').classList.remove('hidden'); setMsg(el('login-status'), ''); setTimeout(() => el('login-phone').focus(), 0); }
+  function openLogin() { el('login-modal').classList.remove('hidden'); setMsg(el('login-status'), ''); setTimeout(() => el('login-mini-user').focus(), 0); }
   function bindLogin() {
     el('btn-login').addEventListener('click', openLogin);
     el('btn-logout').addEventListener('click', () => { Api.clearSession(); updateAuthUI(); toast('ออกจากระบบแล้ว'); });
@@ -219,10 +219,10 @@ const Team = (() => {
       toast(canManage() ? `เข้าสู่ระบบแล้ว: ${r.user.name}` : 'เข้าสู่ระบบแล้ว แต่บัญชีนี้ไม่มีสิทธิ์จัดการข้อมูลทีม', !canManage());
     };
     el('form-phone').addEventListener('submit', async e => {
-      e.preventDefault(); const phone = Api.normalizePhone(el('login-phone').value);
-      if (!/^0\d{8,9}$/.test(phone)) return setMsg(el('login-status'), 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก', 'error');
-      setMsg(el('login-status'), 'กำลังตรวจสอบ…', 'working');
-      try { done(await Api.post('login_admin', { phone, device: device() }, false)); } catch (err) { setMsg(el('login-status'), err.message, 'error'); }
+      e.preventDefault(); setMsg(el('login-status'), 'กำลังตรวจสอบ…', 'working');
+      // v3.12 Mini Super Admin เข้าด้วยชื่อผู้ใช้ + รหัสผ่าน
+      try { done(await Api.post('login_mini', { username: el('login-mini-user').value.trim(), password: el('login-mini-pass').value, device: device() }, false)); el('form-phone').reset(); }
+      catch (err) { setMsg(el('login-status'), err.message, 'error'); }
     });
     el('form-super').addEventListener('submit', async e => {
       e.preventDefault(); setMsg(el('login-status'), 'กำลังตรวจสอบ…', 'working');

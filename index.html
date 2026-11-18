@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.11.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.12.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -257,8 +257,9 @@
     </div>
     <div class="px-5 pt-4">
       <div class="tabs" role="tablist">
-        <button type="button" role="tab" class="tab is-active" data-login-tab="admin" aria-selected="true">Admin / Mini Super Admin<span class="block text-xs font-normal">เข้าด้วยเบอร์โทรศัพท์</span></button>
-        <button type="button" role="tab" class="tab" data-login-tab="super" aria-selected="false">Super Admin<span class="block text-xs font-normal">ผู้ดูแลทั้งระบบ</span></button>
+        <button type="button" role="tab" class="tab is-active" data-login-tab="admin" aria-selected="true">Admin<span class="block text-xs font-normal">เบอร์โทรศัพท์</span></button>
+        <button type="button" role="tab" class="tab" data-login-tab="mini" aria-selected="false">Mini Super Admin<span class="block text-xs font-normal">ชื่อผู้ใช้ + รหัสผ่าน</span></button>
+        <button type="button" role="tab" class="tab" data-login-tab="super" aria-selected="false">Super Admin<span class="block text-xs font-normal">ชื่อผู้ใช้ + รหัสผ่าน</span></button>
       </div>
     </div>
 
@@ -267,6 +268,7 @@
       <label class="field-label" for="admin-phone">เบอร์โทรศัพท์ที่ได้รับอนุญาต</label>
       <input id="admin-phone" class="field w-full text-lg tracking-wide" type="tel" inputmode="numeric" placeholder="08x-xxx-xxxx" maxlength="12" required/>
       <button type="submit" class="btn-primary w-full justify-center">เข้าสู่ระบบ</button>
+      <p class="text-center text-xs text-ink-soft">เบอร์เดียวกันนี้ใช้เข้า Green Gain Hub และ KPP Smart Agri-Materials ได้ด้วย</p>
       <p class="text-center text-sm text-ink-soft">ยังไม่มีสิทธิ์ใช้งาน? <button type="button" id="btn-show-register" class="font-semibold text-brand-700 underline underline-offset-2">ขออนุญาตใช้งาน</button></p>
     </form>
 
@@ -287,6 +289,16 @@
         <button type="button" id="btn-hide-register" class="btn-ghost flex-1 justify-center">ย้อนกลับ</button>
         <button type="submit" class="btn-primary flex-1 justify-center">ส่งคำขอ</button>
       </div>
+    </form>
+
+    <!-- v3.12 Mini Super Admin: username + password -->
+    <form id="form-mini" class="hidden space-y-3 px-5 py-4" autocomplete="off" data-login-pane="mini">
+      <label class="field-label" for="mini-user">ชื่อผู้ใช้</label>
+      <input id="mini-user" class="field w-full" type="text" autocomplete="username" autocapitalize="none" required/>
+      <label class="field-label" for="mini-pass">รหัสผ่าน</label>
+      <input id="mini-pass" class="field w-full" type="password" autocomplete="current-password" required/>
+      <button type="submit" class="btn-primary w-full justify-center">เข้าสู่ระบบ</button>
+      <p class="text-xs text-ink-soft">ยังไม่ได้รับชื่อผู้ใช้? ติดต่อ Super Admin ระหว่างนี้เข้าที่แท็บ Admin ด้วยเบอร์โทรได้จนกว่าจะตั้งรหัสผ่าน</p>
     </form>
 
     <!-- Super Admin -->
@@ -311,6 +323,7 @@
       </div>
       <button type="button" class="icon-btn text-white hover:bg-white/10" data-close-modal aria-label="ปิด">✕</button>
     </div>
+    <div id="sso-prev" class="hidden border-b border-amber-200 bg-amber-50 px-5 py-2.5 text-sm" role="note"></div>
     <div class="border-b border-line px-3">
       <div class="tabs-line" role="tablist" id="console-tabs">
         <button type="button" class="tab-line is-active" data-tab="import">นำเข้า HS</button>
@@ -318,6 +331,7 @@
         <button type="button" class="tab-line" data-tab="compare">เปรียบเทียบแหล่งข้อมูล</button>
         <button type="button" class="tab-line" data-tab="requests">คำขอใช้งาน <span id="badge-requests" class="badge hidden">0</span></button>
         <button type="button" class="tab-line" data-tab="accounts">ผู้ดูแลระบบ</button>
+        <button type="button" class="tab-line" data-tab="people">ตัวตนกลาง (SSO)</button>
         <button type="button" class="tab-line" data-tab="logs">บันทึกการใช้งาน</button>
         <button type="button" class="tab-line national-only hidden" data-tab="settings">ตั้งค่าระบบ</button>
       </div>
@@ -396,12 +410,42 @@
           <div><label class="field-label" for="acc-province">จังหวัด (สังกัด)</label><select id="acc-province" class="field w-full"></select></div>
           <div class="super-only hidden sm:col-span-2"><label class="field-label" for="acc-role">บทบาท</label><select id="acc-role" class="field w-full"><option value="admin">Admin — จัดการได้เฉพาะจังหวัดที่สังกัด</option><option value="minisuper">Mini Super Admin — จัดการได้ทุกจังหวัด (ยกเว้นการจัดการ Mini Super Admin)</option></select></div>
           <div class="sm:col-span-2"><label class="field-label" for="acc-affiliation">สังกัด/หน่วยงาน</label><input id="acc-affiliation" class="field w-full" maxlength="160"/></div>
+          <div id="acc-cred" class="hidden grid gap-2 rounded-lg bg-indigo-50 p-2.5 sm:col-span-2 sm:grid-cols-2">
+            <p class="text-xs text-indigo-900 sm:col-span-2">Mini Super Admin เข้าสู่ระบบด้วยชื่อผู้ใช้ + รหัสผ่าน (เบอร์โทรอย่างเดียวใช้ไม่ได้) · รหัสผ่านอย่างน้อย 8 ตัว มีตัวอักษรและตัวเลข · แก้ไขบัญชีเดิม เว้นรหัสผ่านว่าง = คงรหัสเดิม</p>
+            <div><label class="field-label" for="acc-username">ชื่อผู้ใช้</label><input id="acc-username" class="field w-full" autocomplete="off" autocapitalize="none" maxlength="40"/></div>
+            <div><label class="field-label" for="acc-password">รหัสผ่าน</label><input id="acc-password" class="field w-full" type="password" autocomplete="new-password" maxlength="64"/></div>
+          </div>
           <div class="flex gap-2 sm:col-span-2">
             <button type="submit" class="btn-primary" id="btn-acc-save">เพิ่มผู้ดูแล</button>
             <button type="button" class="btn-ghost hidden" id="btn-acc-cancel">ยกเลิกการแก้ไข</button>
           </div>
         </form>
         <div id="accounts-list"></div>
+        <!-- v3.12 Mini Super Admin เปลี่ยนรหัสผ่านของตนเอง -->
+        <form id="form-mypass" class="mini-only hidden grid gap-2 rounded-xl border border-line p-3 sm:grid-cols-3">
+          <h4 class="text-sm font-bold sm:col-span-3">รหัสผ่านของฉัน (Mini Super Admin)</h4>
+          <div><label class="field-label" for="mypass-current">รหัสผ่านปัจจุบัน</label><input id="mypass-current" class="field w-full" type="password" autocomplete="current-password"/></div>
+          <div><label class="field-label" for="mypass-new">รหัสผ่านใหม่</label><input id="mypass-new" class="field w-full" type="password" autocomplete="new-password" minlength="8" required/></div>
+          <div class="flex items-end"><button type="submit" class="btn-primary w-full justify-center">เปลี่ยนรหัสผ่าน</button></div>
+        </form>
+      </section>
+
+      <!-- v3.12 ตัวตนกลาง (SSO): เบอร์โทรเดียวใช้ได้ทั้ง Agri-Risk Map, Green Gain Hub และ KPP Smart Agri-Materials -->
+      <section data-pane="people" class="hidden space-y-3">
+        <div><h3 class="text-base font-bold">ตัวตนกลาง (เบอร์โทรเดียว ใช้ได้ 3 ระบบ)</h3>
+          <p class="text-sm text-ink-soft">ผู้ที่ลงทะเบียนครั้งเดียวแล้วใช้ Agri-Risk Map, Green Gain Hub และ KPP Smart Agri-Materials ได้ · สิทธิ์ในแต่ละระบบยังกำหนดที่ระบบนั้น · ระงับที่นี่ = ออกจากทุกระบบทันที · เบอร์ปกปิดเป็นค่าเริ่มต้น การดูเบอร์เต็มถูกบันทึก</p></div>
+        <div class="flex flex-wrap items-end gap-2">
+          <div class="min-w-[12rem] flex-1"><label class="field-label" for="people-q">ค้นหา</label><input id="people-q" class="field w-full" placeholder="ชื่อ เบอร์ 4 ตัวท้าย หน่วยงาน อำเภอ"/></div>
+          <div><label class="field-label" for="people-status">สถานะ</label><select id="people-status" class="field"><option value="">ทั้งหมด</option><option value="active">ใช้งาน</option><option value="suspended">ระงับ</option></select></div>
+          <button type="button" id="btn-people-full" class="btn-ghost national-only hidden">แสดงเบอร์เต็ม</button>
+        </div>
+        <div id="people-summary" class="grid grid-cols-2 gap-2 sm:grid-cols-4"></div>
+        <div id="people-list"></div>
+        <form id="form-sso" class="super-only hidden flex flex-wrap items-end gap-2 rounded-xl border border-line p-3">
+          <div class="min-w-[14rem] flex-1"><label class="field-label" for="sso-mode">การใช้ตัวตนกลาง (Super Admin)</label>
+            <select id="sso-mode" class="field w-full"><option value="optional">เปิดใช้ (ระบบอื่นยังมีทางเข้าเดิม)</option><option value="required">บังคับใช้ (ระบบอื่นปิดทางเข้าเดิม ยกเว้น Mini/Super)</option><option value="off">ปิดชั่วคราว (ทุกระบบกลับไปใช้ทางเข้าเดิม)</option></select></div>
+          <button type="submit" class="btn-primary">บันทึก</button>
+        </form>
       </section>
 
       <!-- v3.11 บันทึกการใช้งาน = การเข้าสู่ระบบ (LoginAttempts) + การดำเนินการ (AuditLog) -->
@@ -546,13 +590,14 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.11.0"></script>
-<script src="js/api.js?v=3.11.0"></script>
-<script src="js/geo.js?v=3.11.0"></script>
-<script src="js/map.js?v=3.11.0"></script>
-<script src="js/dashboard.js?v=3.11.0"></script>
-<script src="js/report.js?v=3.11.0"></script>
-<script src="js/admin.js?v=3.11.0"></script>
-<script src="js/app.js?v=3.11.0"></script>
+<script src="js/config.js?v=3.12.0"></script>
+<script src="js/api.js?v=3.12.0"></script>
+<script src="js/geo.js?v=3.12.0"></script>
+<script src="js/map.js?v=3.12.0"></script>
+<script src="js/dashboard.js?v=3.12.0"></script>
+<script src="js/report.js?v=3.12.0"></script>
+<script src="js/kpp-id.js?v=3.12.0"></script>
+<script src="js/admin.js?v=3.12.0"></script>
+<script src="js/app.js?v=3.12.0"></script>
 </body>
 </html>
