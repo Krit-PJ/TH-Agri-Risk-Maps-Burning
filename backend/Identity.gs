@@ -227,7 +227,7 @@ function miniHash_(salt, password) {
   return h;
 }
 function normUser_(v) { return String(v || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, ''); }
-function validPassword_(pw) { return String(pw || '').length >= 8 && /[A-Za-z]/.test(pw) && /\d/.test(pw); }
+function validPassword_(pw) { return String(pw || '').length >= 8; }   // v3.12.1 อย่างน้อย 8 ตัว ตัวเลข/ตัวอักษรก็ได้ ไม่บังคับผสม
 
 /** login_mini { username, password, device } */
 function loginMini_(b) {
@@ -257,7 +257,7 @@ function miniCredentials_(acc, username, password) {
   if (dup) throw new Error('ชื่อผู้ใช้นี้มีผู้ใช้แล้ว');
   const patch = { username: un };
   if (password) {
-    if (!validPassword_(password)) throw new Error('รหัสผ่านต้องยาวอย่างน้อย 8 ตัว มีทั้งตัวอักษรและตัวเลข');
+    if (!validPassword_(password)) throw new Error('รหัสผ่านต้องยาวอย่างน้อย 8 ตัว (ตัวเลขหรือตัวอักษรก็ได้)');
     const salt = Utilities.getUuid();
     patch.passSalt = salt; patch.passHash = miniHash_(salt, password);
   } else if (!acc || !acc.passHash) throw new Error('กรุณากำหนดรหัสผ่านเริ่มต้นของ Mini Super Admin');
@@ -269,7 +269,7 @@ function accountPassword_(user, b) {
   const acc = findRow_('Accounts', r => r.accountId === user.sub);
   if (!acc) throw new Error('ไม่พบบัญชี');
   if (acc.passHash && miniHash_(String(acc.passSalt), b.current) !== String(acc.passHash)) throw new Error('รหัสผ่านปัจจุบันไม่ถูกต้อง');
-  if (!validPassword_(b.password)) throw new Error('รหัสผ่านต้องยาวอย่างน้อย 8 ตัว มีทั้งตัวอักษรและตัวเลข');
+  if (!validPassword_(b.password)) throw new Error('รหัสผ่านต้องยาวอย่างน้อย 8 ตัว (ตัวเลขหรือตัวอักษรก็ได้)');
   const salt = Utilities.getUuid();
   updateRow_('Accounts', acc._row, { passSalt: salt, passHash: miniHash_(salt, b.password) });
   audit_(user, 'account_password', acc.accountId, '');

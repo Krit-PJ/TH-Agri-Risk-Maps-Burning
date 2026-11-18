@@ -104,7 +104,10 @@ for (let i = 0; i < 5; i++) post({ action: 'login_mini', username: 'mini.kpp', p
 ok(err(post({ action: 'login_mini', username: 'mini.kpp', password: 'Kpp2026ok' }), /รอ 15 นาที/), 'mini locked 15 minutes after 5 wrong passwords');
 env.cache.delete('mf:mini.kpp');
 ok(err(post({ action: 'account_password', token: miniLogin.token, current: 'nope', password: 'NewPass2026' }), /ปัจจุบัน/), 'password change needs the current password');
-ok(post({ action: 'account_password', token: miniLogin.token, current: 'Kpp2026ok', password: 'NewPass2026' }).ok, 'mini changes own password');
+ok(post({ action: 'account_password', token: miniLogin.token, current: 'Kpp2026ok', password: '12345678' }).ok, 'digits-only password of 8 is accepted');
+ok(post({ action: 'account_password', token: miniLogin.token, current: '12345678', password: 'abcdefgh' }).ok, 'letters-only password of 8 is accepted');
+ok(err(post({ action: 'account_password', token: miniLogin.token, current: 'abcdefgh', password: '1234567' }), /8 ตัว/), '7 characters rejected');
+ok(post({ action: 'account_password', token: miniLogin.token, current: 'abcdefgh', password: 'NewPass2026' }).ok, 'mini changes own password');
 ok(post({ action: 'login_mini', username: 'mini.kpp', password: 'NewPass2026' }).ok, 'new password works');
 ok(!JSON.stringify(env.readAll_('LoginAttempts')).includes('NewPass2026'), 'passwords never logged');
 ok(post({ action: 'account_save', token: sup.token, accountId: mini.accountId, phone: '0833333333', fullName: 'มินิ แก้ชื่อ', provinceCode: '62', role: 'minisuper' }).ok, 'editing a mini without a new password keeps the password');

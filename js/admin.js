@@ -167,7 +167,7 @@ const Admin = (() => {
   async function changeMyPassword(e) {
     e.preventDefault();
     const pw = el('mypass-new').value;
-    if (pw.length < 8 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return setMsg(el('console-status'), 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัว มีทั้งตัวอักษรและตัวเลข', 'error');
+    if (pw.length < 8) return setMsg(el('console-status'), 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัว (ตัวเลขหรือตัวอักษรก็ได้)', 'error');
     if (await run(() => Api.post('account_password', { current: el('mypass-current').value, password: pw }), 'เปลี่ยนรหัสผ่านแล้ว')) el('form-mypass').reset();
   }
   function afterLogin() {
