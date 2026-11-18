@@ -940,9 +940,16 @@ function appendObj_(name, obj) {
   const row = headers.map(h => obj[h] === undefined || obj[h] === null ? '' : (text.indexOf(h) >= 0 ? String(obj[h]) : obj[h]));
   sh.getRange(sh.getLastRow() + 1, 1, 1, headers.length).setValues([row]);
 }
+/** 3.12.2: คอลัมน์ที่แก้ซึ่งอยู่ติดกันเขียนรวดเดียว (เดิมเขียนทีละช่อง) — ไม่อ่านและไม่เขียนทับช่องที่ไม่ได้แก้ */
 function updateRow_(name, rowNum, patch) {
   const headers = SHEETS[name], sh = sheet_(name);
-  Object.keys(patch).forEach(k => { const i = headers.indexOf(k); if (i >= 0) sh.getRange(rowNum, i + 1).setValue(patch[k]); });
+  const cols = Object.keys(patch).map(k => headers.indexOf(k)).filter(i => i >= 0).sort((a, b) => a - b);
+  for (let a = 0; a < cols.length;) {
+    let b = a; while (b + 1 < cols.length && cols[b + 1] === cols[b] + 1) b++;
+    const vals = cols.slice(a, b + 1).map(i => patch[headers[i]]);
+    sh.getRange(rowNum, cols[a] + 1, 1, vals.length).setValues([vals]);
+    a = b + 1;
+  }
 }
 function stripRow_(r) { const o = Object.assign({}, r); delete o._row; return o; }
 /** ปรับเบอร์โทรให้เป็นรูปแบบเดียว — คืนเลข 0 ที่ Google Sheet อาจตัดทิ้ง */

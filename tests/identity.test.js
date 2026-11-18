@@ -129,4 +129,21 @@ post({ action: 'sso_mode_save', token: sup.token, mode: 'optional' });
 const rep = post({ action: 'login_report', token: sup.token, days: 1 });
 ok(rep.attempts.some(a => a.role === 'sso' && a.result === 'success') && rep.attempts.some(a => a.role === 'minisuper' && a.identifier === 'mini.kpp'), 'SSO and mini logins appear in the login report');
 
+/* 12. 3.12.2: id_login with aud returns a one-use ticket in the same answer (one round trip less) */
+r = post({ action: 'id_register', phone: '0877777777', fullName: 'ทดสอบ เร็วขึ้น', provinceCode: '62', consent: true, system: 'SAM', device: 'x', aud: 'SAM' });
+ok(r.ok && r.ticket && r.expiresIn === 120, 'register with aud returns a ticket');
+let rd = post({ action: 'id_redeem', ticket: r.ticket, aud: 'SAM' });
+ok(rd.ok && rd.person.phone === '0877777777', 'that ticket redeems');
+ok(err(post({ action: 'id_redeem', ticket: r.ticket, aud: 'SAM' }), /ถูกใช้แล้ว/), 'and only once');
+r = post({ action: 'id_login', phone: '0877777777', system: 'GGH', device: 'Chrome / Android', aud: 'GGH' });
+ok(r.ok && r.ticket && r.person.systems.includes('GGH') && r.person.systems.includes('SAM'), 'login with aud: ticket + systems marked in the same write');
+ok(err(post({ action: 'id_redeem', ticket: r.ticket, aud: 'SAM' }), /ไม่ได้ออกให้ระบบนี้/), 'ticket is bound to its aud');
+ok(post({ action: 'id_redeem', ticket: r.ticket, aud: 'GGH' }).ok, 'redeems for GGH');
+r = post({ action: 'id_login', phone: '0877777777', system: 'GGH', aud: 'XYZ' });
+ok(r.ok && !r.ticket, 'unknown aud → no ticket, login still works');
+r = post({ action: 'id_login', phone: '0877777777', system: 'GGH' });
+ok(r.ok && !r.ticket && r.prevLogin && r.prevLogin.device === '', 'without aud nothing changes (prevLogin shifts as before)');
+const row = env.readAll_('People').find(p => p.phone === '0877777777');
+ok(row.lastSystem === 'GGH' && row.prevSystem === 'GGH' && row.status === 'active' && row.fullName === 'ทดสอบ เร็วขึ้น', 'batched row write keeps other columns');
+
 console.log('PASS: ' + n + ' checks — central identity (SSO), tickets, not-me, Mini username/password');

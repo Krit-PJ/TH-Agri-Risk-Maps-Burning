@@ -74,9 +74,11 @@ function idFromAccount_(acc) {
   return idByPhone_(phone);
 }
 /** บันทึกการเข้า: เลื่อนครั้งล่าสุดไปเป็น "ครั้งก่อน" เพื่อให้เจ้าของเห็นและกด "ไม่ใช่ฉัน" ได้ */
-function idTouch_(p, system, device) {
-  updateRow_('People', p._row, { prevLoginAt: p.lastLoginAt || '', prevDevice: p.lastDevice || '', prevSystem: p.lastSystem || '',
-    lastLoginAt: now_(), lastDevice: device || '', lastSystem: system || '', systems: idMarkSystem_(p, system) });
+function idTouch_(p, system, device, aud) {
+  const patch = { prevLoginAt: p.lastLoginAt || '', prevDevice: p.lastDevice || '', prevSystem: p.lastSystem || '',
+    lastLoginAt: now_(), lastDevice: device || '', lastSystem: system || '', systems: idMarkSystem_({ systems: idMarkSystem_(p, system) }, aud) };
+  updateRow_('People', p._row, patch);
+  return Object.assign({}, p, patch);
 }
 function idSystem_(v) { const s = String(v || '').toUpperCase(); return ID_SYSTEMS[s] ? s : 'ARM'; }
 function idDevice_(v) { return String(v || '').slice(0, 120); }
@@ -118,7 +120,7 @@ function idLogin_(b) {
     logAttempt_('sso', phone, 'disabled', { accountId: p.personId, fullName: p.fullName, provinceCode: p.provinceCode }, device + ' · ' + system);
     throw new Error('หมายเลขนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าหน้าที่อำเภอหรือจังหวัด');   // ไม่แสดงเหตุผล/ข้อมูลการเข้าแก่ผู้กรอกเบอร์
   }
-  return idIssue_(p, system, device, !!b.remember);
+  return idIssue_(p, system, device, !!b.remember, b.aud);
 }
 
 /** id_register { phone, fullName, position, affiliation, provinceCode, districtName, consent, system, device, remember } */
@@ -139,18 +141,21 @@ function idRegister_(b) {
   } finally { lock.releaseLock(); }
   const p = idByPhone_(phone);
   audit_({ sub: p.personId, name: p.fullName, role: 'public', prov: prov }, 'id_register', p.personId + ' ผ่าน ' + ID_SYSTEMS[system], prov);
-  return idIssue_(p, system, device, !!b.remember);
+  return idIssue_(p, system, device, !!b.remember, b.aud);
 }
 
-function idIssue_(p, system, device, remember) {
+/** 3.12.2: aud (ไม่บังคับ) = ระบบที่กำลังจะเข้า → แนบตั๋วใช้ครั้งเดียวมาในคำตอบเดียวกัน (ไม่ต้องเรียก id_ticket อีกรอบ) */
+function idIssue_(p, system, device, remember, aud) {
   // "จดจำเครื่องนี้" ไม่ใช้กับผู้ที่มีบัญชีผู้ดูแล Agri-Risk (เห็นข้อมูลระดับจังหวัด)
   const isAdmin = !!findRow_('Accounts', r => normalizePhone_(r.phone) === normalizePhone_(p.phone) && r.status === 'approved');
   const prev = p.lastLoginAt ? { at: p.lastLoginAt, device: p.lastDevice || '', system: p.lastSystem || '' } : null;
-  idTouch_(p, system, device);
+  const a = String(aud || '').toUpperCase();
+  const fresh = idTouch_(p, system, device, ID_SYSTEMS[a] ? a : '');
   logAttempt_('sso', normalizePhone_(p.phone), 'success', { accountId: p.personId, fullName: p.fullName, provinceCode: p.provinceCode }, device + ' · ' + system);
   const t = idSign_(p, remember && !isAdmin);
-  const fresh = findRow_('People', r => r.personId === p.personId) || p;
-  return { ok: true, token: t.token, exp: t.exp, person: idPublic_(fresh), prevLogin: prev };
+  const out = { ok: true, token: t.token, exp: t.exp, person: idPublic_(fresh), prevLogin: prev };
+  if (ID_SYSTEMS[a]) { out.ticket = idTicketFor_(p, a); out.expiresIn = ID_TICKET_SECONDS; }
+  return out;
 }
 
 /** id_me { idToken } */
@@ -161,8 +166,11 @@ function idTicket_(b) {
   requireSsoOn_();
   const p = idVerify_(b.idToken), aud = String(b.aud || '').toUpperCase();
   if (!ID_SYSTEMS[aud]) throw new Error('ไม่รู้จักระบบปลายทาง');
+  return { ok: true, ticket: idTicketFor_(p, aud), expiresIn: ID_TICKET_SECONDS };
+}
+function idTicketFor_(p, aud) {
   const payload = Utilities.base64EncodeWebSafe(JSON.stringify({ pid: p.personId, aud: aud, exp: Date.now() + ID_TICKET_SECONDS * 1000, jti: Utilities.getUuid() }));
-  return { ok: true, ticket: payload + '.' + hmac_('TK|' + payload), expiresIn: ID_TICKET_SECONDS };
+  return payload + '.' + hmac_('TK|' + payload);
 }
 
 /** id_redeem { ticket, aud, device } — เรียกโดย Apps Script ของระบบปลายทาง (ฝั่งเซิร์ฟเวอร์) */
@@ -181,7 +189,8 @@ function idRedeem_(b) {
   } finally { lock.releaseLock(); }
   const p = findRow_('People', r => r.personId === t.pid);
   if (!p || String(p.status) !== 'active') throw new Error('บัญชีถูกระงับหรือไม่พบตัวตน');
-  updateRow_('People', p._row, { systems: idMarkSystem_(p, aud) });
+  const systems = idMarkSystem_(p, aud);
+  if (systems !== String(p.systems || '')) { updateRow_('People', p._row, { systems: systems }); p.systems = systems; }   // 3.12.2: เขียนเฉพาะเมื่อเปลี่ยน
   return { ok: true, person: idPublic_(p) };
 }
 
