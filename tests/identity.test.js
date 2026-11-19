@@ -146,4 +146,12 @@ ok(r.ok && !r.ticket && r.prevLogin && r.prevLogin.device === '', 'without aud n
 const row = env.readAll_('People').find(p => p.phone === '0877777777');
 ok(row.lastSystem === 'GGH' && row.prevSystem === 'GGH' && row.status === 'active' && row.fullName === 'ทดสอบ เร็วขึ้น', 'batched row write keeps other columns');
 
-console.log('PASS: ' + n + ' checks — central identity (SSO), tickets, not-me, Mini username/password');
+/* 13. 3.12.3: ABM (officer system split from Green Gain Hub) is a known system */
+r = post({ action: 'id_login', phone: '0877777777', system: 'ABM', device: 'Chrome / Windows', aud: 'ABM' });
+ok(r.ok && r.ticket && r.person.systems.includes('ABM'), 'ABM login with aud returns a ticket and marks the system');
+ok(err(post({ action: 'id_redeem', ticket: r.ticket, aud: 'GGH' }), /ไม่ได้ออกให้ระบบนี้/), 'an ABM ticket is not valid for Green Gain Hub');
+ok(post({ action: 'id_redeem', ticket: r.ticket, aud: 'ABM' }).ok, 'redeems for ABM');
+ok(post({ action: 'id_ticket', idToken: r.token, aud: 'ABM' }).ticket, 'id_ticket accepts ABM');
+ok(env.readAll_('People').find(p => p.phone === '0877777777').lastSystem === 'ABM', 'last system ABM');
+
+console.log('PASS: ' + n + ' checks — central identity (SSO), tickets, not-me, Mini username/password, ABM');
