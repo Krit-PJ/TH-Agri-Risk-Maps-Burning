@@ -12,7 +12,7 @@ const Admin = (() => {
   /** Super Admin และ Mini Super Admin: ขอบเขตทุกจังหวัด */
   function isNational() { return ['superadmin', 'minisuper'].includes(user()?.role); }
   const ROLE_LABEL = { superadmin: 'Super Admin', minisuper: 'Mini Super Admin', admin: 'Admin', sso: 'ตัวตนกลาง (SSO)' };
-  const SYS_LABEL = { ARM: 'Agri-Risk', GGH: 'Green Gain Hub', SAM: 'Smart Agri' };
+  const SYS_LABEL = { ARM: 'Agri-Risk', GGH: 'Green Gain Hub', SAM: 'Smart Agri', ABM: 'ABM' };
   function setMsg(node, text, type = '') {
     if (!node) return;
     node.textContent = text;
@@ -321,7 +321,7 @@ const Admin = (() => {
     const rows = all.filter(p => (!st || p.status === st) && (!q || `${p.fullName} ${p.phone} ${p.affiliation} ${p.districtName} ${p.provinceName}`.toLowerCase().includes(q)))
       .sort((a, b) => String(b.lastLoginAt || b.createdAt).localeCompare(String(a.lastLoginAt || a.createdAt)));
     const count = s => all.filter(p => p.systems.includes(s)).length;
-    el('people-summary').innerHTML = [[fmt(all.length), 'ตัวตนทั้งหมด'], [fmt(count('GGH')), 'ใช้ Green Gain Hub'], [fmt(count('SAM')), 'ใช้ Smart Agri'], [fmt(all.filter(p => p.status === 'suspended').length), 'ถูกระงับ']]
+    el('people-summary').innerHTML = [[fmt(all.length), 'ตัวตนทั้งหมด'], [fmt(count('GGH')), 'ใช้ Green Gain Hub'], [fmt(count('SAM')), 'ใช้ Smart Agri'], [fmt(count('ABM')), 'ใช้ ABM (เจ้าหน้าที่)'], [fmt(all.filter(p => p.status === 'suspended').length), 'ถูกระงับ']]
       .map(([v, l]) => `<div class="rounded-lg bg-paper p-2.5"><div class="text-lg font-bold">${v}</div><div class="text-xs text-ink-soft">${l}</div></div>`).join('');
     el('people-list').innerHTML = rows.length ? `<div class="overflow-x-auto"><table class="data-table"><thead><tr><th>ชื่อ</th><th>เบอร์โทร</th><th>จังหวัด / อำเภอ</th><th>ระบบที่ใช้</th><th>สถานะ</th><th>เข้าใช้ล่าสุด</th><th></th></tr></thead><tbody>${rows.map(p => `<tr>
       <td><p class="font-semibold">${esc(p.fullName)}</p><p class="text-xs text-ink-soft">${esc([p.position, p.affiliation].filter(Boolean).join(' · ') || '-')}</p></td>

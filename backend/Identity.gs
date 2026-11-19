@@ -11,7 +11,8 @@
  * ชีต People = ตัวตนกลาง · ชีต LoginAttempts (เดิม) บันทึกการเข้า role = 'sso'
  * Script Property SSO_MODE = off | optional (ค่าเริ่มต้น) | required — off = ปิด endpoint ตัวตนกลางทั้งหมด
  */
-const ID_SYSTEMS = { ARM: 'Agri-Risk Map', GGH: 'Green Gain Hub', SAM: 'KPP Smart Agri-Materials' };
+// 3.12.3: ABM = ระบบบริหารจัดการวัสดุเหลือใช้ทางการเกษตร (เจ้าหน้าที่/ผู้บริหาร แยกจาก Green Gain Hub 19 พ.ย. 2569)
+const ID_SYSTEMS = { ARM: 'Agri-Risk Map', GGH: 'Green Gain Hub', SAM: 'KPP Smart Agri-Materials', ABM: 'ระบบบริหารจัดการวัสดุเหลือใช้ทางการเกษตร (ABM)' };
 const ID_TTL_HOURS = 8;              // ค่าเริ่มต้น
 const ID_REMEMBER_DAYS = 30;         // "จดจำเครื่องนี้" (เฉพาะผู้ที่ไม่มีบัญชีผู้ดูแล Agri-Risk)
 const ID_TICKET_SECONDS = 120;
