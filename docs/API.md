@@ -1,4 +1,4 @@
-# TH Agri-Risk Map Burning — Public Data API v1.4
+# TH Agri-Risk Map Burning — Public Data API v1.5
 
 API อ่านอย่างเดียวสำหรับระบบอื่นที่ต้องการนำข้อมูลจุดความร้อนและระดับความเสี่ยงไปใช้ ข้อมูลเป็นปัจจุบันเสมอ
 แคชจะถูกล้างทันทีเมื่อมีการนำเข้า เปิด/ปิดชุดข้อมูล หรือเปลี่ยนการตั้งค่า
@@ -21,7 +21,7 @@ https://script.google.com/macros/s/AKfycbzAgSOxgQsaOx9bqBYM53KXFzk1QKsop46HZeINg
 | fn | พารามิเตอร์ | คืนค่า |
 |---|---|---|
 | `meta` | – | เวอร์ชัน API, สูตรที่ใช้งานอยู่ (`abri`: เวอร์ชัน จุดตัด เกณฑ์ขั้นต่ำ ปีงบที่ประเมิน · `model5`), ช่วงข้อมูล, เดือนที่มีข้อมูล (`dataMonths`), นโยบายดาวเทียม, ประเภทพื้นที่, ระดับ, รายการ endpoint |
-| `provinces` | `format` | จังหวัดที่มีข้อมูล: จำนวนจุดพื้นที่เกษตร วันแรก/วันล่าสุด |
+| `provinces` | `format` | จังหวัดที่มีข้อมูล: `hsAgri` = จุดพื้นที่เกษตรสะสมทุกปี · `fiscalYear` + `hsFiscalYear` = จุดพื้นที่เกษตรของปีงบประมาณปัจจุบัน ต.ค.–ก.ย. (ตัวเลขเดียวกับรายการจังหวัดบนหน้าเว็บ ขึ้นปีงบใหม่อัตโนมัติทุก 1 ต.ค., v1.5) · วันแรก/วันล่าสุด |
 | `risk` | `province` (จำเป็น), `level=subdistrict\|district`, `model=ABRI\|M5\|M4`, `land`, `end`, `format`, `key` | ระดับความเสี่ยงรายตำบล/อำเภอ |
 | `hotspots` | `province` (จำเป็น), `land`, `from`, `to`, `district`, `subdistrict`, `crop`, `since`, `format` | จุดความร้อนรายจุด (แหล่งข้อมูลหลัก ชุดที่เปิดใช้งาน) พร้อม `id` และ `importedAt` · `since` = **ดึงเฉพาะข้อมูลใหม่** (v1.4) |
 | `compare` | `province` (จำเป็น), `from`, `to`, `level=district\|subdistrict`, `district`, `subdistrict`, `crop`, `land`, `format` | **ตาราง “เปรียบเทียบ HS” และการ์ดสรุปเดียวกับหน้าเว็บ**: ช่วงเดียวกันปีก่อน · ช่วงที่เลือก · เพิ่ม/ลด · ระดับความเสี่ยง (v1.3) |

@@ -2,6 +2,9 @@
 const App = (() => {
   const el = id => document.getElementById(id);
   const fmt = n => Number(n || 0).toLocaleString('th-TH');
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  /** ข้อความอธิบายตัวเลขหลังชื่อจังหวัด (v3.13) */
+  const hsTitle = p => p.fyCount !== null && p.fyCount !== undefined ? `จุดความร้อนพื้นที่เกษตร ปีงบประมาณ ${p.fiscalYear} (1 ต.ค. ${p.fiscalYear - 1} – 30 ก.ย. ${p.fiscalYear}) ถึง ${Geo.thaiDate(p.last)} · สะสมทุกปี ${Number(p.count).toLocaleString('th-TH')} จุด` : 'จุดความร้อนพื้นที่เกษตรสะสมทุกปีที่มีข้อมูล';
   let available = [];            // จังหวัดที่มีข้อมูล HS [{code,name,count,first,last}]
   let provFC = null;             // ขอบเขตจังหวัดทั้งประเทศ
   let current = null;            // { code, name, last, ... }
@@ -72,7 +75,9 @@ const App = (() => {
   async function loadAvailable() {
     available = [];
     if (Api.configured()) {
-      try { available = (await Api.get('provinces')).provinces.sort((a, b) => b.count - a.count); }
+      // v3.13: ตัวเลขในรายการ = HS พื้นที่เกษตรของปีงบประมาณปัจจุบัน (fyCount · Backend ขึ้นปีงบใหม่เองทุก 1 ต.ค.) · ไม่มี fyCount = ยอดสะสมเดิม
+      // เรียงตามรหัสจังหวัด รหัสซ้ำเรียงตามชื่อ (ตัวอักษรไทย)
+      try { available = (await Api.get('provinces')).provinces.map(p => Object.assign(p, { hs: p.fyCount ?? p.count })).sort((a, b) => String(a.code).localeCompare(String(b.code)) || String(a.name).localeCompare(String(b.name), 'th')); }
       catch (err) { console.warn(err); Admin.toast('เชื่อมต่อฐานข้อมูลไม่สำเร็จ: ' + err.message, 'error'); }
     }
     renderProvinceList();
@@ -85,9 +90,11 @@ const App = (() => {
     el('province-list').innerHTML = list.length ? list.map(p => `<li><button type="button" class="prov-item" data-code="${p.code}">
         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-sm font-semibold text-slate-600">${p.code}</span>
         <span class="min-w-0"><span class="block truncate font-semibold">${p.name}</span><span class="block text-xs text-ink-soft">ล่าสุด ${Geo.thaiDate(p.last)}</span></span>
-        <span class="prov-count" title="จำนวนจุดความร้อนทั้งหมด">${fmt(p.count)}</span></button></li>`).join('')
+        <span class="prov-count" title="${esc(hsTitle(p))}">${fmt(p.hs)}</span></button></li>`).join('')
       : `<li class="px-3 py-8 text-center text-sm leading-relaxed text-ink-soft">${!Api.configured() ? 'ยังไม่ได้เชื่อมต่อฐานข้อมูล<br>ผู้ดูแลระบบตั้งค่า API_URL ใน js/config.js' : available.length ? 'ไม่พบจังหวัดที่ค้นหา' : 'ยังไม่มีจังหวัดที่นำเข้าข้อมูล HS<br>ผู้ดูแลจังหวัดเข้าสู่ระบบเพื่อนำเข้าข้อมูล'}</li>`;
     el('province-list-foot').textContent = `มีข้อมูล HS ${available.length} จาก 77 จังหวัด`;
+    const fy = available.find(p => p.fyCount !== null && p.fyCount !== undefined)?.fiscalYear;
+    el('province-list-note').textContent = fy ? `ตัวเลข = จุดความร้อนพื้นที่เกษตร ปีงบประมาณ ${fy} (ต.ค. ${String(fy - 1).slice(-2)} – ก.ย. ${String(fy).slice(-2)}) ถึงข้อมูลล่าสุด · ขึ้นปีงบใหม่อัตโนมัติทุก 1 ต.ค.` : (available.length ? 'ตัวเลข = จุดความร้อนพื้นที่เกษตรสะสมทุกปีที่มีข้อมูล' : '');
     el('province-list').querySelectorAll('[data-code]').forEach(b => {
       b.addEventListener('click', () => go(b.dataset.code));
       b.addEventListener('mouseenter', () => MapModule.highlightProvince(b.dataset.code, true));

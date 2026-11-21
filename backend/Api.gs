@@ -11,7 +11,7 @@
  * ไม่มี key: ระดับความเสี่ยง (4 ระดับ) + จำนวนจุดปีงบปัจจุบัน · มี key ที่ออกโดยผู้ดูแล: คะแนน 0–100 องค์ประกอบ และเหตุผล
  * key เก็บใน Script Properties (API_KEYS) — ออก/ดู/ยกเลิกที่แผงผู้ดูแล → ตั้งค่าระบบ (v3.11) หรือจาก Editor: createApiKey('ชื่อหน่วยงาน'), listApiKeys(), revokeApiKey('key')
  * ผลลัพธ์เป็นข้อมูลล่าสุดในฐานข้อมูลเสมอ (แคชจะถูกล้างทันทีเมื่อมีการนำเข้า/เปิด-ปิดชุดข้อมูล/เปลี่ยนตั้งค่า) */
-const API_VERSION = '1.4';   // 1.4 (v3.10): hotspots id/importedAt + since (ดึงเฉพาะข้อมูลใหม่) · 1.3 (v3.9.3): fn=compare (ตารางเปรียบเทียบเดียวกับหน้าเว็บ) · ตัวกรอง district/subdistrict/crop · 1.2: ABRI-2Y ค่าเริ่มต้น
+const API_VERSION = '1.5';   // 1.5 (v3.13): provinces fiscalYear/hsFiscalYear (HS ปีงบประมาณปัจจุบัน) · 1.4 (v3.10): hotspots id/importedAt + since (ดึงเฉพาะข้อมูลใหม่) · 1.3 (v3.9.3): fn=compare (ตารางเปรียบเทียบเดียวกับหน้าเว็บ) · ตัวกรอง district/subdistrict/crop · 1.2: ABRI-2Y ค่าเริ่มต้น
 const API_DOCS = 'https://github.com/Krit-PJ/TH-Agri-Risk-Maps-Burning/blob/main/docs/API.md';
 
 function apiKeys_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('API_KEYS') || '{}'); } catch (e) { return {}; } }
@@ -54,8 +54,9 @@ function apiGet_(p) {
           'fn=compare&province=XX&from=&to=&level=district|subdistrict&district=&subdistrict=&crop=&land=&format=json|csv'] }), 'json');
     }
     case 'provinces': {
-      const rows = publicProvinces_().map(r => ({ code: r.code, name: r.name, hsAgri: r.count, first: r.first, last: r.last, updatedAt: r.updatedAt }));
-      return fmt === 'csv' ? apiCsv_(['code', 'name', 'hsAgri', 'first', 'last', 'updatedAt'], rows.map(r => [r.code, r.name, r.hsAgri, r.first, r.last, r.updatedAt]))
+      // v1.5: hsFiscalYear = HS พื้นที่เกษตรของปีงบประมาณปัจจุบัน (fiscalYear: ต.ค.–ก.ย.) — ตัวเลขเดียวกับรายการจังหวัดบนหน้าเว็บ · hsAgri = สะสมทุกปี (เดิม)
+      const rows = publicProvinces_().map(r => ({ code: r.code, name: r.name, hsAgri: r.count, fiscalYear: r.fiscalYear, hsFiscalYear: r.fyCount, first: r.first, last: r.last, updatedAt: r.updatedAt }));
+      return fmt === 'csv' ? apiCsv_(['code', 'name', 'hsAgri', 'first', 'last', 'updatedAt', 'fiscalYear', 'hsFiscalYear'], rows.map(r => [r.code, r.name, r.hsAgri, r.first, r.last, r.updatedAt, r.fiscalYear, r.hsFiscalYear]))
         : apiOut_(Object.assign(base, { rows: rows }), 'json');
     }
     case 'risk': {
