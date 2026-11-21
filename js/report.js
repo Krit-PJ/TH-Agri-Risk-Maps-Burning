@@ -17,12 +17,13 @@ const Report = (() => {
   /** v3.15 วิธีประเมิน (รูปแบบที่ผู้ใช้กำหนด) — ABRI-2Y: 4 ข้อ · สูตรอื่น: คำอธิบายสูตร + แหล่งข้อมูล */
   function methodHtml(ctx, unit) {
     const r = ctx.risk, src = `แหล่งข้อมูลจุดความร้อนจาก ${hsSourceText(ctx)}`;
+    const multiNote = ctx.multi ? ' · <b>ประเมินแยกรายจังหวัด</b> สีระดับความเสี่ยงบนแผนที่จึงเปรียบเทียบข้ามจังหวัดไม่ได้ (เทียบจำนวนจุดจากตาราง)' : '';
     if (!r) return `<ol><li>${ctx.basis || 'ยังไม่มีผลประเมินระดับความเสี่ยง'}</li><li>${src}</li></ol>`;
     if (r.model !== 'ABRI') return `<ol><li>${ctx.basis}</li><li>${src}</li></ol>`;
     const yrs = span(r.history), c = r.cuts || [50, 75, 90];
     return `<ol>
       <li>ระดับความเสี่ยง หมายถึง ระดับความเสี่ยงจากการจัดกลุ่มจำนวนจุดความร้อนย้อนหลัง 2 ปีงบประมาณ (ปีงบ ${yrs})</li>
-      <li>จัดกลุ่มด้วยหลักการ Percentile เทียบ${unit}ภายในจังหวัดเดียวกัน เป็นการประเมินความเสี่ยงเชิงประวัติจากการเกิดจุดความร้อนซ้ำในแต่ละพื้นที่ ซึ่งสะท้อนพฤติกรรมการเผาของพื้นที่</li>
+      <li>จัดกลุ่มด้วยหลักการ Percentile เทียบ${unit}ภายในจังหวัดเดียวกัน เป็นการประเมินความเสี่ยงเชิงประวัติจากการเกิดจุดความร้อนซ้ำในแต่ละพื้นที่ ซึ่งสะท้อนพฤติกรรมการเผาของพื้นที่${multiNote}</li>
       <li>${src}</li>
       <li>เกณฑ์: สูงมาก ≥ P${c[2]} · สูง P${c[1]}–${c[2]} · ปานกลาง P${c[0]}–${c[1]} · ต่ำ &lt; P${c[0]} หรือจุดรวมน้อยกว่า ${r.minHs ?? 3} จุด · เป็นการประเมินจากข้อมูลที่ผ่านมา ไม่ใช่การทำนาย</li>
     </ol>`;
@@ -34,7 +35,7 @@ const Report = (() => {
     const st = MapModule.getState(), raw = MapModule.getData();
     const prov = ctx.province;
     // ---- header/meta ----
-    el('pr-province').textContent = `จังหวัด${prov.name}`;
+    el('pr-province').textContent = ctx.multi ? (prov.all ? `ทุกจังหวัดที่มีข้อมูล (${prov.multi.length} จังหวัด)` : `${prov.multi.length} จังหวัด`) : `จังหวัด${prov.name}`;
     el('pr-scope').textContent = ctx.scopeText;
     el('pr-period').textContent = ctx.periodText + ` · ${ctx.land || 'พื้นที่เกษตร'}` + (st.crop ? ` (${st.crop})` : '');
     el('pr-updated').textContent = Geo.thaiDate(prov.last);
@@ -43,18 +44,20 @@ const Report = (() => {
     // ---- table: every district/subdistrict in scope, including zero HS ----
     // v3.15: เรียงตามระดับความเสี่ยง สูงมาก → ต่ำ (ไม่ประเมิน/ไม่มีผล อยู่ท้าย) ระดับเท่ากันเรียงตามรหัสพื้นที่
     const rank = r => CONFIG.RISK_LEVELS.indexOf(r.level);
-    const rows = S.rows.slice().sort((a, b) => rank(b) - rank(a) || String(a.code).localeCompare(String(b.code)));
+    // v3.17 หลายจังหวัด: แถว = จังหวัด เรียงตามรหัสจังหวัด (ระดับความเสี่ยงเป็นของรายอำเภอภายในแต่ละจังหวัด)
+    const rows = S.rows.slice().sort((a, b) => S.multi ? String(a.code).localeCompare(String(b.code)) : rank(b) - rank(a) || String(a.code).localeCompare(String(b.code)));
     el('pr-table-title').textContent = `จุดความร้อน (HS) ราย${S.unitLabel} — ครบ ${rows.length} ${S.unitLabel}`;
     // v3.15 ลำดับคอลัมน์: ลำดับ · พื้นที่ · ระดับความเสี่ยง (ปีงบฐาน) · HS ช่วงเดียวกันปีที่ผ่านมา · HS ช่วงที่เลือก · เพิ่ม/ลด — หัวคอลัมน์ 2 บรรทัด ตัดที่รอยต่อคำ
     const partial = S.compareMode === 'month' && !S.compareNone;
     const prevCell = v => S.compareNone ? 'ไม่มีข้อมูล' : fmt(v);
     const yrs = ctx.risk?.model === 'ABRI' ? span(ctx.risk.history) : '';
     const two = (a, b) => `<span class="l">${a}</span><span class="l">${b}</span>`;
-    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th>${yrs ? two('ระดับความเสี่ยง', `(ปีงบ ${yrs})`) : 'ระดับความเสี่ยง'}</th><th class="num">${two('จุดความร้อน', `ช่วงเดียวกันปีที่ผ่านมา${partial ? '*' : ''}`)}</th><th class="num">${two('จุดความร้อน', 'ช่วงที่เลือก')}</th><th class="num">เพิ่ม/ลด${partial ? '*' : ''}</th></tr>`;
+    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th>${S.multi ? two('อำเภอเสี่ยงสูง–สูงมาก', yrs ? `(ปีงบ ${yrs})` : '') : yrs ? two('ระดับความเสี่ยง', `(ปีงบ ${yrs})`) : 'ระดับความเสี่ยง'}</th><th class="num">${two('จุดความร้อน', `ช่วงเดียวกันปีที่ผ่านมา${partial ? '*' : ''}`)}</th><th class="num">${two('จุดความร้อน', 'ช่วงที่เลือก')}</th><th class="num">เพิ่ม/ลด${partial ? '*' : ''}</th></tr>`;
     const lvCell = l => `<span class="lv"><i style="background:${l.color}"></i>${l.label}</span>`;
     const extra = S.unassigned || S.unassignedPrev ? `<tr><td class="num">–</td><td>ไม่ระบุพื้นที่</td><td>–</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td></tr>` : '';
-    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td>${lvCell(r.level)}</td><td class="num">${prevCell(r.previous)}</td><td class="num"><b>${fmt(r.current)}</b></td><td class="num">${r.change.text}</td></tr>`).join('') + extra;
-    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th></th><th class="num">${prevCell(S.totalPrev)}</th><th class="num">${fmt(S.totalCur)}</th><th class="num">${S.change.text}</th></tr>`
+    const lvOf = r => S.multi ? (r.level.key === 'prov' ? `<span class="lv"><i style="background:${r.nHigh ? CONFIG.RISK_LEVELS[3].color : CONFIG.RISK_LEVELS[0].color}"></i>${fmt(r.nHigh)} / ${fmt(r.nUnits)} อำเภอ</span>` : lvCell(r.level)) : lvCell(r.level);
+    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td>${lvOf(r)}</td><td class="num">${prevCell(r.previous)}</td><td class="num"><b>${fmt(r.current)}</b></td><td class="num">${r.change.text}</td></tr>`).join('') + extra;
+    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th>${S.multi ? `${fmt(S.levels[2] + S.levels[3])} / ${fmt(S.nLevelUnits)} อำเภอ` : ''}</th><th class="num">${prevCell(S.totalPrev)}</th><th class="num">${fmt(S.totalCur)}</th><th class="num">${S.change.text}</th></tr>`
       + (partial ? `<tr><td colspan="6" class="pr-foot-note">* ปีที่ผ่านมามีข้อมูลไม่ครบทุกเดือน: นับปีที่ผ่านมาและ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel}) · คอลัมน์ช่วงที่เลือกแสดงจำนวนจริงทั้งหมด</td></tr>` : '');
     el('pr-src-hs').textContent = `จุดความร้อน ${hsSourceText(ctx)}`;
     // fit all rows on one page
@@ -84,16 +87,16 @@ const Report = (() => {
       [fmt(S.totalCur), 'จุดความร้อนในช่วงที่เลือก'],
       [S.change.text, S.compareText],
       [`${withHs}/${rows.length}`, `${S.unitLabel}ที่พบจุดความร้อน`],
-      [String(S.levels[2] + S.levels[3]), `${S.unitLabel}เสี่ยงสูง–สูงมาก`]
+      [String(S.levels[2] + S.levels[3]), `${S.levelUnit || S.unitLabel}เสี่ยงสูง–สูงมาก`]
     ].map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
 
     // ---- map ----
     const m = ensureMap();
     layers.forEach(l => m.removeLayer(l)); layers = [];
-    const riskFC = MapModule.getRiskForScope(S.level);
+    const riskFC = MapModule.getRiskForScope(S.multi ? 'district' : S.level);
     const riskLayer = L.geoJSON(riskFC, { style: f => ({ color: '#ffffff', weight: 0.6, fillColor: MapModule.levelOf(f.properties).color, fillOpacity: ctx.risk ? (f.properties.risk_level < 0 ? 0.3 : 0.55) : 0 }), interactive: false }).addTo(m);
     layers.push(riskLayer);
-    const outline = S.level === 'district'
+    const outline = S.level === 'district' || S.multi
       ? L.geoJSON(raw.bundle.district, { style: { color: '#334155', weight: 1.1, fill: false }, interactive: false })
       : L.geoJSON({ type: 'FeatureCollection', features: raw.bundle.subdistrict.features.filter(f => f.properties.amp_code === st.district && (!st.subdistrict || f.properties.tam_code === st.subdistrict)) }, { style: { color: '#475569', weight: 0.8, fill: false }, interactive: false });
     layers.push(outline.addTo(m));
@@ -105,10 +108,11 @@ const Report = (() => {
     }).addTo(m);
     layers.push(pts);
     // labels at an interior point of every unit
-    const labelSize = riskFC.features.length > 24 ? 7 : riskFC.features.length > 14 ? 8 : 9.5;
-    riskFC.features.forEach(f => {
+    const labelFs = S.multi ? focus : riskFC.features;   // v3.17 หลายจังหวัด: ป้ายชื่อจังหวัด (อำเภอมากเกินอ่าน)
+    const labelSize = S.multi ? (labelFs.length > 10 ? 7.5 : 9) : riskFC.features.length > 24 ? 7 : riskFC.features.length > 14 ? 8 : 9.5;
+    labelFs.forEach(f => {
       let c; try { c = turf.pointOnFeature(f).geometry.coordinates; } catch { return; }
-      const t = L.tooltip({ permanent: true, direction: 'center', className: 'area-label', interactive: false }).setLatLng([c[1], c[0]]).setContent(`<span style="font-size:${labelSize}px">${f.properties.name}</span>`);
+      const t = L.tooltip({ permanent: true, direction: 'center', className: 'area-label', interactive: false }).setLatLng([c[1], c[0]]).setContent(`<span style="font-size:${labelSize}px">${S.multi ? f.properties.pro_th : f.properties.name}</span>`);
       t.addTo(m); layers.push(t);
     });
     m.invalidateSize({ pan: false });

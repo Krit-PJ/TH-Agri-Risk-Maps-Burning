@@ -15,9 +15,10 @@ const Dashboard = (() => {
   function summary() {
     const raw = MapModule.getData(), st = MapModule.getState();
     if (!raw.bundle) return null;
-    const level = st.district ? 'subdistrict' : 'district';
-    const unitKey = level === 'district' ? '__dCode' : '__sCode';
-    const risk = MapModule.getRiskForScope(level)?.features || [];
+    const multi = !!raw.multi;   // v3.17 หลายจังหวัด: ตาราง/อันดับเป็นรายจังหวัด · ระดับความเสี่ยงนับรายอำเภอ (ประเมินแยกรายจังหวัด)
+    const level = multi ? 'province' : st.district ? 'subdistrict' : 'district';
+    const unitKey = level === 'province' ? '__pCode' : level === 'district' ? '__dCode' : '__sCode';
+    const risk = MapModule.getRiskForScope(multi ? 'district' : level)?.features || [];
     const base = (raw.hotspot?.features || []).filter(f => {
       const p = f.properties;
       return (!st.crop || p.__crop === st.crop) && (!st.district || p.__dCode === st.district) && (!st.subdistrict || p.__sCode === st.subdistrict);
@@ -32,15 +33,25 @@ const Dashboard = (() => {
     const countBy = fs => fs.reduce((o, f) => { const k = f.properties[unitKey] || '-'; o[k] = (o[k] || 0) + 1; return o; }, {});
     const cur = countBy(current), cmpC = countBy(curCmp), prev = countBy(prior);
     const NA = { text: '–', cls: 'chg-flat' };
-    const rows = risk.map(f => {
-      const p = f.properties, lv = MapModule.riskInfo() ? MapModule.levelOf(p) : NO_LEVEL;
-      return { code: p.code, name: p.name, current: cur[p.code] || 0, cmpCurrent: cmpC[p.code] || 0, previous: prev[p.code] || 0, score: p.risk_score ?? 0, level: lv,
-        change: W.none ? NA : pctChange(cmpC[p.code] || 0, prev[p.code] || 0) };
-    });
+    const unitLevels = risk.map(f => MapModule.riskInfo() ? MapModule.levelOf(f.properties) : NO_LEVEL);
+    const rows = multi
+      ? raw.multi.map(code => {
+        const ds = risk.filter(f => f.properties.province_code === code), lvs = ds.map(f => MapModule.riskInfo() ? MapModule.levelOf(f.properties) : NO_LEVEL);
+        const high = lvs.filter(l => l === CONFIG.RISK_LEVELS[2] || l === CONFIG.RISK_LEVELS[3]).length;
+        const rated = !!MapModule.riskInfo() && ds.some(f => f.properties.risk_level >= 0);
+        return { code, name: MapModule.provinceName(code) || code, current: cur[code] || 0, cmpCurrent: cmpC[code] || 0, previous: prev[code] || 0, score: high, nUnits: ds.length, nHigh: high,
+          level: rated ? { label: `สูง–สูงมาก ${high}/${ds.length} อำเภอ`, color: high ? CONFIG.RISK_LEVELS[3].color : CONFIG.RISK_LEVELS[0].color, key: 'prov' } : NO_LEVEL,
+          change: W.none ? NA : pctChange(cmpC[code] || 0, prev[code] || 0) };
+      })
+      : risk.map((f, i) => {
+        const p = f.properties, lv = unitLevels[i];
+        return { code: p.code, name: p.name, current: cur[p.code] || 0, cmpCurrent: cmpC[p.code] || 0, previous: prev[p.code] || 0, score: p.risk_score ?? 0, level: lv,
+          change: W.none ? NA : pctChange(cmpC[p.code] || 0, prev[p.code] || 0) };
+      });
     // จุดที่ไม่มีรหัส/ไม่ตรงกับขอบเขตพื้นที่ในแผนที่ — แสดงเป็นแถว “ไม่ระบุพื้นที่” เพื่อให้ผลรวมตาราง = จำนวนจุดจริงในช่วงที่เลือก
     const sumOf = k => rows.reduce((a, r) => a + r[k], 0);
     const unassigned = Math.max(0, current.length - sumOf('current')), unassignedPrev = Math.max(0, prior.length - sumOf('previous')), unassignedCmp = Math.max(0, curCmp.length - sumOf('cmpCurrent'));
-    const levels = CONFIG.RISK_LEVELS.map(l => rows.filter(r => r.level === l).length);
+    const levels = CONFIG.RISK_LEVELS.map(l => unitLevels.filter(x => x === l).length);   // จำนวนพื้นที่ (อำเภอ/ตำบล) ต่อระดับ
     const months = [];
     for (let i = s; i <= e && months.length < 48; i++) months.push(i);
     const byMonth = months.map(i => current.filter(f => f.properties.__ym === i).length);
@@ -49,7 +60,7 @@ const Dashboard = (() => {
     const selText = (() => { const a = Geo.ymFromIndex(s), z = Geo.ymFromIndex(e), zd = new Date(Date.UTC(z.year - 543, z.month, 0)).getUTCDate();
       let end = `${z.year - 543}-${String(z.month).padStart(2, '0')}-${zd}`; if (latest && end > latest) end = latest;
       return `${Geo.thaiDate(`${a.year - 543}-${String(a.month).padStart(2, '0')}-01`)} – ${Geo.thaiDate(end)}`; })();
-    return { level, unitLabel: level === 'district' ? 'อำเภอ' : 'ตำบล', rows, current, curCmp, prior, unassigned, unassignedPrev, unassignedCmp, levels, months, byMonth,
+    return { level, multi, unitLabel: level === 'province' ? 'จังหวัด' : level === 'district' ? 'อำเภอ' : 'ตำบล', levelUnit: level === 'subdistrict' ? 'ตำบล' : 'อำเภอ', nLevelUnits: unitLevels.length, rows, current, curCmp, prior, unassigned, unassignedPrev, unassignedCmp, levels, months, byMonth,
       totalCur: current.length, totalCmp: curCmp.length, totalPrev: prior.length, change: W.none ? NA : pctChange(curCmp.length, prior.length),
       compareMode: W.mode, compareNote: W.note, compareNone: !!W.none, selText, curLabel: W.curLabel || '', prevLabel: W.prevLabel || '',
       currentText: W.none ? selText : partial ? `${W.curLabel} (เดือนที่มีข้อมูลทั้งสองปี${latest && endD >= latest ? ` · ข้อมูลถึง ${Geo.thaiDate(latest)}` : ''})` : `${Geo.thaiDate(startD)} – ${Geo.thaiDate(endD)}`,
@@ -82,7 +93,7 @@ const Dashboard = (() => {
       [fmt(S.totalCur), 'จุดความร้อนในช่วงที่เลือก'],
       [`<span class="chg ${S.change.cls} align-middle text-base">${S.change.text}</span>`, S.compareText],
       [`${fmt(withHs)}<span class="text-base font-semibold text-ink-soft">/${fmt(S.rows.length)}</span>`, `${u}ที่พบจุดความร้อน`],
-      [fmt(highCount), `${u}เสี่ยงสูง–สูงมาก`]
+      [S.multi ? `${fmt(highCount)}<span class="text-base font-semibold text-ink-soft">/${fmt(S.nLevelUnits)}</span>` : fmt(highCount), `${S.levelUnit}เสี่ยงสูง–สูงมาก${S.multi ? ' (เทียบในแต่ละจังหวัด)' : ''}`]
     ].map(([v, l]) => `<div class="kpi"><div class="kpi-v">${v}</div><div class="kpi-l">${l}</div></div>`).join('');
 
     // comparison table (template)
@@ -95,7 +106,7 @@ const Dashboard = (() => {
     el('comparison-period').textContent = `${S.compareNone ? `${S.selText} · ${S.priorText}` : partial ? `${S.selText} · เทียบเดือนที่มีข้อมูลทั้งสองปี` : `${S.currentText} เทียบ ${S.priorText}`}${st.crop ? ` · ${st.crop}` : ''}`;
     const prevCell = v => S.compareNone ? '<span class="text-ink-mute text-xs">ไม่มีข้อมูล</span>' : fmt(v);
     const picked = S.level === 'district' ? st.district : st.subdistrict;
-    const body = cmp.map(r => `<tr class="cmp-row${picked === r.code ? ' cmp-picked' : ''}" data-cmp-code="${r.code}" tabindex="0" title="คลิกเพื่อ${S.level === 'district' ? 'ดูรายตำบลในอำเภอนี้' : picked === r.code ? 'ยกเลิกการเลือกตำบล' : 'เลือกตำบลนี้'}"><td>${r.name}</td><td class="num">${prevCell(r.previous)}</td><td class="num">${fmt(r.current)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`);
+    const body = cmp.map(r => `<tr class="cmp-row${picked === r.code ? ' cmp-picked' : ''}" data-cmp-code="${r.code}" tabindex="0" title="คลิกเพื่อ${S.level === 'province' ? `เปิดจังหวัด${r.name} (รายอำเภอ)` : S.level === 'district' ? 'ดูรายตำบลในอำเภอนี้' : picked === r.code ? 'ยกเลิกการเลือกตำบล' : 'เลือกตำบลนี้'}"><td>${r.name}</td><td class="num">${prevCell(r.previous)}</td><td class="num">${fmt(r.current)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`);
     if (S.unassigned || S.unassignedPrev) body.push(`<tr class="text-ink-soft"><td>ไม่ระบุพื้นที่</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td></tr>`);
     const tb = document.querySelector('#tbl-hotspot-comparison tbody');
     tb.innerHTML = body.join('');
@@ -128,7 +139,7 @@ const Dashboard = (() => {
     const tot = S.levels.reduce((a, b) => a + b, 0);
     el('risk-legend-list').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => {
       const i = CONFIG.RISK_LEVELS.indexOf(l), v = S.levels[i];
-      return `<div class="flex items-center gap-2 text-[13px]"><span class="risk-dot" style="background:${l.color}"></span><span class="flex-1">${l.label}</span><span class="tabular-nums text-ink-soft">${v} ${u}</span><strong class="w-12 text-right tabular-nums">${tot ? (v * 100 / tot).toFixed(1) : '0.0'}%</strong></div>`;
+      return `<div class="flex items-center gap-2 text-[13px]"><span class="risk-dot" style="background:${l.color}"></span><span class="flex-1">${l.label}</span><span class="tabular-nums text-ink-soft">${v} ${S.levelUnit}</span><strong class="w-12 text-right tabular-nums">${tot ? (v * 100 / tot).toFixed(1) : '0.0'}%</strong></div>`;
     }).join('');
 
     // all units ranked (template "ทุกอำเภอ")

@@ -29,7 +29,11 @@ const App = (() => {
       onSettingsChanged: () => { loadSettings(); MapModule.clearRiskCache(); refreshAfterDataChange(''); }
     });
     // เข้าสู่ระบบ/ออกจากระบบ: โหลดระดับความเสี่ยงใหม่ (ผู้ดูแลเห็นรายละเอียดคะแนนและแนวโน้ม)
-    document.addEventListener('agri-risk:auth-changed', () => { if (current) applyCurrent(); });
+    document.addEventListener('agri-risk:auth-changed', () => {
+      renderMultiPicker();
+      if (current?.multi && !isNationalUser()) { Admin.toast('การแสดงหลายจังหวัดใช้ได้เฉพาะ Super Admin / Mini Super Admin', 'error'); go(''); return; }
+      if (current) applyCurrent();
+    });
     initCounter();
     await loadSettings();
     provFC = await Geo.provinces();
@@ -80,7 +84,7 @@ const App = (() => {
       try { available = (await Api.get('provinces')).provinces.map(p => Object.assign(p, { hs: p.fyCount ?? p.count })).sort((a, b) => String(a.code).localeCompare(String(b.code)) || String(a.name).localeCompare(String(b.name), 'th')); }
       catch (err) { console.warn(err); Admin.toast('เชื่อมต่อฐานข้อมูลไม่สำเร็จ: ' + err.message, 'error'); }
     }
-    renderProvinceList();
+    renderProvinceList(); renderMultiPicker();
     const latest = available.map(p => p.last).sort().pop();
     el('last-updated').textContent = `ข้อมูลล่าสุด: ${latest ? Geo.thaiDate(latest) : '-'}`;
   }
@@ -117,9 +121,101 @@ const App = (() => {
     setTimeout(() => { MapModule.invalidate(); MapModule.showNational(provFC, available, { onSelect: go, onHover: (code, on) => el('province-list').querySelector(`[data-code="${code}"]`)?.classList.toggle('is-hover', on) }); }, 30);
   }
 
+  /* ============================ v3.17 แสดงหลายจังหวัด (Super Admin / Mini Super Admin) ============================ */
+  const isNationalUser = () => ['superadmin', 'minisuper'].includes(Api.session()?.user?.role);
+  const multiSel = new Set();
+  let returnMulti = null, pendingDistrict = '';
+  function renderMultiPicker() {
+    const box = el('multi-list'); if (!box) return;
+    box.innerHTML = available.map(p => `<label class="flex min-w-0 cursor-pointer items-center gap-1.5"><input type="checkbox" value="${p.code}"${multiSel.has(p.code) ? ' checked' : ''}/><span class="truncate">${esc(p.name)}</span></label>`).join('');
+    box.querySelectorAll('input').forEach(i => i.addEventListener('change', () => { if (i.checked) multiSel.add(i.value); else multiSel.delete(i.value); syncMultiBtn(); }));
+    syncMultiBtn();
+  }
+  function syncMultiBtn() {
+    const b = el('btn-multi-open'); if (!b) return;
+    const n = multiSel.size; b.disabled = !n;
+    b.textContent = !n ? 'แสดงแผนที่' : n === available.length && n > 1 ? `แสดงทุกจังหวัด (${n})` : `แสดงแผนที่ ${n} จังหวัด`;
+  }
+  function bindMultiPicker() {
+    el('btn-multi-all')?.addEventListener('click', () => { available.forEach(p => multiSel.add(p.code)); renderMultiPicker(); });
+    el('btn-multi-clear')?.addEventListener('click', () => { multiSel.clear(); renderMultiPicker(); });
+    el('btn-multi-open')?.addEventListener('click', () => {
+      const codes = [...multiSel].sort();
+      if (codes.length === 1) go(codes[0]);
+      else if (codes.length > 1) { closePanels(); location.hash = `pp=${codes.length === available.length ? 'all' : codes.join(',')}`; }
+    });
+  }
+  const multiLabel = (infos, all) => all ? `ทุกจังหวัดที่มีข้อมูล (${infos.length} จังหวัด)` : infos.length <= 4 ? infos.map(p => p.name).join(' · ') : `${infos.length} จังหวัด (${infos.slice(0, 3).map(p => p.name).join(' · ')} …)`;
+  function mergeBundles(bundles) {
+    return {
+      province: { type: 'FeatureCollection', features: bundles.map(b => b.province) },
+      district: { type: 'FeatureCollection', features: bundles.flatMap(b => b.district.features) },
+      subdistrict: { type: 'FeatureCollection', features: bundles.flatMap(b => b.subdistrict.features) }
+    };
+  }
+  /** จุดความร้อนรายจังหวัด → รวมเป็นชุดเดียว (ผูกรหัสอำเภอ/ตำบลกับขอบเขตของจังหวัดนั้น แล้วระบุ __pCode) */
+  function mergeHotspots(parts) {
+    return { type: 'FeatureCollection', features: parts.flatMap(({ c, bundle, hs }) => Geo.buildHotspots(hs, bundle).features.map(f => { f.properties.__pCode = c; return f; })) };
+  }
+  const hsCache = new Map();   // v3.17 จุดความร้อนรายจังหวัด (จังหวัด|ประเภทพื้นที่) — กลับมาภาพรวมหลายจังหวัดได้เร็ว · ล้างเมื่อข้อมูลเปลี่ยน
+  async function fetchMultiParts(codes, bundles, token) {
+    let done = 0;
+    const label = () => `กำลังโหลดข้อมูล ${codes.length} จังหวัด… (${done}/${codes.length})`;
+    setLoading(true, label());
+    return Promise.all(codes.map(async (c, i) => {
+      const key = `${c}|${currentLand()}`;
+      if (!hsCache.has(key)) hsCache.set(key, Api.get('hotspots', { province: c, land: currentLand() }).catch(err => { hsCache.delete(key); throw err; }));
+      const [bundle, hs] = await Promise.all([bundles?.[i] || Geo.provinceBundle(c), hsCache.get(key)]);
+      done++; if (token === loadToken) setLoading(true, label());
+      return { c, bundle, hs };
+    }));
+  }
+  async function openMulti(codes, all) {
+    const token = ++loadToken;
+    const infos = codes.map(c => available.find(p => p.code === c));
+    try {
+      const parts = await fetchMultiParts(codes, null, token);
+      if (token !== loadToken) return;
+      const bundle = mergeBundles(parts.map(p => p.bundle)), hotspots = mergeHotspots(parts);
+      current = { code: '', multi: codes, all, hash: location.hash.slice(1), name: multiLabel(infos, all), names: infos.map(p => p.name), last: infos.map(p => p.last).sort().pop(), bundle, bundles: parts.map(p => p.bundle) };
+      MapModule.setMulti(bundle, hotspots, codes);
+      showAnalysisUI();
+      populateDistricts(bundle); populateCrops(hotspots);
+      setupPeriod(hotspots);
+      MapModule.invalidate();
+      applyCurrent();
+    } catch (err) {
+      console.error(err); Admin.toast('โหลดข้อมูลหลายจังหวัดไม่สำเร็จ: ' + err.message, 'error');
+      if (token === loadToken) location.hash = '';
+    } finally { if (token === loadToken) setLoading(false); }
+  }
+  /** ส่วนแสดงผลร่วม: จังหวัดเดียว / หลายจังหวัด */
+  function showAnalysisUI() {
+    const multi = !!current.multi;
+    document.body.dataset.mode = 'province';
+    el('national-panel').classList.add('hidden'); el('province-panel').classList.remove('hidden');
+    el('right-panel').classList.remove('hidden'); el('period-bar').classList.remove('hidden');
+    el('btn-print').classList.remove('hidden'); el('map-hint').classList.add('hidden');
+    el('mobile-toggle-left').textContent = 'ชั้นข้อมูล'; el('mobile-toggle-right').classList.remove('hidden');
+    el('header-province').textContent = multi ? ` — ${current.name}` : ` — จังหวัด${current.name}`;
+    el('province-title-label').textContent = multi ? 'พื้นที่' : 'จังหวัด';
+    el('province-title').textContent = current.name;
+    el('btn-back-label').textContent = current.fromMulti ? 'กลับภาพรวมหลายจังหวัด' : 'เปลี่ยนจังหวัด';
+    el('area-filters').classList.toggle('hidden', multi); el('multi-hint').classList.toggle('hidden', !multi);
+    document.title = `${multi ? current.name : 'จังหวัด' + current.name} | Agri-Risk Map Burning`;
+  }
+
   /* ============================ routing ============================ */
   function go(code) { closePanels(); location.hash = code ? `p=${code}` : ''; }
   function routeFromHash() {
+    const mm = location.hash.match(/pp=(all|[\d,]+)/);
+    if (mm) {
+      if (!isNationalUser()) { Admin.toast('การแสดงหลายจังหวัดใช้ได้เฉพาะ Super Admin / Mini Super Admin — กรุณาเข้าสู่ระบบ', 'error'); showNationalView(); return; }
+      const all = mm[1] === 'all', codes = all ? available.map(p => p.code) : [...new Set(mm[1].split(','))].filter(c => available.some(p => p.code === c)).sort();
+      if (codes.length > 1) { codes.forEach(c => multiSel.add(c)); renderMultiPicker(); openMulti(codes, all); return; }
+      if (codes.length === 1) { location.hash = `p=${codes[0]}`; return; }
+      showNationalView(); return;
+    }
     const code = (location.hash.match(/p=(\d{2})/) || [])[1];
     if (code && available.some(p => p.code === code)) openProvince(code);
     else { if (code && Api.configured()) Admin.toast('จังหวัดนี้ยังไม่มีข้อมูลจุดความร้อน', 'error'); showNationalView(); }
@@ -134,17 +230,13 @@ const App = (() => {
       const [bundle, hs] = await Promise.all([Geo.provinceBundle(code), Api.get('hotspots', { province: code, land: currentLand() })]);
       if (token !== loadToken) return;
       const hotspots = Geo.buildHotspots(hs, bundle);
-      current = { ...info, bundle };
+      const fromMulti = returnMulti && isNationalUser() ? returnMulti : null, pick = pendingDistrict;
+      returnMulti = null; pendingDistrict = '';
+      current = { ...info, bundle, fromMulti };
       MapModule.setProvince(bundle, hotspots, code);
-      document.body.dataset.mode = 'province';
-      el('national-panel').classList.add('hidden'); el('province-panel').classList.remove('hidden');
-      el('right-panel').classList.remove('hidden'); el('period-bar').classList.remove('hidden');
-      el('btn-print').classList.remove('hidden'); el('map-hint').classList.add('hidden');
-      el('mobile-toggle-left').textContent = 'ชั้นข้อมูล'; el('mobile-toggle-right').classList.remove('hidden');
-      el('header-province').textContent = ` — จังหวัด${info.name}`;
-      el('province-title').textContent = info.name;
-      document.title = `จังหวัด${info.name} | Agri-Risk Map Burning`;
+      showAnalysisUI();
       populateDistricts(bundle); populateCrops(hotspots);
+      if (pick && el('filter-district').querySelector(`option[value="${pick}"]`)) { el('filter-district').value = pick; populateSubdistricts(); }
       setupPeriod(hotspots);
       MapModule.invalidate();
       applyCurrent();
@@ -158,6 +250,19 @@ const App = (() => {
   async function changeLand() {
     if (!current) return;
     const token = ++loadToken, code = current.code;
+    if (current.multi) {   // v3.17 หลายจังหวัด: โหลดจุดของประเภทพื้นที่ใหม่ทุกจังหวัด (ใช้ขอบเขตเดิม)
+      try {
+        const parts = await fetchMultiParts(current.multi, current.bundles, token);
+        if (token !== loadToken) return;
+        const hotspots = mergeHotspots(parts);
+        MapModule.setMulti(current.bundle, hotspots, current.multi);
+        const crop = el('filter-crop').value; populateCrops(hotspots);
+        if (crop && el('filter-crop').querySelector(`option[value="${crop}"]`)) el('filter-crop').value = crop;
+        await applyCurrent();
+      } catch (err) { Admin.toast('โหลดข้อมูลไม่สำเร็จ: ' + err.message, 'error'); }
+      finally { if (token === loadToken) setLoading(false); }
+      return;
+    }
     setLoading(true, `กำลังโหลดจุดความร้อน${landLabel(currentLand())}…`);
     try {
       const hs = await Api.get('hotspots', { province: code, land: currentLand() });
@@ -269,6 +374,7 @@ const App = (() => {
     el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)} · ${landLabel(currentLand())}${crop ? ` · ชนิดพืช: ${crop}` : ''}${riskText}`;
   }
   function scopeText() {
+    if (current.multi) return current.all ? `ทุกจังหวัดที่มีข้อมูล (${current.multi.length} จังหวัด)` : current.names.length <= 6 ? current.names.join(' · ') : `${current.multi.length} จังหวัด (${current.names.slice(0, 3).join(' · ')} …)`;
     const d = el('filter-district'), t = el('filter-subdistrict');
     if (t.value) return `ตำบล${t.selectedOptions[0].text} อำเภอ${d.selectedOptions[0].text} จังหวัด${current.name}`;
     if (d.value) return `อำเภอ${d.selectedOptions[0].text} จังหวัด${current.name}`;
@@ -277,7 +383,8 @@ const App = (() => {
 
   function bindProvinceControls() {
     el('province-search').addEventListener('input', renderProvinceList);
-    el('btn-back-national').addEventListener('click', () => go(''));
+    el('btn-back-national').addEventListener('click', () => { if (current?.fromMulti) { closePanels(); location.hash = current.fromMulti; } else go(''); });
+    bindMultiPicker();
     el('filter-district').addEventListener('change', () => { populateSubdistricts(); applyCurrent(); });
     el('filter-subdistrict').addEventListener('change', applyCurrent);
     el('filter-crop').addEventListener('change', applyCurrent);
@@ -296,6 +403,12 @@ const App = (() => {
     // v3.14 คลิกพื้นที่บนแผนที่ หรือแถวในตารางเปรียบเทียบ: อำเภอ → เลือกอำเภอ (ดูรายตำบล) · ตำบล → เลือก/ยกเลิกตำบล
     document.addEventListener('agri-risk:area-click', e => {
       const { level, code } = e.detail;
+      if (current?.multi) {   // v3.17 หลายจังหวัด: คลิกอำเภอ/แถวจังหวัด → เปิดจังหวัดนั้น (เลือกอำเภอที่คลิก) · ปุ่มกลับพากลับมาภาพรวมหลายจังหวัด
+        const prov = level === 'province' ? code : String(code).slice(0, 2);
+        if (!available.some(p => p.code === prov)) return;
+        returnMulti = current.hash; pendingDistrict = level === 'district' ? code : '';
+        go(prov); return;
+      }
       if (level === 'district') {
         if (el('filter-district').value === code) return;
         el('filter-district').value = code; populateSubdistricts(); applyCurrent();
@@ -314,7 +427,7 @@ const App = (() => {
   function scopeUp() {
     if (el('filter-subdistrict').value) el('filter-subdistrict').value = '';
     else if (el('filter-district').value) { el('filter-district').value = ''; populateSubdistricts(); }
-    else return;
+    else { if (current?.fromMulti) { closePanels(); location.hash = current.fromMulti; } return; }
     applyCurrent();
   }
   /** v3.14 ปุ่มกลับบนแผนที่ (แสดงเมื่อเลือกอำเภอ/ตำบล): ตำบล → ภาพรวมอำเภอ · อำเภอ → ภาพรวมจังหวัด (กด Esc ได้เช่นกัน) */
@@ -323,7 +436,7 @@ const App = (() => {
     if (!current) return;
     const d = el('filter-district'), t = el('filter-subdistrict');
     const dName = d.value ? d.selectedOptions[0].text : '';
-    const upLabel = t.value ? `ภาพรวมอำเภอ${dName}` : d.value ? `ภาพรวมจังหวัด${current.name}` : '';
+    const upLabel = current.multi ? '' : t.value ? `ภาพรวมอำเภอ${dName}` : d.value ? `ภาพรวมจังหวัด${current.name}` : current.fromMulti ? 'ภาพรวมหลายจังหวัด' : '';
     const map = MapModule.map();
     if (map && !backCtl) {
       backCtl = L.control({ position: 'topleft' });
@@ -336,15 +449,16 @@ const App = (() => {
 
 
   async function refreshAfterDataChange(code) {
-    MapModule.clearRiskCache();
+    MapModule.clearRiskCache(); hsCache.clear();
     await loadAvailable();
-    if (current && (!code || code === current.code)) {
+    if (current?.multi) { if (!code || current.multi.includes(code)) routeFromHash(); }
+    else if (current && (!code || code === current.code)) {
       if (available.some(p => p.code === current.code)) openProvince(current.code); else go('');
     } else if (!current) showNationalView();
   }
 
   /* ============================ print ============================ */
-  function printCtx() { return { province: current, scopeText: scopeText(), periodText: Geo.periodText(appliedRange), seasons: current.seasons || [], risk: current.risk || null, land: landLabel(currentLand()), basis: MapModule.riskBasisText(false) }; }
+  function printCtx() { return { province: current, multi: !!current.multi, scopeText: scopeText(), periodText: Geo.periodText(appliedRange), seasons: current.seasons || [], risk: current.risk || null, land: landLabel(currentLand()), basis: MapModule.riskBasisText(false) }; }
   function bindPrint() {
     el('btn-print').addEventListener('click', async () => {
       if (!current) return;
