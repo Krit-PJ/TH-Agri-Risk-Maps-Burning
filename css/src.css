@@ -157,7 +157,7 @@
 .pr-meta div { display: flex; gap: 1.5mm; } .pr-meta dt { color: #4a5a51; } .pr-meta dd { margin: 0; font-weight: 600; }
 .pr-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 152mm 1fr; gap: 4mm; padding-top: 3mm; }
 .pr-left { display: flex; flex-direction: column; min-height: 0; }
-#pr-map { width: 152mm; height: 132mm; border: .3mm solid #9aa8a0; background: #fff; }
+#pr-map { width: 152mm; flex: 1 1 auto; min-height: 0; border: .3mm solid #9aa8a0; background: #fff; } /* v3.16 สูงตามพื้นที่ที่เหลือ (เดิม 132 มม.) */
 #pr-map .leaflet-control-container { display: none; }
 .pr-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 1.2mm 4mm; padding: 1.8mm 0 1mm; font-size: 7.5pt; }
 .pr-legend i { display: inline-block; width: 3.2mm; height: 3.2mm; border-radius: .6mm; vertical-align: -.5mm; margin-right: 1mm; border: .2mm solid rgba(0,0,0,.25); }
@@ -167,18 +167,18 @@
 .pr-kpis div { border: .25mm solid #c9d3cd; border-radius: 1.2mm; padding: 1.2mm 2mm; }
 .pr-kpis b { display: block; font-size: 11pt; } .pr-kpis span { font-size: 6.8pt; color: #4a5a51; }
 .pr-right { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-.pr-notes { margin-top: 3mm; display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; font-size: 7.3pt; line-height: 1.45; color: #2b3a31; }
+.pr-notes { margin-top: 3mm; display: grid; grid-template-columns: 1fr; gap: 3mm; font-size: 7.3pt; line-height: 1.45; color: #2b3a31; }
 .pr-notes h3 { font-size: 8pt; font-weight: 700; color: #124429; margin: 0 0 1mm; }
 .pr-notes table { width: 100%; border-collapse: collapse; }
 .pr-notes td { padding: .6mm 1mm; border-bottom: .2mm solid #e3e9e5; }
 .pr-notes p { margin: 0 0 1mm; }
-/* v3.15 วิธีประเมินแบบลำดับข้อ + เป้าหมายระบบ (เต็มความกว้าง) · compact = ซ่อนสรุประดับเมื่อพื้นที่ไม่พอ */
+/* v3.15 วิธีประเมินแบบลำดับข้อ · v3.16 เต็มความกว้าง (นำสรุประดับออก) · compact = ย่อเมื่อพื้นที่ไม่พอ */
 .pr-notes ol { margin: 0; padding: 0; list-style: none; counter-reset: prm; } .pr-notes ol li { counter-increment: prm; margin: 0 0 .6mm; padding-left: 4mm; text-indent: -4mm; }
 .pr-notes ol li::before { content: counter(prm) ") "; display: inline-block; width: 4mm; text-indent: 0; font-weight: 600; color: #124429; }
-.pr-notes .pr-goal { grid-column: 1 / -1; border: .25mm solid #c9d3cd; border-left: 1mm solid #1f6f43; border-radius: 1mm; padding: 1.2mm 2mm; background: #f6faf7; }
-.pr-notes .pr-goal p { margin: 0; }
-.pr-notes.compact .pr-dist { display: none; } .pr-notes.compact .pr-method { grid-column: 1 / -1; }
-.pr-notes.compact { margin-top: 1.5mm; gap: 1.5mm; font-size: 6.5pt; line-height: 1.32; } .pr-notes.compact h3 { font-size: 7.2pt; margin-bottom: .5mm; } .pr-notes.compact ol li { margin-bottom: .2mm; } .pr-notes.compact .pr-goal { padding: .8mm 1.6mm; }
+.pr-notes.compact { margin-top: 1.5mm; font-size: 6.6pt; line-height: 1.32; } .pr-notes.compact h3 { font-size: 7.2pt; margin-bottom: .5mm; } .pr-notes.compact ol li { margin-bottom: .2mm; }
+/* v3.16 การ์ดเป้าหมายฯ ใต้แถวการ์ดสรุป (คอลัมน์ซ้าย) */
+.pr-goal { margin-top: 2mm; border: .25mm solid #c9d3cd; border-left: 1mm solid #1f6f43; border-radius: 1.2mm; padding: 1.4mm 2.4mm; background: #f6faf7; font-size: 7.3pt; line-height: 1.45; color: #2b3a31; }
+.pr-goal h3 { font-size: 8pt; font-weight: 700; color: #124429; margin: 0 0 .5mm; } .pr-goal p { margin: 0; }
 .pr-right h2 { font-size: 9.5pt; font-weight: 700; margin: 0 0 1.5mm; color: #124429; }
 .pr-table { width: 100%; border-collapse: collapse; font-size: var(--pr-fs, 8pt); }
 .pr-table th, .pr-table td { border-bottom: .2mm solid #d7dfda; padding: var(--pr-pad, 1.2mm) 1.2mm; text-align: left; line-height: 1.2; }
@@ -188,6 +188,7 @@
 .pr-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pr-table .lv { display: inline-flex; align-items: center; gap: 1mm; white-space: nowrap; }
 .pr-table .lv i { width: 2.4mm; height: 2.4mm; border-radius: 50%; display: inline-block; }
+.pr-table td, .pr-table th { white-space: nowrap; } /* v3.16 ชื่อพื้นที่และตัวเลขไม่ตัดบรรทัด (หัวคอลัมน์ 2 บรรทัดด้วย .l) */
 .pr-table .pr-foot-note { font-size: .85em; color: #4a5a51; border-bottom: 0; white-space: normal; }
 .pr-foot { display: flex; justify-content: space-between; gap: 4mm; border-top: .25mm solid #c9d3cd; padding-top: 1.2mm; margin-top: 2mm; font-size: 6.5pt; color: #4a5a51; }
 
@@ -209,7 +210,6 @@
 .leaflet-top.leaflet-left .map-back { margin-top: 3.6rem; }
 .map-back-btn { border-radius: 9999px; border: 1px solid #cfe3d6; background: rgba(255, 255, 255, .96); padding: .35rem .8rem; font: 600 13px/1.2 "IBM Plex Sans Thai", sans-serif; color: #14532d; box-shadow: 0 1px 4px rgba(15, 23, 42, .25); cursor: pointer; }
 .map-back-btn:hover { background: #f1f8f3; }
-.hs-cluster-prev span { opacity: .85; }
 
 /* v3.9.1: ตารางเปรียบเทียบ HS — คลิกแถวเพื่อเลือกพื้นที่ (เหมือนคลิกบนแผนที่) */
 #tbl-hotspot-comparison .cmp-row { cursor: pointer; }

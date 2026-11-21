@@ -2,7 +2,7 @@
 const MapModule = (() => {
   let map, basemapKey = 'voyager';
   const base = {};
-  const shown = { national: null, province: null, district: null, subdistrict: null, risk: null, hotspot: null, hotspotPrev: null };
+  const shown = { national: null, province: null, district: null, subdistrict: null, risk: null, hotspot: null };
   const raw = { bundle: null, hotspot: null, riskDistrict: null, riskSubdistrict: null, seasons: [], risk: null, code: '', dataFirst: '', dataMonths: [] };
   const riskCache = new Map();
   let state = { district: '', subdistrict: '', crop: '', land: CONFIG.DEFAULT_LAND, startYM: null, endYM: null };
@@ -16,13 +16,12 @@ const MapModule = (() => {
     Object.entries(CONFIG.BASEMAPS).forEach(([k, b]) => { if (k !== 'print') base[k] = L.tileLayer(b.url, { maxZoom: 19, attribution: b.attribution, crossOrigin: true }); });
     base[basemapKey].addTo(map);
     // ลำดับชั้น: ระดับความเสี่ยง (overlayPane 400) < จุดความร้อนช่วงเดียวกันปีก่อน (440) < จุดความร้อนช่วงที่เลือก (450, ชั้นบนสุดของข้อมูล)
-    map.createPane('hsPrev').style.zIndex = 440; map.createPane('hsCur').style.zIndex = 450;
+    map.createPane('hsCur').style.zIndex = 450;   // v3.16: นำชั้นจุดช่วงเดียวกันปีก่อน (hsPrev) ออก — แผนที่แสดงเฉพาะจุดของช่วงที่เลือก
     map.fitBounds(CONFIG.THAILAND_BOUNDS, { animate: false });
 
     document.querySelectorAll('input[name="basemap"]').forEach(el => el.addEventListener('change', () => setBasemap(el.value)));
     ['lyr-province', 'lyr-district', 'lyr-subdistrict'].forEach(id => document.getElementById(id)?.addEventListener('change', renderBoundaries));
     document.getElementById('lyr-hotspot')?.addEventListener('change', renderHotspots);
-    document.getElementById('lyr-hotspot-prev')?.addEventListener('change', () => { renderHotspots(); renderLegend(); });
     document.getElementById('lyr-risk')?.addEventListener('change', renderRisk);
     return map;
   }
@@ -76,7 +75,7 @@ const MapModule = (() => {
     raw.bundle = bundle; raw.hotspot = hotspotFC; raw.code = code || ''; raw.risk = null;
   }
   function clearProvince() {
-    ['province', 'district', 'subdistrict', 'risk', 'hotspot', 'hotspotPrev'].forEach(k => { remove(shown[k]); shown[k] = null; });
+    ['province', 'district', 'subdistrict', 'risk', 'hotspot'].forEach(k => { remove(shown[k]); shown[k] = null; });
     raw.bundle = null; raw.hotspot = null; raw.riskDistrict = null; raw.riskSubdistrict = null; raw.risk = null; raw.code = '';
   }
 
@@ -105,11 +104,6 @@ const MapModule = (() => {
     const latest = (raw.hotspot?.features || []).reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
     const end = isoDate(e.year - 543, e.month, new Date(Date.UTC(e.year - 543, e.month, 0)).getUTCDate());
     return Object.assign(Geo.compareWindow(isoDate(s.year - 543, s.month, 1), end, latest, raw.dataFirst, raw.dataMonths), { latest });
-  }
-  /** จุดความร้อนช่วงเดียวกันปีก่อน (ตามตัวกรองพื้นที่/ชนิดพืช) สำหรับชั้นข้อมูลบนแผนที่ */
-  function prevHotspots() {
-    const W = compareInfo(); if (!W || W.none) return [];
-    return (raw.hotspot?.features || []).filter(f => { const p = f.properties; return W.inPrev(p.__date) && (!state.crop || p.__crop === state.crop) && (!state.district || p.__dCode === state.district) && (!state.subdistrict || p.__sCode === state.subdistrict); });
   }
   function scopeUnits(level) {
     if (!raw.bundle) return [];
@@ -284,33 +278,32 @@ const MapModule = (() => {
     return m;
   }
   function renderHotspots() {
-    remove(shown.hotspot); shown.hotspot = null; remove(shown.hotspotPrev); shown.hotspotPrev = null; clustered = false;
+    remove(shown.hotspot); shown.hotspot = null; clustered = false;
     if (!raw.bundle) return;
     const lv = subdistrictLevels();
-    const layer = (features, prev) => {
-      const pane = prev ? 'hsPrev' : 'hsCur';
+    const layer = features => {
+      const pane = 'hsCur';
       const pts = L.geoJSON({ type: 'FeatureCollection', features }, {
-        pointToLayer: (f, ll) => L.circleMarker(ll, prev ? { pane, radius: 4.5, fillColor: '#94a3b8', color: '#ffffff', weight: 1, fillOpacity: 0.8 } : { pane, radius: 5.5, fillColor: CONFIG.SEASON_COLORS[0], color: '#ffffff', weight: 1.4, fillOpacity: 0.95 }),
-        onEachFeature: (f, l) => l.bindPopup(hsPopup(f.properties, prev))
+        pointToLayer: (f, ll) => L.circleMarker(ll, { pane, radius: 5.5, fillColor: CONFIG.SEASON_COLORS[0], color: '#ffffff', weight: 1.4, fillOpacity: 0.95 }),
+        onEachFeature: (f, l) => l.bindPopup(hsPopup(f.properties, false))
       });
       if (features.length <= HS_CLUSTER_MIN) return pts.addTo(map);   // จุดไม่มาก: แสดงทุกจุด ไม่มีตัวเลข
       clustered = true;
       const group = L.markerClusterGroup({ disableClusteringAtZoom: 11, chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 28, clusterPane: pane,
         iconCreateFunction: c => {
           const ms = c.getAllChildMarkers(), n = ms.length, size = n < 10 ? 26 : n < 50 ? 32 : n < 200 ? 38 : 44;
-          let bg = prev ? '#64748b' : '#1e293b', label = '';
-          if (!prev && lv.size) {
+          let bg = '#1e293b', label = '';
+          if (lv.size) {
             const cnt = [0, 0, 0, 0]; ms.forEach(m => { const l = lv.get(m.feature?.properties?.__sCode); if (l >= 0) cnt[l]++; });
             const best = cnt.reduce((b, v, i) => v >= cnt[b] && v > 0 ? i : b, 0);   // เสมอกันใช้ระดับที่สูงกว่า
             if (cnt[best] > 0) { bg = CLUSTER_DARK[best]; label = ` · ส่วนใหญ่อยู่ในตำบลระดับ${CONFIG.RISK_LEVELS[best].label}`; }
           }
-          return L.divIcon({ html: `<span style="background:${bg}" title="จุดความร้อน ${n.toLocaleString('th-TH')} จุด${label}">${n.toLocaleString('th-TH')}</span>`, className: prev ? 'hs-cluster hs-cluster-prev' : 'hs-cluster', iconSize: [size, size] });
+          return L.divIcon({ html: `<span style="background:${bg}" title="จุดความร้อน ${n.toLocaleString('th-TH')} จุด${label}">${n.toLocaleString('th-TH')}</span>`, className: 'hs-cluster', iconSize: [size, size] });
         } });
       pts.addTo(group);
       return group.addTo(map);
     };
-    if (document.getElementById('lyr-hotspot-prev')?.checked) shown.hotspotPrev = layer(prevHotspots(), true);
-    if (document.getElementById('lyr-hotspot')?.checked) shown.hotspot = layer(mapHotspots(), false);
+    if (document.getElementById('lyr-hotspot')?.checked) shown.hotspot = layer(mapHotspots());
   }
 
   /** คำอธิบายแผนที่: เฉพาะระดับความเสี่ยงการเผา (รายละเอียดสูตรอยู่ในแถบสถานะ ป๊อปอัป และรายงาน) */
@@ -357,7 +350,7 @@ const MapModule = (() => {
   const levelOf = p => p.risk_level < 0 ? NA_LEVEL : (CONFIG.RISK_LEVELS[p.risk_level] || CONFIG.RISK_LEVELS[0]);
 
   return {
-    setDataStart: d => { raw.dataFirst = d || ''; }, setDataMonths: m => { raw.dataMonths = Array.isArray(m) ? m : []; }, compareInfo, prevHotspots, levelOf,
+    setDataStart: d => { raw.dataFirst = d || ''; }, setDataMonths: m => { raw.dataMonths = Array.isArray(m) ? m : []; }, compareInfo, levelOf,
     init, showNational, highlightProvince, setProvince, clearProvince, applyFilter, focusSelection, seasonColor, riskInfo, riskBasisText, viewerDetailed,
     clearRiskCache: () => riskCache.clear(),
     map: () => map, getData: () => raw, getState: () => ({ ...state }), filteredHotspots, mapHotspots, displaySeason, inRange, selectionFeatures,
