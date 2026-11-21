@@ -52,7 +52,8 @@ const MapModule = (() => {
         const code = f.properties.pro_code, info = avail.get(code);
         nationalLayers.set(code, layer);
         if (!info) { layer.options.interactive = false; return; }
-        layer.bindTooltip(`<strong>จ.${f.properties.pro_th}</strong><br>HS ${info.count.toLocaleString('th-TH')} จุด<br><span style="color:#4a5a51">คลิกเพื่อเปิดข้อมูลจังหวัด</span>`, { sticky: true, className: 'prov-tip', direction: 'top', offset: [0, -6] });
+        const fyText = info.fyCount !== null && info.fyCount !== undefined ? `HS ปีงบ ${info.fiscalYear}: ${Number(info.fyCount).toLocaleString('th-TH')} จุด` : `HS ${Number(info.count).toLocaleString('th-TH')} จุด`;
+        layer.bindTooltip(`<strong>จ.${f.properties.pro_th}</strong><br>${fyText}<br><span style="color:#4a5a51">คลิกเพื่อเปิดข้อมูลจังหวัด</span>`, { sticky: true, className: 'prov-tip', direction: 'top', offset: [0, -6] });
         layer.on({
           mouseover: () => { highlightProvince(code, true); handlers.onHover?.(code, true); },
           mouseout: () => { highlightProvince(code, false); handlers.onHover?.(code, false); },
@@ -308,20 +309,43 @@ const MapModule = (() => {
           <div class="hs-pop-crop">${Geo.cropIcon(p.__crop, 'hs-pop-ic')}<span>${p.__crop}</span></div>${p.__land ? `<div class="hs-pop-note">พื้นที่: ${p.__land}</div>` : ''}
           <div class="hs-pop-note">ปีงบประมาณ ${p.__season} (ต.ค. ${p.__season - 1} – ก.ย. ${p.__season})</div></div>`;
   }
-  /** จุดความร้อน 2 ชั้น: ช่วงที่เลือก (ชั้นบนสุด สีน้ำเงิน) และช่วงเดียวกันปีก่อน (ชั้นล่าง สีเทา) */
+  /* v3.13 จุดความร้อน 2 ชั้น: ช่วงที่เลือก (ชั้นบนสุด จุดสีน้ำเงิน) และช่วงเดียวกันปีก่อน (ชั้นล่าง จุดสีเทา)
+   * ปกติแสดงเป็นจุดทุกจุด ไม่มีตัวเลข · รวมกลุ่มอัตโนมัติเฉพาะเมื่อชั้นนั้นมีจุดเกิน HS_CLUSTER_MIN และเฉพาะบริเวณที่จุดทับกัน (ซูม ≥ 11 แยกเป็นจุดเสมอ)
+   * สีวงกลมกลุ่ม (ช่วงที่เลือก) = ระดับความเสี่ยงของตำบลที่จุดส่วนใหญ่ในกลุ่มอยู่ (ผลเดียวกับที่ระบายสีพื้นที่ — สีบนแผนที่มีความหมายเดียว) ใช้เฉดเข้ม + ขอบขาว
+   * ยังไม่มีผลประเมิน = สีกรมท่ากลาง · ช่วงเดียวกันปีก่อน = สีเทา */
+  const HS_CLUSTER_MIN = CONFIG.HS_CLUSTER_MIN || 800;
+  const CLUSTER_DARK = ['#1e8449', '#a67c00', '#c0560f', '#b03a2e'];   // ต่ำ ปานกลาง สูง สูงมาก (เฉดเข้มของ CONFIG.RISK_LEVELS)
+  let clustered = false;
+  function subdistrictLevels() {
+    const m = new Map();
+    if (!raw.risk || raw.risk.empty || raw.risk.noHistory) return m;
+    (raw.riskSubdistrict?.features || []).forEach(f => m.set(f.properties.code, f.properties.risk_level));
+    return m;
+  }
   function renderHotspots() {
-    remove(shown.hotspot); shown.hotspot = null; remove(shown.hotspotPrev); shown.hotspotPrev = null;
+    remove(shown.hotspot); shown.hotspot = null; remove(shown.hotspotPrev); shown.hotspotPrev = null; clustered = false;
     if (!raw.bundle) return;
-    // วงกลมกลุ่มจุดใช้สีกลาง (ไม่ใช้เขียว/เหลือง/ส้มค่าเริ่มต้นที่ซ้ำกับสีระดับความเสี่ยง) ตัวเลข = จำนวนจุดความร้อนในกลุ่ม
+    const lv = subdistrictLevels();
     const layer = (features, prev) => {
       const pane = prev ? 'hsPrev' : 'hsCur';
-      const group = L.markerClusterGroup({ disableClusteringAtZoom: 11, chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 50, clusterPane: pane,
-        iconCreateFunction: c => { const n = c.getChildCount(), size = n < 10 ? 30 : n < 100 ? 36 : 44;
-          return L.divIcon({ html: `<span>${n.toLocaleString('th-TH')}</span>`, className: prev ? 'hs-cluster hs-cluster-prev' : 'hs-cluster', iconSize: [size, size] }); } });
-      L.geoJSON({ type: 'FeatureCollection', features }, {
+      const pts = L.geoJSON({ type: 'FeatureCollection', features }, {
         pointToLayer: (f, ll) => L.circleMarker(ll, prev ? { pane, radius: 4.5, fillColor: '#94a3b8', color: '#ffffff', weight: 1, fillOpacity: 0.8 } : { pane, radius: 5.5, fillColor: CONFIG.SEASON_COLORS[0], color: '#ffffff', weight: 1.4, fillOpacity: 0.95 }),
         onEachFeature: (f, l) => l.bindPopup(hsPopup(f.properties, prev))
-      }).addTo(group);
+      });
+      if (features.length <= HS_CLUSTER_MIN) return pts.addTo(map);   // จุดไม่มาก: แสดงทุกจุด ไม่มีตัวเลข
+      clustered = true;
+      const group = L.markerClusterGroup({ disableClusteringAtZoom: 11, chunkedLoading: true, showCoverageOnHover: false, maxClusterRadius: 28, clusterPane: pane,
+        iconCreateFunction: c => {
+          const ms = c.getAllChildMarkers(), n = ms.length, size = n < 10 ? 26 : n < 50 ? 32 : n < 200 ? 38 : 44;
+          let bg = prev ? '#64748b' : '#1e293b', label = '';
+          if (!prev && lv.size) {
+            const cnt = [0, 0, 0, 0]; ms.forEach(m => { const l = lv.get(m.feature?.properties?.__sCode); if (l >= 0) cnt[l]++; });
+            const best = cnt.reduce((b, v, i) => v >= cnt[b] && v > 0 ? i : b, 0);   // เสมอกันใช้ระดับที่สูงกว่า
+            if (cnt[best] > 0) { bg = CLUSTER_DARK[best]; label = ` · ส่วนใหญ่อยู่ในตำบลระดับ${CONFIG.RISK_LEVELS[best].label}`; }
+          }
+          return L.divIcon({ html: `<span style="background:${bg}" title="จุดความร้อน ${n.toLocaleString('th-TH')} จุด${label}">${n.toLocaleString('th-TH')}</span>`, className: prev ? 'hs-cluster hs-cluster-prev' : 'hs-cluster', iconSize: [size, size] });
+        } });
+      pts.addTo(group);
       return group.addTo(map);
     };
     if (document.getElementById('lyr-hotspot-prev')?.checked) shown.hotspotPrev = layer(prevHotspots(), true);
@@ -336,6 +360,7 @@ const MapModule = (() => {
       <p class="mb-1.5 font-bold text-ink">ระดับความเสี่ยงการเผา (พื้นที่)</p>
       <div class="grid grid-cols-2 gap-x-3 gap-y-1">${CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span class="risk-pill text-xs"><span class="risk-dot" style="background:${l.color}"></span>${l.label}</span>`).join('')}</div>
       ${na ? `<span class="risk-pill mt-1 text-xs"><span class="risk-dot" style="background:${NA_LEVEL.color}"></span>ไม่ประเมิน (ไม่มีพื้นที่เกษตร)</span>` : ''}
+      ${clustered ? '<p class="mt-1.5 max-w-[14rem] leading-snug text-ink-soft">วงกลมตัวเลข = กลุ่มจุดความร้อนที่ทับกัน (แสดงเมื่อจุดมาก) สีตามระดับความเสี่ยงของตำบลที่จุดส่วนใหญ่อยู่ · ซูมเข้าเพื่อดูรายจุด</p>' : ''}
     </div>`;
     el.classList.remove('hidden');
   }
@@ -348,7 +373,7 @@ const MapModule = (() => {
     let error = '';
     try { const r = await loadRisk(); if (code !== raw.code) return { stale: true }; raw.risk = r; if (r?.first && !raw.dataFirst) raw.dataFirst = r.first; }
     catch (err) { error = err.message; raw.risk = null; }
-    computeRiskLayers(); renderRisk(); renderLegend();
+    computeRiskLayers(); renderRisk(); if (clustered) renderHotspots(); renderLegend();
     return { seasons: activeSeasons(), risk: riskInfo(), basis: riskBasisText(true), error };
   }
 

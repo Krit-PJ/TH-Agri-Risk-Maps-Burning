@@ -663,6 +663,9 @@ function refreshSummary_(prov) {
   rows.forEach(r => { if (/^\d{4}-\d{2}/.test(r[1])) months[r[1].slice(0, 7)] = 1; });
   const dates = rows.filter(r => rowLand_(r[15]) === DEFAULT_LAND).map(r => r[1]).filter(Boolean).sort();
   const count = dates.length, first = dates[0] || '', last = dates[dates.length - 1] || '';
+  // v3.13: จำนวน HS พื้นที่เกษตรรายปีงบ (รายการจังหวัดแสดงยอดปีงบปัจจุบัน — publicProvinces_ เลือกปีตอนอ่าน จึงเปลี่ยนปีเองอัตโนมัติทุก 1 ต.ค.)
+  const fy = {}; dates.forEach(d => { const s = seasonOfDate_(d); fy[s] = (fy[s] || 0) + 1; });
+  PropertiesService.getScriptProperties().setProperty('fy:' + src + ':' + prov, JSON.stringify(fy));
   PropertiesService.getScriptProperties().setProperty('months:' + src + ':' + prov, Object.keys(months).sort().join(','));
   const row = findRow_('ProvinceSummary', r => String(r.provinceCode) === prov);
   const data = { provinceCode: prov, provinceName: PROVINCES[prov], hsCount: count, firstDate: first, lastDate: last, updatedAt: now_() };
@@ -676,10 +679,16 @@ function refreshAllSummaries() {
   return dataMonths_().length;
 }
 
+/** จังหวัดที่มีข้อมูล HS · count = HS พื้นที่เกษตรสะสมทุกปี (เดิม) · v3.13: fiscalYear/fyCount = HS พื้นที่เกษตรของปีงบประมาณปัจจุบัน
+ *  ปีงบปัจจุบัน = ปีงบของวันนี้ (เวลาไทย) 1 ต.ค. – 30 ก.ย. เช่น ปีงบ 2570 = ต.ค. 2569 – ก.ย. 2570 — ขึ้นปีงบใหม่อัตโนมัติทุก 1 ต.ค.
+ *  fyCount = null เมื่อยังไม่มียอดรายปีงบ (ก่อนรัน refreshAllSummaries ครั้งแรกหลังอัปเดต) */
 function publicProvinces_() {
-  return readAll_('ProvinceSummary').filter(r => Number(r.hsCount) > 0).map(r => ({
-    code: String(r.provinceCode).padStart(2, '0'), name: r.provinceName, count: Number(r.hsCount), first: String(r.firstDate), last: String(r.lastDate), updatedAt: String(r.updatedAt)
-  }));
+  const fyear = seasonOfDate_(Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd')), src = hsSource_(), props = PropertiesService.getScriptProperties().getProperties();
+  return readAll_('ProvinceSummary').filter(r => Number(r.hsCount) > 0).map(r => {
+    const code = String(r.provinceCode).padStart(2, '0'), raw = props['fy:' + src + ':' + code];
+    let fyCount = null; try { if (raw && fyear) fyCount = Number(JSON.parse(raw)[fyear] || 0); } catch (e) { }
+    return { code: code, name: r.provinceName, count: Number(r.hsCount), fiscalYear: fyear, fyCount: fyCount, first: String(r.firstDate), last: String(r.lastDate), updatedAt: String(r.updatedAt) };
+  });
 }
 
 /** คืนข้อมูลแบบกระชับ: [date,time,dCode,sCode,dName,sName,village,plant,lat,lng,tsrc,land]
