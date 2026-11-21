@@ -11,12 +11,23 @@ const Report = (() => {
     return prMap;
   }
 
-  /** คำอธิบายวิธีประเมินระดับความเสี่ยงสำหรับรายงาน */
-  function riskMethodText(ctx) {
-    const r = ctx.risk;
-    if (!r) return `${ctx.basis || 'ยังไม่มีผลประเมินระดับความเสี่ยง'} จำนวนจุดในตารางเป็นของช่วงที่เลือก`;
-    return `${ctx.basis}${r.model !== 'ABRI' ? ' พื้นที่สีเทา = ไม่ประเมินเพราะไม่มีพื้นที่เพาะปลูก' : ''} ตารางแสดงจำนวนจุดของช่วงที่เลือก`;
+  const span = H => { const a = (H || []).slice().sort((x, y) => x - y); return a.length > 1 ? `${a[0]}–${a[a.length - 1]}` : `${a[0] || ''}`; };
+  /** v3.15 แหล่งข้อมูลจุดความร้อนตามแหล่งข้อมูลหลักที่ตั้งค่าไว้ (ผลประเมินระบุ source) */
+  const hsSourceText = ctx => ctx.risk?.source === 'FIRMS' ? 'NASA FIRMS (ดาวเทียม VIIRS)' : 'สำนักงานส่งเสริมและพัฒนาการเกษตรที่ 6 จังหวัดเชียงใหม่';
+  /** v3.15 วิธีประเมิน (รูปแบบที่ผู้ใช้กำหนด) — ABRI-2Y: 4 ข้อ · สูตรอื่น: คำอธิบายสูตร + แหล่งข้อมูล */
+  function methodHtml(ctx, unit) {
+    const r = ctx.risk, src = `แหล่งข้อมูลจุดความร้อนจาก ${hsSourceText(ctx)}`;
+    if (!r) return `<ol><li>${ctx.basis || 'ยังไม่มีผลประเมินระดับความเสี่ยง'}</li><li>${src}</li></ol>`;
+    if (r.model !== 'ABRI') return `<ol><li>${ctx.basis}</li><li>${src}</li></ol>`;
+    const yrs = span(r.history), c = r.cuts || [50, 75, 90];
+    return `<ol>
+      <li>ระดับความเสี่ยง หมายถึง ระดับความเสี่ยงจากการจัดกลุ่มจำนวนจุดความร้อนย้อนหลัง 2 ปีงบประมาณ (ปีงบ ${yrs})</li>
+      <li>จัดกลุ่มด้วยหลักการ Percentile เทียบ${unit}ภายในจังหวัดเดียวกัน เป็นการประเมินความเสี่ยงเชิงประวัติจากการเกิดจุดความร้อนซ้ำในแต่ละพื้นที่ ซึ่งสะท้อนพฤติกรรมการเผาของพื้นที่</li>
+      <li>${src}</li>
+      <li>เกณฑ์: สูงมาก ≥ P${c[2]} · สูง P${c[1]}–${c[2]} · ปานกลาง P${c[0]}–${c[1]} · ต่ำ &lt; P${c[0]} หรือจุดรวมน้อยกว่า ${r.minHs ?? 3} จุด · เป็นการประเมินจากข้อมูลที่ผ่านมา ไม่ใช่การทำนาย</li>
+    </ol>`;
   }
+  const GOAL_TEXT = 'เพื่อจัดลำดับพื้นที่เสี่ยงเชิงประวัติและพฤติกรรมการเผา และส่งเสริมการใช้ประโยชน์จากวัสดุเหลือใช้ทางการเกษตร สร้างทางเลือกให้เกิดรายได้เพิ่ม';
   function build(ctx) {
     const S = Dashboard.summary();
     if (!S) return null;
@@ -30,31 +41,41 @@ const Report = (() => {
     el('pr-date').textContent = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
 
     // ---- table: every district/subdistrict in scope, including zero HS ----
-    const rows = S.rows.slice().sort((a, b) => b.current - a.current || b.score - a.score || a.name.localeCompare(b.name, 'th'));
+    // v3.15: เรียงตามระดับความเสี่ยง สูงมาก → ต่ำ (ไม่ประเมิน/ไม่มีผล อยู่ท้าย) ระดับเท่ากันเรียงตามรหัสพื้นที่
+    const rank = r => CONFIG.RISK_LEVELS.indexOf(r.level);
+    const rows = S.rows.slice().sort((a, b) => rank(b) - rank(a) || String(a.code).localeCompare(String(b.code)));
     el('pr-table-title').textContent = `จุดความร้อน (HS) ราย${S.unitLabel} — ครบ ${rows.length} ${S.unitLabel}`;
-    // v3.9.1: ลำดับคอลัมน์เหมือนหน้าจอ — ช่วงเดียวกันปีก่อน → ช่วงที่เลือก (จำนวนจริงทั้งหมด) → เพิ่ม/ลด → ระดับ
+    // v3.15 ลำดับคอลัมน์: ลำดับ · พื้นที่ · ระดับความเสี่ยง (ปีงบฐาน) · HS ช่วงเดียวกันปีที่ผ่านมา · HS ช่วงที่เลือก · เพิ่ม/ลด — หัวคอลัมน์ 2 บรรทัด ตัดที่รอยต่อคำ
     const partial = S.compareMode === 'month' && !S.compareNone;
     const prevCell = v => S.compareNone ? 'ไม่มีข้อมูล' : fmt(v);
-    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th class="num">ช่วงเดียวกันปีก่อน${partial ? '*' : ''}</th><th class="num">ช่วงที่เลือก</th><th class="num">เพิ่ม/ลด${partial ? '*' : ''}</th><th>ระดับความเสี่ยง</th></tr>`;
-    const extra = S.unassigned || S.unassignedPrev ? `<tr><td class="num">–</td><td>ไม่ระบุพื้นที่</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td><td>–</td></tr>` : '';
-    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td class="num">${prevCell(r.previous)}</td><td class="num"><b>${fmt(r.current)}</b></td><td class="num">${r.change.text}</td><td><span class="lv"><i style="background:${r.level.color}"></i>${r.level.label}</span></td></tr>`).join('') + extra;
-    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th class="num">${prevCell(S.totalPrev)}</th><th class="num">${fmt(S.totalCur)}</th><th class="num">${S.change.text}</th><th></th></tr>`
-      + (partial ? `<tr><td colspan="6" class="pr-foot-note">* ปีก่อนมีข้อมูลไม่ครบทุกเดือน: นับปีก่อนและ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel}) · คอลัมน์ช่วงที่เลือกแสดงจำนวนจริงทั้งหมด</td></tr>` : '');
+    const yrs = ctx.risk?.model === 'ABRI' ? span(ctx.risk.history) : '';
+    const two = (a, b) => `<span class="l">${a}</span><span class="l">${b}</span>`;
+    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th>${yrs ? two('ระดับความเสี่ยง', `(ปีงบ ${yrs})`) : 'ระดับความเสี่ยง'}</th><th class="num">${two('จุดความร้อน', `ช่วงเดียวกันปีที่ผ่านมา${partial ? '*' : ''}`)}</th><th class="num">${two('จุดความร้อน', 'ช่วงที่เลือก')}</th><th class="num">เพิ่ม/ลด${partial ? '*' : ''}</th></tr>`;
+    const lvCell = l => `<span class="lv"><i style="background:${l.color}"></i>${l.label}</span>`;
+    const extra = S.unassigned || S.unassignedPrev ? `<tr><td class="num">–</td><td>ไม่ระบุพื้นที่</td><td>–</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td></tr>` : '';
+    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td>${lvCell(r.level)}</td><td class="num">${prevCell(r.previous)}</td><td class="num"><b>${fmt(r.current)}</b></td><td class="num">${r.change.text}</td></tr>`).join('') + extra;
+    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th></th><th class="num">${prevCell(S.totalPrev)}</th><th class="num">${fmt(S.totalCur)}</th><th class="num">${S.change.text}</th></tr>`
+      + (partial ? `<tr><td colspan="6" class="pr-foot-note">* ปีที่ผ่านมามีข้อมูลไม่ครบทุกเดือน: นับปีที่ผ่านมาและ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel}) · คอลัมน์ช่วงที่เลือกแสดงจำนวนจริงทั้งหมด</td></tr>` : '');
+    el('pr-src-hs').textContent = `จุดความร้อน ${hsSourceText(ctx)}`;
     // fit all rows on one page
-    const n = rows.length + (S.unassigned || S.unassignedPrev ? 1 : 0) + (partial ? 3 : 2);
-    const h = Math.min(7, 158 / n);                         // mm per row
+    const n = rows.length + (S.unassigned || S.unassignedPrev ? 1 : 0) + (partial ? 4 : 3);
+    const h = Math.min(7, 150 / n);                         // mm per row
     const fs = Math.max(5.6, Math.min(9, h * 1.45));          // pt
     const pad = Math.max(0.25, (h - fs * 0.3528 * 1.25) / 2); // mm
     const table = el('pr-table'), right = table.parentElement, notes = el('pr-notes');
     const setSize = (f, p) => { table.style.setProperty('--pr-fs', f.toFixed(2) + 'pt'); table.style.setProperty('--pr-pad', p.toFixed(2) + 'mm'); };
-    // ---- notes under the table: risk distribution + method ----
+    // ---- notes under the table: risk distribution + method + goal ----
     const totU = S.levels.reduce((a, b) => a + b, 0) || 1;
-    notes.innerHTML = `<div><h3>สรุประดับความเสี่ยง</h3><table>${CONFIG.RISK_LEVELS.slice().reverse().map(l => { const v = S.levels[CONFIG.RISK_LEVELS.indexOf(l)]; return `<tr><td><span class="lv"><i style="background:${l.color};width:2.4mm;height:2.4mm;border-radius:50%;display:inline-block;margin-right:1mm"></i>${l.label}</span></td><td class="num">${v} ${S.unitLabel}</td><td class="num">${(v * 100 / totU).toFixed(1)}%</td></tr>`; }).join('')}</table></div>
-      <div><h3>วิธีประเมิน</h3><p>${riskMethodText(ctx)}</p><p>เปรียบเทียบกับช่วงเดียวกันปีก่อน: ${S.compareText}${S.compareMode === 'month' && !S.compareNone ? ` (${S.compareNote})` : ''}</p></div>`;
-    let f = fs, p = pad; setSize(f, p); notes.style.display = '';
+    notes.innerHTML = `<div class="pr-dist"><h3>สรุประดับความเสี่ยง</h3><table>${CONFIG.RISK_LEVELS.slice().reverse().map(l => { const v = S.levels[CONFIG.RISK_LEVELS.indexOf(l)]; return `<tr><td><span class="lv"><i style="background:${l.color};width:2.4mm;height:2.4mm;border-radius:50%;display:inline-block;margin-right:1mm"></i>${l.label}</span></td><td class="num">${v} ${S.unitLabel}</td><td class="num">${(v * 100 / totU).toFixed(1)}%</td></tr>`; }).join('')}</table></div>
+      <div class="pr-method"><h3>วิธีประเมิน</h3>${methodHtml(ctx, S.unitLabel)}</div>
+      <div class="pr-goal"><h3>เป้าหมายในการพัฒนาระบบฯ</h3><p>${GOAL_TEXT}</p></div>`;
+    // ลำดับการย่อเมื่อไม่พอ 1 หน้า: ย่อตารางถึง 6.4pt → ซ่อนสรุประดับ (มีในการ์ด KPI) → ย่อตารางต่อ → ซ่อนหมายเหตุทั้งหมด (สุดท้าย)
+    let f = fs, p = pad; setSize(f, p); notes.style.display = ''; notes.classList.remove('compact');
     const fits = () => right.scrollHeight <= right.clientHeight + 1;
-    if (!fits()) notes.style.display = 'none';
+    while (!fits() && f > 6.4) { f -= 0.25; p = Math.max(0.12, p - 0.1); setSize(f, p); }
+    if (!fits()) notes.classList.add('compact');
     while (!fits() && f > 5.2) { f -= 0.25; p = Math.max(0.12, p - 0.1); setSize(f, p); }
+    if (!fits()) notes.style.display = 'none';
 
     // ---- legend & KPIs (outside the map so nothing covers data) ----
     el('pr-legend').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join('')

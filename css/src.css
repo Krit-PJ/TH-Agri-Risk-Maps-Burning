@@ -152,6 +152,7 @@
 .pr-logo { width: 14mm; height: 14mm; object-fit: contain; }
 .pr-title h1 { font-size: 13.5pt; font-weight: 700; color: #124429; margin: 0; line-height: 1.25; }
 .pr-title p { font-size: 7.5pt; color: #4a5a51; margin: .5mm 0 0; }
+.pr-title p.pr-credit { font-size: 6.8pt; color: #1f6f43; margin-top: .2mm; } /* v3.15 บรรทัดผู้พัฒนา */
 .pr-meta { display: grid; grid-template-columns: auto auto; gap: .6mm 5mm; font-size: 7.5pt; margin: 0; }
 .pr-meta div { display: flex; gap: 1.5mm; } .pr-meta dt { color: #4a5a51; } .pr-meta dd { margin: 0; font-weight: 600; }
 .pr-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 152mm 1fr; gap: 4mm; padding-top: 3mm; }
@@ -171,10 +172,18 @@
 .pr-notes table { width: 100%; border-collapse: collapse; }
 .pr-notes td { padding: .6mm 1mm; border-bottom: .2mm solid #e3e9e5; }
 .pr-notes p { margin: 0 0 1mm; }
+/* v3.15 วิธีประเมินแบบลำดับข้อ + เป้าหมายระบบ (เต็มความกว้าง) · compact = ซ่อนสรุประดับเมื่อพื้นที่ไม่พอ */
+.pr-notes ol { margin: 0; padding: 0; list-style: none; counter-reset: prm; } .pr-notes ol li { counter-increment: prm; margin: 0 0 .6mm; padding-left: 4mm; text-indent: -4mm; }
+.pr-notes ol li::before { content: counter(prm) ") "; display: inline-block; width: 4mm; text-indent: 0; font-weight: 600; color: #124429; }
+.pr-notes .pr-goal { grid-column: 1 / -1; border: .25mm solid #c9d3cd; border-left: 1mm solid #1f6f43; border-radius: 1mm; padding: 1.2mm 2mm; background: #f6faf7; }
+.pr-notes .pr-goal p { margin: 0; }
+.pr-notes.compact .pr-dist { display: none; } .pr-notes.compact .pr-method { grid-column: 1 / -1; }
+.pr-notes.compact { margin-top: 1.5mm; gap: 1.5mm; font-size: 6.5pt; line-height: 1.32; } .pr-notes.compact h3 { font-size: 7.2pt; margin-bottom: .5mm; } .pr-notes.compact ol li { margin-bottom: .2mm; } .pr-notes.compact .pr-goal { padding: .8mm 1.6mm; }
 .pr-right h2 { font-size: 9.5pt; font-weight: 700; margin: 0 0 1.5mm; color: #124429; }
 .pr-table { width: 100%; border-collapse: collapse; font-size: var(--pr-fs, 8pt); }
 .pr-table th, .pr-table td { border-bottom: .2mm solid #d7dfda; padding: var(--pr-pad, 1.2mm) 1.2mm; text-align: left; line-height: 1.2; }
-.pr-table thead th { background: #eef7f1; color: #124429; font-weight: 700; border-bottom: .35mm solid #1f6f43; }
+.pr-table thead th { background: #eef7f1; color: #124429; font-weight: 700; border-bottom: .35mm solid #1f6f43; vertical-align: bottom; line-height: 1.25; }
+.pr-table thead th .l { display: block; white-space: nowrap; } /* v3.15 หัวคอลัมน์ 2 บรรทัด ตัดที่รอยต่อคำ */
 .pr-table tfoot th { background: #eef7f1; border-top: .35mm solid #1f6f43; }
 .pr-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pr-table .lv { display: inline-flex; align-items: center; gap: 1mm; white-space: nowrap; }
