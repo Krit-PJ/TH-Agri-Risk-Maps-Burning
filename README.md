@@ -236,4 +236,4 @@ A_i   = พื้นที่เพาะปลูก ESA WorldCover 2021 (ไ�
 
 * ขอบเขตการปกครอง: [OpenGISData-Thailand](https://github.com/chingchai/OpenGISData-Thailand) (CC BY 4.0) ข้อมูลต้นทาง กรมการปกครอง
 * แผนที่ฐาน: Esri (World Street Map, World Imagery, Light Gray Canvas), © OpenStreetMap contributors, OpenTopoMap
-* จุดความร้อน: NASA FIRMS VIIRS (นำเข้าโดยผู้ดูแลจังหวัด)
+* จุดความร้อน: สำนักงานส่งเสริมและพัฒนาการเกษตรที่ 6 จังหวัดเชียงใหม่ (แหล่งหลัก `AGENCY`, ดาวเทียม VIIRS) · NASA FIRMS VIIRS (แหล่ง `FIRMS`) — นำเข้าโดยผู้ดูแลระบบ
