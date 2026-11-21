@@ -11,7 +11,7 @@
  * ไม่มี key: ระดับความเสี่ยง (4 ระดับ) + จำนวนจุดปีงบปัจจุบัน · มี key ที่ออกโดยผู้ดูแล: คะแนน 0–100 องค์ประกอบ และเหตุผล
  * key เก็บใน Script Properties (API_KEYS) — ออก/ดู/ยกเลิกที่แผงผู้ดูแล → ตั้งค่าระบบ (v3.11) หรือจาก Editor: createApiKey('ชื่อหน่วยงาน'), listApiKeys(), revokeApiKey('key')
  * ผลลัพธ์เป็นข้อมูลล่าสุดในฐานข้อมูลเสมอ (แคชจะถูกล้างทันทีเมื่อมีการนำเข้า/เปิด-ปิดชุดข้อมูล/เปลี่ยนตั้งค่า) */
-const API_VERSION = '1.5';   // 1.5 (v3.13): provinces fiscalYear/hsFiscalYear (HS ปีงบประมาณปัจจุบัน) · 1.4 (v3.10): hotspots id/importedAt + since (ดึงเฉพาะข้อมูลใหม่) · 1.3 (v3.9.3): fn=compare (ตารางเปรียบเทียบเดียวกับหน้าเว็บ) · ตัวกรอง district/subdistrict/crop · 1.2: ABRI-2Y ค่าเริ่มต้น
+const API_VERSION = '1.6';   // 1.6 (v3.14): ช่วงเริ่มต้น = ปีงบประมาณปัจจุบัน (เหมือนหน้าเว็บ) · 1.5 (v3.13): provinces fiscalYear/hsFiscalYear (HS ปีงบประมาณปัจจุบัน) · 1.4 (v3.10): hotspots id/importedAt + since (ดึงเฉพาะข้อมูลใหม่) · 1.3 (v3.9.3): fn=compare (ตารางเปรียบเทียบเดียวกับหน้าเว็บ) · ตัวกรอง district/subdistrict/crop · 1.2: ABRI-2Y ค่าเริ่มต้น
 const API_DOCS = 'https://github.com/Krit-PJ/TH-Agri-Risk-Maps-Burning/blob/main/docs/API.md';
 
 function apiKeys_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('API_KEYS') || '{}'); } catch (e) { return {}; } }
@@ -134,7 +134,12 @@ function apiFilter_(p) {
   return f;
 }
 /** ช่วงเริ่มต้นเดียวกับหน้าเว็บ: ปีงบประมาณล่าสุดที่ครบแล้ว (1 ต.ค. – 30 ก.ย.) */
-function apiDefaultPeriod_() { const e = defaultEnd_(); if (!e) return { from: '', to: '' }; const y = +e.slice(0, 4); return { from: (y - 1) + '-10-01', to: e }; }
+/** ช่วงเริ่มต้น (v1.6 = หน้าเว็บ v3.14): ปีงบประมาณปัจจุบัน 1 ต.ค. – ข้อมูลล่าสุด (ขึ้นปีงบใหม่ทุก 1 ต.ค.) */
+function apiDefaultPeriod_() {
+  const today = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd'), fy = seasonOfDate_(today), from = (fy - 544) + '-10-01';
+  const last = dataRange_().last || '';
+  return { from: from, to: last && last >= from ? (last < today ? last : today) : today, fiscalYear: fy };
+}
 const API_MONTH_SHORT_ = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 function apiMonthsLabel_(list) {
   const idx = ym => (+ym.slice(0, 4)) * 12 + (+ym.slice(5, 7)), runs = [];

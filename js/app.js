@@ -110,6 +110,7 @@ const App = (() => {
     el('btn-print').classList.add('hidden'); el('map-legend').classList.add('hidden'); el('crop-bar').classList.add('hidden');
     el('mobile-toggle-left').textContent = 'รายการจังหวัด'; el('mobile-toggle-right').classList.add('hidden');
     el('header-province').textContent = '';
+    const bc = backCtl?.getContainer(); if (bc) bc.innerHTML = '';   // v3.14 ซ่อนปุ่มกลับบนแผนที่ในโหมดประเทศ
     el('map-hint').classList.remove('hidden');
     el('map-hint').textContent = available.length ? 'เลือกจังหวัดที่มีข้อมูลจุดความร้อน เพื่อเปิดแผนที่ความเสี่ยงและรายงาน' : 'ยังไม่มีจังหวัดที่มีข้อมูลจุดความร้อน';
     document.title = 'Agri-Risk Map Burning | ระบบเฝ้าระวังความเสี่ยงการเผาในพื้นที่เกษตร';
@@ -194,36 +195,52 @@ const App = (() => {
     el('filter-crop').innerHTML = '<option value="">ทุกชนิดพืช</option>' + CONFIG.PLANT_TYPES.filter(p => present.has(p)).map(p => `<option value="${p}">${p}</option>`).join('');
   }
 
-  /* ---------- period: ค่าเริ่มต้น = ปีงบประมาณล่าสุดที่ครบแล้ว (ต.ค.–ก.ย.) · เลือกปีงบหรือกำหนดช่วงเดือนเองได้ ---------- */
+  /* ---------- period (v3.14): ค่าเริ่มต้น = ปีงบประมาณปัจจุบัน (ต.ค.–ก.ย. ของวันนี้ ตรงกับตัวเลขในรายการจังหวัด) ขึ้นปีงบใหม่เองทุก 1 ต.ค.
+   * เลือกปีงบ หรือกำหนดเดือน/ปีเอง → มีผลทันที (ไม่ต้องกดปุ่ม) และช่องปีงบกับช่องเดือน/ปีปรับตามกัน ---------- */
   function setupPeriod(fc) {
+    const now = new Date(), today = { year: now.getFullYear() + 543, month: now.getMonth() + 1 }, todayYM = Geo.ymIndex(today.year, today.month);
     const yms = fc.features.map(f => f.properties.__ym);
-    const maxYM = yms.length ? Math.max(...yms) : Geo.ymIndex(new Date().getFullYear() + 543, new Date().getMonth() + 1);
+    const maxYM = yms.length ? Math.max(...yms) : todayYM;
     const minYM = yms.length ? Math.min(...yms) : maxYM;
     const latest = Geo.ymFromIndex(maxYM), first = Geo.ymFromIndex(minYM);
-    const lastDate = fc.features.reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
-    const years = []; for (let y = Math.min(first.year, latest.year - 1, Geo.seasonOf(first.year, first.month) - 1); y <= latest.year; y++) years.push(y);
+    const curFy = Math.max(Geo.seasonOf(today.year, today.month), Geo.seasonOf(latest.year, latest.month)), firstFy = Geo.seasonOf(first.year, first.month);
+    const lastYM = Math.max(maxYM, Math.min(todayYM, Geo.ymIndex(curFy, 9)));   // เดือนสุดท้ายที่เลือกได้ = เดือนปัจจุบัน (หรือเดือนล่าสุดของข้อมูล)
+    const years = []; for (let y = Math.min(first.year, Geo.seasonOf(first.year, first.month) - 1); y <= Geo.ymFromIndex(lastYM).year; y++) years.push(y);
     const mOpts = CONFIG.MONTH_SHORT.slice(1).map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
     const yOpts = years.slice().reverse().map(y => `<option value="${y}">${y}</option>`).join('');   // v3.9.1: ปีล่าสุดอยู่บนสุด
     ['range-start-month', 'range-end-month'].forEach(id => { el(id).innerHTML = mOpts; });
     ['range-start-year', 'range-end-year'].forEach(id => { el(id).innerHTML = yOpts; });
-    const season = Geo.seasonOf(latest.year, latest.month), firstFy = Geo.seasonOf(first.year, first.month);
-    // ปีงบของวันล่าสุดยังไม่ครบ (ยังไม่ถึง 30 ก.ย.) → ค่าเริ่มต้นเป็นปีงบก่อนหน้าที่ครบแล้ว
-    const complete = lastDate >= `${season - 543}-09-30`, def = complete || season - 1 < firstFy ? season : season - 1;
+    const ongoing = Geo.ymIndex(curFy, 9) > lastYM;
     if (el('range-fy')) {
-      const fys = []; for (let y = season; y >= firstFy; y--) fys.push(y);
-      el('range-fy').innerHTML = fys.map(y => `<option value="${y}">${y} (ต.ค. ${String(y - 1).slice(2)} – ก.ย. ${String(y).slice(2)})${y === season && !complete ? ' · ถึงปัจจุบัน' : ''}</option>`).join('') + '<option value="">กำหนดเอง</option>';
-      el('range-fy').value = String(def);
+      const fys = []; for (let y = curFy; y >= firstFy; y--) fys.push(y);
+      el('range-fy').innerHTML = fys.map(y => `<option value="${y}">${y} (ต.ค. ${String(y - 1).slice(2)} – ก.ย. ${String(y).slice(2)})${y === curFy && ongoing ? ' · ถึงปัจจุบัน' : ''}</option>`).join('') + '<option value="">กำหนดเอง</option>';
+      el('range-fy').value = String(curFy);
     }
-    fyRange(def, season, latest);
+    current.fyLatest = { season: curFy, lastYM };
+    fyRange(curFy);
     appliedRange = readRange();
     current.defaultRange = { ...appliedRange };
-    current.fyLatest = { season, latest };
-    el('btn-apply-period').classList.remove('ring-2', 'ring-amber-400');
   }
-  /** ช่วงของปีงบประมาณ fy: ต.ค. (fy−1) – ก.ย. fy (ปีงบปัจจุบันตัดที่เดือนล่าสุดของข้อมูล) */
-  function fyRange(fy, season, latest) {
-    if (fy === season && Geo.ymIndex(fy, 9) > Geo.ymIndex(latest.year, latest.month)) setRangeUI(fy - 1, 10, latest.year, latest.month);
+  /** ช่วงของปีงบประมาณ fy: ต.ค. (fy−1) – ก.ย. fy · ปีงบที่ยังไม่จบตัดที่เดือนปัจจุบัน */
+  function fyRange(fy) {
+    const lastYM = current?.fyLatest?.lastYM;
+    if (lastYM && Geo.ymIndex(fy, 9) > lastYM) { const e = Geo.ymFromIndex(lastYM); setRangeUI(fy - 1, 10, e.year, e.month); }
     else setRangeUI(fy - 1, 10, fy, 9);
+  }
+  /** ใช้ช่วงที่เลือกทันที (หน่วงเล็กน้อย เผื่อผู้ใช้เปลี่ยนหลายช่องติดกัน) */
+  let periodTimer = null;
+  function applyPeriodSoon() {
+    clearTimeout(periodTimer);
+    el('timeline-status').textContent = `กำลังแสดง HS สะสม ${Geo.periodText(readRange())}…`;
+    periodTimer = setTimeout(() => { appliedRange = readRange(); const r = appliedRange; setRangeUI(r.startYear, r.startMonth, r.endYear, r.endMonth); syncFySelect(); applyCurrent(); }, 250);
+  }
+  function syncFySelect() {
+    if (!el('range-fy')) return;
+    // ช่วง ต.ค. (fy−1) – ก.ย. fy (หรือถึงเดือนปัจจุบันของปีงบที่ยังไม่จบ) = ปีงบ fy · อื่น ๆ = กำหนดเอง
+    const r = readRange(), fyN = r.startYear + 1, endYM = Geo.ymIndex(r.endYear, r.endMonth);
+    const isFy = r.startMonth === 10 && (endYM === Geo.ymIndex(fyN, 9) || (endYM === current?.fyLatest?.lastYM && endYM < Geo.ymIndex(fyN, 9) && endYM >= Geo.ymIndex(fyN - 1, 10)));
+    const fy = isFy ? String(fyN) : '';
+    el('range-fy').value = [...el('range-fy').options].some(o => o.value === fy) ? fy : '';
   }
   function setRangeUI(sy, sm, ey, em) { el('range-start-year').value = sy; el('range-start-month').value = sm; el('range-end-year').value = ey; el('range-end-month').value = em; }
   function readRange() {
@@ -241,10 +258,12 @@ const App = (() => {
     if (!current) return;
     const seq = ++applySeq, crop = el('filter-crop').value;
     el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)} · กำลังประเมินระดับความเสี่ยง…`;
-    const info = await MapModule.applyFilter(filterState());
+    const pending = MapModule.applyFilter(filterState());
+    renderScope();
+    const info = await pending;
     if (seq !== applySeq || info.stale) return;
     current.seasons = info.seasons; current.risk = info.risk;
-    Dashboard.refresh();
+    Dashboard.refresh(); renderScope();
     renderCropBar();
     const riskText = info.error ? ` · ประเมินระดับความเสี่ยงไม่สำเร็จ: ${info.error}` : info.basis ? ` · ระดับความเสี่ยง: ${info.basis}` : '';
     el('timeline-status').textContent = `HS สะสม ${Geo.periodText(appliedRange)} · ${landLabel(currentLand())}${crop ? ` · ชนิดพืช: ${crop}` : ''}${riskText}`;
@@ -265,36 +284,56 @@ const App = (() => {
     el('filter-land').addEventListener('change', changeLand);
     el('btn-reset-filter').addEventListener('click', () => {
       el('filter-district').value = ''; populateSubdistricts(); el('filter-crop').value = '';
-      if (current?.defaultRange) { const r = current.defaultRange; setRangeUI(r.startYear, r.startMonth, r.endYear, r.endMonth); appliedRange = { ...r }; if (el('range-fy')) el('range-fy').value = String(r.endMonth === 9 ? r.endYear : r.endYear + (r.endMonth >= 10 ? 1 : 0)); }
+      if (current?.defaultRange) { const r = current.defaultRange; setRangeUI(r.startYear, r.startMonth, r.endYear, r.endMonth); appliedRange = { ...r }; syncFySelect(); }
       if (currentLand() !== CONFIG.DEFAULT_LAND) { el('filter-land').value = CONFIG.DEFAULT_LAND; changeLand(); } else applyCurrent();
     });
+    // v3.14: เลือกปีงบ → ช่องเดือน/ปีเปลี่ยนตาม และแสดงข้อมูลทันที · เปลี่ยนเดือน/ปีเอง → ช่องปีงบปรับตาม (หรือ "กำหนดเอง") และแสดงข้อมูลทันที
     el('range-fy')?.addEventListener('change', () => {
       const fy = Number(el('range-fy').value); if (!fy || !current?.fyLatest) return;
-      fyRange(fy, current.fyLatest.season, current.fyLatest.latest);
-      el('btn-apply-period').classList.add('ring-2', 'ring-amber-400');
-      el('timeline-status').textContent = `เลือกปีงบประมาณ ${fy} (${Geo.periodText(readRange())}) แล้ว กด "แสดงข้อมูล" เพื่อใช้ช่วงนี้`;
+      fyRange(fy); applyPeriodSoon();
     });
-    ['range-start-month', 'range-start-year', 'range-end-month', 'range-end-year'].forEach(id => el(id).addEventListener('change', () => {
-      if (el('range-fy')) { const r = readRange(), fy = r.startMonth === 10 && r.endMonth === 9 && r.endYear === r.startYear + 1 ? String(r.endYear) : ''; el('range-fy').value = [...el('range-fy').options].some(o => o.value === fy) ? fy : ''; }
-      el('btn-apply-period').classList.add('ring-2', 'ring-amber-400');
-      el('timeline-status').textContent = `เลือกช่วง ${Geo.periodText(readRange())} แล้ว กด "แสดงข้อมูล" เพื่อใช้ช่วงนี้`;
-    }));
-    el('btn-apply-period').addEventListener('click', () => {
-      appliedRange = readRange(); const r = appliedRange; setRangeUI(r.startYear, r.startMonth, r.endYear, r.endMonth);
-      el('btn-apply-period').classList.remove('ring-2', 'ring-amber-400'); applyCurrent();
-    });
-    // คลิกพื้นที่บนแผนที่ (ปุ่มดูรายตำบล) หรือคลิกแถวในตารางเปรียบเทียบ: อำเภอ → ดูรายตำบล · ตำบล → เลือก/ยกเลิกตำบล
+    ['range-start-month', 'range-start-year', 'range-end-month', 'range-end-year'].forEach(id => el(id).addEventListener('change', () => { syncFySelect(); applyPeriodSoon(); }));
+    // v3.14 คลิกพื้นที่บนแผนที่ หรือแถวในตารางเปรียบเทียบ: อำเภอ → เลือกอำเภอ (ดูรายตำบล) · ตำบล → เลือก/ยกเลิกตำบล
     document.addEventListener('agri-risk:area-click', e => {
       const { level, code } = e.detail;
       if (level === 'district') {
-        if (el('filter-district').value) return;
+        if (el('filter-district').value === code) return;
         el('filter-district').value = code; populateSubdistricts(); applyCurrent();
       } else if (level === 'subdistrict') {
         const t = el('filter-subdistrict'); if (![...t.options].some(o => o.value === code)) return;
         t.value = t.value === code ? '' : code; applyCurrent();
       }
     });
+    // v3.14 กลับขึ้นหนึ่งระดับ: ตำบล → อำเภอ → ภาพรวมจังหวัด (ปุ่มบนแผนที่ ปุ่มในแถบพื้นที่ที่เลือก หรือ Esc)
+    document.addEventListener('click', e => { if (e.target.closest('[data-scope-up]')) scopeUp(); });
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape' || !current || document.querySelector('.modal:not(.hidden)') || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || '')) return;
+      if (el('filter-district').value || el('filter-subdistrict').value) scopeUp();
+    });
   }
+  function scopeUp() {
+    if (el('filter-subdistrict').value) el('filter-subdistrict').value = '';
+    else if (el('filter-district').value) { el('filter-district').value = ''; populateSubdistricts(); }
+    else return;
+    applyCurrent();
+  }
+  /** v3.14 ปุ่มกลับบนแผนที่ (แสดงเมื่อเลือกอำเภอ/ตำบล): ตำบล → ภาพรวมอำเภอ · อำเภอ → ภาพรวมจังหวัด (กด Esc ได้เช่นกัน) */
+  let backCtl = null;
+  function renderScope() {
+    if (!current) return;
+    const d = el('filter-district'), t = el('filter-subdistrict');
+    const dName = d.value ? d.selectedOptions[0].text : '';
+    const upLabel = t.value ? `ภาพรวมอำเภอ${dName}` : d.value ? `ภาพรวมจังหวัด${current.name}` : '';
+    const map = MapModule.map();
+    if (map && !backCtl) {
+      backCtl = L.control({ position: 'topleft' });
+      backCtl.onAdd = () => { const div = L.DomUtil.create('div', 'map-back'); L.DomEvent.disableClickPropagation(div); return div; };
+      backCtl.addTo(map);
+    }
+    const box = backCtl?.getContainer();
+    if (box) box.innerHTML = upLabel ? `<button type="button" class="map-back-btn" data-scope-up title="กลับ (Esc)">← ${esc(upLabel)}</button>` : '';
+  }
+
 
   async function refreshAfterDataChange(code) {
     MapModule.clearRiskCache();
