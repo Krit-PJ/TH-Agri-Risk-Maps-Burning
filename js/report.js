@@ -59,19 +59,17 @@ const Report = (() => {
     el('pr-src-hs').textContent = `จุดความร้อน ${hsSourceText(ctx)}`;
     // fit all rows on one page
     const n = rows.length + (S.unassigned || S.unassignedPrev ? 1 : 0) + (partial ? 4 : 3);
-    const h = Math.min(7, 150 / n);                         // mm per row
-    const fs = Math.max(5.6, Math.min(9, h * 1.45));          // pt
+    const h = Math.min(7, 156 / n);                         // mm per row
+    const fs = Math.max(5.6, Math.min(8, h * 1.45));          // pt (v3.16 สูงสุด 8pt ให้ชื่อพื้นที่/หัวคอลัมน์ไม่ตัดบรรทัด)
     const pad = Math.max(0.25, (h - fs * 0.3528 * 1.25) / 2); // mm
     const table = el('pr-table'), right = table.parentElement, notes = el('pr-notes');
     const setSize = (f, p) => { table.style.setProperty('--pr-fs', f.toFixed(2) + 'pt'); table.style.setProperty('--pr-pad', p.toFixed(2) + 'mm'); };
-    // ---- notes under the table: risk distribution + method + goal ----
-    const totU = S.levels.reduce((a, b) => a + b, 0) || 1;
-    notes.innerHTML = `<div class="pr-dist"><h3>สรุประดับความเสี่ยง</h3><table>${CONFIG.RISK_LEVELS.slice().reverse().map(l => { const v = S.levels[CONFIG.RISK_LEVELS.indexOf(l)]; return `<tr><td><span class="lv"><i style="background:${l.color};width:2.4mm;height:2.4mm;border-radius:50%;display:inline-block;margin-right:1mm"></i>${l.label}</span></td><td class="num">${v} ${S.unitLabel}</td><td class="num">${(v * 100 / totU).toFixed(1)}%</td></tr>`; }).join('')}</table></div>
-      <div class="pr-method"><h3>วิธีประเมิน</h3>${methodHtml(ctx, S.unitLabel)}</div>
-      <div class="pr-goal"><h3>เป้าหมายในการพัฒนาระบบฯ</h3><p>${GOAL_TEXT}</p></div>`;
-    // ลำดับการย่อเมื่อไม่พอ 1 หน้า: ย่อตารางถึง 6.4pt → ซ่อนสรุประดับ (มีในการ์ด KPI) → ย่อตารางต่อ → ซ่อนหมายเหตุทั้งหมด (สุดท้าย)
+    // ---- v3.16: ใต้ตาราง = วิธีประเมิน (เต็มความกว้าง) · นำ “สรุประดับความเสี่ยง” ออก · เป้าหมายฯ ย้ายไปใต้การ์ดสรุป (คอลัมน์ซ้าย) ----
+    notes.innerHTML = `<div class="pr-method"><h3>วิธีประเมิน</h3>${methodHtml(ctx, S.unitLabel)}</div>`;
+    el('pr-goal').innerHTML = `<h3>เป้าหมายในการพัฒนาระบบฯ</h3><p>${GOAL_TEXT}</p>`;
+    // ลำดับการย่อเมื่อไม่พอ 1 หน้า: ย่อตารางถึง 6.4pt → ย่อวิธีประเมิน → ย่อตารางต่อ → ซ่อนวิธีประเมิน (สุดท้าย)
     let f = fs, p = pad; setSize(f, p); notes.style.display = ''; notes.classList.remove('compact');
-    const fits = () => right.scrollHeight <= right.clientHeight + 1;
+    const fits = () => right.scrollHeight <= right.clientHeight + 1 && table.scrollWidth <= right.clientWidth + 1;   // ทั้งความสูงและความกว้าง
     while (!fits() && f > 6.4) { f -= 0.25; p = Math.max(0.12, p - 0.1); setSize(f, p); }
     if (!fits()) notes.classList.add('compact');
     while (!fits() && f > 5.2) { f -= 0.25; p = Math.max(0.12, p - 0.1); setSize(f, p); }
@@ -79,7 +77,7 @@ const Report = (() => {
 
     // ---- legend & KPIs (outside the map so nothing covers data) ----
     el('pr-legend').innerHTML = CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span><i style="background:${l.color}"></i>${l.label}</span>`).join('')
-      + `<span><i class="pt" style="background:${CONFIG.SEASON_COLORS[0]}"></i>HS ช่วงที่เลือก (${fmt(S.totalCur)} จุด)</span>` + (document.getElementById('lyr-hotspot-prev')?.checked ? `<span><i class="pt" style="background:#94a3b8"></i>HS ช่วงเดียวกันปีก่อน</span>` : '')
+      + `<span><i class="pt" style="background:${CONFIG.SEASON_COLORS[0]}"></i>HS ช่วงที่เลือก (${fmt(S.totalCur)} จุด)</span>`
       + `<span class="north">▲ ทิศเหนือ</span>`;
     const withHs = rows.filter(r => r.current > 0).length;
     el('pr-kpis').innerHTML = [
@@ -102,8 +100,6 @@ const Report = (() => {
     const focus = MapModule.selectionFeatures();
     const frame = L.geoJSON({ type: 'FeatureCollection', features: focus }, { style: { color: '#0f172a', weight: 2.2, fill: false }, interactive: false }).addTo(m);
     layers.push(frame);
-    if (document.getElementById('lyr-hotspot-prev')?.checked) layers.push(L.geoJSON({ type: 'FeatureCollection', features: MapModule.prevHotspots() }, {
-      pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 2, fillColor: '#94a3b8', color: '#ffffff', weight: 0.5, fillOpacity: 0.9 }), interactive: false }).addTo(m));
     const pts = L.geoJSON({ type: 'FeatureCollection', features: MapModule.mapHotspots() }, {
       pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 2.4, fillColor: CONFIG.SEASON_COLORS[0], color: '#ffffff', weight: 0.6, fillOpacity: 1 }), interactive: false
     }).addTo(m);
