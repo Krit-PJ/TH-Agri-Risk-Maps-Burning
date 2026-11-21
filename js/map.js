@@ -3,7 +3,7 @@ const MapModule = (() => {
   let map, basemapKey = 'voyager';
   const base = {};
   const shown = { national: null, province: null, district: null, subdistrict: null, risk: null, hotspot: null };
-  const raw = { bundle: null, hotspot: null, riskDistrict: null, riskSubdistrict: null, seasons: [], risk: null, code: '', dataFirst: '', dataMonths: [] };
+  const raw = { bundle: null, hotspot: null, riskDistrict: null, riskSubdistrict: null, seasons: [], risk: null, code: '', multi: null, dataFirst: '', dataMonths: [] };
   const riskCache = new Map();
   let state = { district: '', subdistrict: '', crop: '', land: CONFIG.DEFAULT_LAND, startYM: null, endYM: null };
   let nationalLayers = new Map();
@@ -72,11 +72,16 @@ const MapModule = (() => {
   /* ---------------- Province mode ---------------- */
   function setProvince(bundle, hotspotFC, code) {
     hideNational();
-    raw.bundle = bundle; raw.hotspot = hotspotFC; raw.code = code || ''; raw.risk = null;
+    raw.bundle = bundle; raw.hotspot = hotspotFC; raw.code = code || ''; raw.risk = null; raw.multi = null;
+  }
+  /** v3.17 หลายจังหวัด (Super/Mini Super Admin): bundle รวมขอบเขตทุกจังหวัดที่เลือก · ระดับความเสี่ยงยังประเมินแยกรายจังหวัด */
+  function setMulti(bundle, hotspotFC, codes) {
+    hideNational();
+    raw.bundle = bundle; raw.hotspot = hotspotFC; raw.code = ''; raw.risk = null; raw.multi = codes.slice();
   }
   function clearProvince() {
     ['province', 'district', 'subdistrict', 'risk', 'hotspot'].forEach(k => { remove(shown[k]); shown[k] = null; });
-    raw.bundle = null; raw.hotspot = null; raw.riskDistrict = null; raw.riskSubdistrict = null; raw.risk = null; raw.code = '';
+    raw.bundle = null; raw.hotspot = null; raw.riskDistrict = null; raw.riskSubdistrict = null; raw.risk = null; raw.code = ''; raw.multi = null;
   }
 
   const districtCodeOf = f => f.properties.amp_code;
@@ -128,22 +133,39 @@ const MapModule = (() => {
   /** ผู้ดูแลระบบในขอบเขตสิทธิ์จะเห็นคะแนน องค์ประกอบ และแนวโน้มเพิ่ม (ประชาชนเห็นเฉพาะระดับ 4 สี) */
   function viewerDetailed() {
     const u = Api.session()?.user;
-    return !!u && (u.role === 'superadmin' || u.role === 'minisuper' || u.prov === raw.code);
+    return !!u && (u.role === 'superadmin' || u.role === 'minisuper' || (!!raw.code && u.prov === raw.code));
   }
   function endDateOfRange() {
     if (!state.endYM) return '';
     const e = Geo.ymFromIndex(state.endYM), y = e.year - 543, last = new Date(Date.UTC(y, e.month, 0)).getUTCDate();
     return `${y}-${String(e.month).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
   }
-  async function loadRisk() {
-    if (!raw.code || !Api.configured()) return null;
+  function loadRiskOf(code) {
     const detailed = viewerDetailed(), end = endDateOfRange(), land = state.land || CONFIG.DEFAULT_LAND;
-    const key = `${raw.code}|${end}|${land}|${detailed ? 'd' : 'p'}`;
+    const key = `${code}|${end}|${land}|${detailed ? 'd' : 'p'}`;
     if (!riskCache.has(key)) {
-      const req = detailed ? Api.post('risk_detail', { province: raw.code, end, land }) : Api.get('risk', { province: raw.code, end, land });
+      const req = detailed ? Api.post('risk_detail', { province: code, end, land }) : Api.get('risk', { province: code, end, land });
       riskCache.set(key, req.catch(err => { riskCache.delete(key); throw err; }));
     }
     return riskCache.get(key);
+  }
+  async function loadRisk() {
+    if (!Api.configured()) return null;
+    if (raw.multi) return loadRiskMulti(raw.multi);
+    if (!raw.code) return null;
+    return loadRiskOf(raw.code);
+  }
+  /** v3.17 ผลประเมินรายจังหวัด (แต่ละจังหวัดจัดลำดับภายในจังหวัดตนเอง) รวมเป็นตารางเดียวสำหรับแสดงบนแผนที่ — รหัสอำเภอ/ตำบลไม่ซ้ำข้ามจังหวัด
+   * จังหวัดที่ยังไม่มีผลประเมิน: อำเภอ/ตำบลของจังหวัดนั้นแสดงเป็น “ไม่ประเมิน” (ไม่ระบายเป็นระดับต่ำ) */
+  async function loadRiskMulti(codes) {
+    const rs = await Promise.all(codes.map(c => loadRiskOf(c).then(r => [c, r]).catch(err => [c, { empty: true, error: err.message }])));
+    const ok = rs.filter(([, r]) => r && !r.empty && !r.noHistory);
+    if (!ok.length) return rs[0]?.[1] || null;
+    const base = ok[0][1];
+    return Object.assign({}, base, {
+      multi: true, validProvinces: ok.map(([c]) => c), failed: rs.filter(([, r]) => r?.error).map(([c]) => c),
+      district: Object.assign({}, ...ok.map(([, r]) => r.district || {})), subdistrict: Object.assign({}, ...ok.map(([, r]) => r.subdistrict || {}))
+    });
   }
   const LEVEL_MID = [12.5, 37.5, 62.5, 87.5];
   const AREA_MODELS = ['M4', 'M5'];   // สูตรที่ใช้พื้นที่เพาะปลูก: ไม่มีพื้นที่เกษตร = ไม่ประเมิน (-1)
@@ -157,12 +179,13 @@ const MapModule = (() => {
       type: 'FeatureCollection',
       features: units.map(feature => {
         const p = feature.properties, code = level === 'district' ? districtCodeOf(feature) : subdistrictCodeOf(feature);
-        const row = table[code], raw0 = row ? Number(at(row, 'level')) : 0, lvl = na ? (row ? raw0 : -1) : Math.max(0, raw0);
+        const unrated = api?.multi && !api.validProvinces.includes(String(code).slice(0, 2));   // v3.17 จังหวัดที่ยังไม่มีผลประเมิน
+        const row = table[code], raw0 = row ? Number(at(row, 'level')) : 0, lvl = unrated ? -1 : na ? (row ? raw0 : -1) : Math.max(0, raw0);
         const detail = api?.detailed && row ? Object.assign({ model: api.model }, Object.fromEntries(cols.map((c, i) => [c, row[i]]))) : null;
         return {
           type: 'Feature', geometry: feature.geometry,
           properties: {
-            code, name: level === 'district' ? p.amp_th : p.tam_th, district_code: p.amp_code, level,
+            code, name: level === 'district' ? p.amp_th : p.tam_th, district_code: p.amp_code, province_code: String(p.amp_code || '').slice(0, 2), level,
             risk_level: lvl, risk_score: lvl < 0 ? null : detail && at(row, 'score') !== null && at(row, 'score') !== undefined ? Number(at(row, 'score')) : LEVEL_MID[lvl],
             selected_hotspot_count: counts[code] || 0, season_hotspot_count: row ? Number(at(row, 'hs0')) : 0, detail,
             n_high: row && cols.includes('nHigh') ? at(row, 'nHigh') : null, n_tambon: row && cols.includes('nTambon') ? at(row, 'nTambon') : null
@@ -252,8 +275,9 @@ const MapModule = (() => {
   /** ชี้: ชื่อพื้นที่ + ระดับความเสี่ยง (สั้น) + สิ่งที่จะเกิดเมื่อคลิก */
   function riskTooltip(p, level, colored = true) {
     const lv = levelOf(p), picked = level === 'subdistrict' && state.subdistrict === p.code;
-    const act = level === 'district' ? 'คลิกเพื่อเลือกอำเภอนี้ (ดูรายตำบล)' : picked ? 'คลิกอีกครั้งเพื่อยกเลิกการเลือกตำบล' : 'คลิกเพื่อเลือกตำบลนี้';
-    return `<strong>${level === 'district' ? 'อ.' : 'ต.'}${p.name}</strong>${colored ? `<br><span class="risk-pill"><span class="risk-dot" style="background:${lv.color}"></span>ความเสี่ยง${lv.label}</span>` : ''}<br><span style="color:#4a5a51">${act}</span>`;
+    const act = raw.multi ? 'คลิกเพื่อเปิดจังหวัดนี้และเลือกอำเภอนี้' : level === 'district' ? 'คลิกเพื่อเลือกอำเภอนี้ (ดูรายตำบล)' : picked ? 'คลิกอีกครั้งเพื่อยกเลิกการเลือกตำบล' : 'คลิกเพื่อเลือกตำบลนี้';
+    const pName = raw.multi ? provinceName(p.province_code) : '';
+    return `<strong>${level === 'district' ? 'อ.' : 'ต.'}${p.name}${pName ? ` จ.${pName}` : ''}</strong>${colored ? `<br><span class="risk-pill"><span class="risk-dot" style="background:${lv.color}"></span>ความเสี่ยง${lv.label}</span>` : ''}<br><span style="color:#4a5a51">${act}</span>`;
   }
 
   const isoDate = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -314,6 +338,7 @@ const MapModule = (() => {
       <p class="mb-1.5 font-bold text-ink">ระดับความเสี่ยงการเผา (พื้นที่)</p>
       <div class="grid grid-cols-2 gap-x-3 gap-y-1">${CONFIG.RISK_LEVELS.slice().reverse().map(l => `<span class="risk-pill text-xs"><span class="risk-dot" style="background:${l.color}"></span>${l.label}</span>`).join('')}</div>
       ${na ? `<span class="risk-pill mt-1 text-xs"><span class="risk-dot" style="background:${NA_LEVEL.color}"></span>ไม่ประเมิน (ไม่มีพื้นที่เกษตร)</span>` : ''}
+      ${raw.multi ? '<p class="mt-1.5 max-w-[14rem] leading-snug text-amber-800">ระดับความเสี่ยงจัดลำดับภายในแต่ละจังหวัด — เปรียบเทียบสีข้ามจังหวัดไม่ได้ (เทียบจำนวนจุดจากตารางรายจังหวัด)</p>' : ''}
       ${clustered ? '<p class="mt-1.5 max-w-[14rem] leading-snug text-ink-soft">วงกลมตัวเลข = กลุ่มจุดความร้อนที่ทับกัน (แสดงเมื่อจุดมาก) สีตามระดับความเสี่ยงของตำบลที่จุดส่วนใหญ่อยู่ · ซูมเข้าเพื่อดูรายจุด</p>' : ''}
     </div>`;
     el.classList.remove('hidden');
@@ -335,7 +360,8 @@ const MapModule = (() => {
     if (!raw.bundle) return [];
     if (state.subdistrict) return raw.bundle.subdistrict.features.filter(f => subdistrictCodeOf(f) === state.subdistrict);
     if (state.district) return raw.bundle.district.features.filter(f => districtCodeOf(f) === state.district);
-    return raw.bundle.province ? [raw.bundle.province] : raw.bundle.district.features;
+    const pv = raw.bundle.province;
+    return pv ? (pv.type === 'FeatureCollection' ? pv.features : [pv]) : raw.bundle.district.features;
   }
   function focusSelection(options = {}) {
     const fs = selectionFeatures();
@@ -348,10 +374,14 @@ const MapModule = (() => {
   }
   const NA_LEVEL = { label: 'ไม่ประเมิน', color: '#cbd5e1', min: -1, max: -1 };
   const levelOf = p => p.risk_level < 0 ? NA_LEVEL : (CONFIG.RISK_LEVELS[p.risk_level] || CONFIG.RISK_LEVELS[0]);
+  function provinceName(code) {
+    const pv = raw.bundle?.province, fs = pv?.type === 'FeatureCollection' ? pv.features : pv ? [pv] : [];
+    return fs.find(f => f.properties.pro_code === code)?.properties.pro_th || '';
+  }
 
   return {
     setDataStart: d => { raw.dataFirst = d || ''; }, setDataMonths: m => { raw.dataMonths = Array.isArray(m) ? m : []; }, compareInfo, levelOf,
-    init, showNational, highlightProvince, setProvince, clearProvince, applyFilter, focusSelection, seasonColor, riskInfo, riskBasisText, viewerDetailed,
+    init, showNational, highlightProvince, setProvince, setMulti, provinceName, clearProvince, applyFilter, focusSelection, seasonColor, riskInfo, riskBasisText, viewerDetailed,
     clearRiskCache: () => riskCache.clear(),
     map: () => map, getData: () => raw, getState: () => ({ ...state }), filteredHotspots, mapHotspots, displaySeason, inRange, selectionFeatures,
     getRiskForScope: level => level === 'district' ? raw.riskDistrict : raw.riskSubdistrict,

@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.16.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.17.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -65,10 +65,10 @@
   <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 sm:px-5">
     <button id="btn-back-national" type="button" class="btn-ghost">
       <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-      เปลี่ยนจังหวัด
+      <span id="btn-back-label">เปลี่ยนจังหวัด</span>
     </button>
     <div class="flex items-center gap-2">
-      <span class="text-sm text-ink-soft">จังหวัด</span>
+      <span id="province-title-label" class="text-sm text-ink-soft">จังหวัด</span>
       <strong id="province-title" class="text-base text-brand-800">-</strong>
     </div>
     <div class="flex flex-wrap items-center gap-2 text-sm" aria-label="ช่วงข้อมูลจุดความร้อนสะสม">
@@ -104,6 +104,19 @@
         </label>
       </div>
       <ul id="province-list" class="min-h-0 flex-1 overflow-y-auto p-2" aria-label="จังหวัดที่มีข้อมูล HS"></ul>
+      <!-- v3.17 แสดงหลายจังหวัด: เฉพาะ Super Admin / Mini Super Admin -->
+      <section id="multi-picker" class="national-only hidden border-t border-line p-3" aria-label="แสดงหลายจังหวัด">
+        <div class="flex items-baseline justify-between gap-2">
+          <h3 class="text-sm font-bold text-brand-800">แสดงหลายจังหวัด</h3>
+          <span class="text-[11px] text-ink-mute">Super / Mini Super Admin</span>
+        </div>
+        <div id="multi-list" class="mt-2 grid max-h-36 grid-cols-2 gap-x-2 gap-y-1 overflow-y-auto pr-1 text-[13px]"></div>
+        <div class="mt-2 flex gap-1.5">
+          <button id="btn-multi-all" type="button" class="btn-ghost btn-sm">ทุกจังหวัด</button>
+          <button id="btn-multi-clear" type="button" class="btn-ghost btn-sm">ล้าง</button>
+          <button id="btn-multi-open" type="button" class="btn-primary btn-sm flex-1 justify-center" disabled>แสดงแผนที่</button>
+        </div>
+      </section>
       <div id="province-list-foot" class="border-t border-line px-4 py-3 text-xs text-ink-soft"></div>
     </div>
 
@@ -122,10 +135,13 @@
 
       <section class="panel-sec">
         <h3 class="panel-h">เลือกพื้นที่วิเคราะห์</h3>
-        <label class="field-label" for="filter-district">อำเภอ</label>
-        <select id="filter-district" class="field w-full"><option value="">ทุกอำเภอ</option></select>
-        <label class="field-label mt-2" for="filter-subdistrict">ตำบล</label>
-        <select id="filter-subdistrict" class="field w-full" disabled><option value="">เลือกอำเภอก่อน</option></select>
+        <div id="area-filters">
+          <label class="field-label" for="filter-district">อำเภอ</label>
+          <select id="filter-district" class="field w-full"><option value="">ทุกอำเภอ</option></select>
+          <label class="field-label mt-2" for="filter-subdistrict">ตำบล</label>
+          <select id="filter-subdistrict" class="field w-full" disabled><option value="">เลือกอำเภอก่อน</option></select>
+        </div>
+        <p id="multi-hint" class="hidden rounded-lg bg-amber-50 p-2 text-xs leading-relaxed text-amber-900">แสดงหลายจังหวัด: คลิกอำเภอบนแผนที่ หรือแถวจังหวัดในตาราง “เปรียบเทียบ HS” เพื่อเปิดดูรายอำเภอ/ตำบลของจังหวัดนั้น · ระดับความเสี่ยงประเมินแยกรายจังหวัด</p>
         <label class="field-label mt-2" for="filter-land">ประเภทพื้นที่ (LandType)</label>
         <select id="filter-land" class="field w-full"></select>
         <label class="field-label mt-2" for="filter-crop">ชนิดพืช (PlantType)</label>
@@ -591,14 +607,14 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.16.0"></script>
-<script src="js/api.js?v=3.16.0"></script>
-<script src="js/geo.js?v=3.16.0"></script>
-<script src="js/map.js?v=3.16.0"></script>
-<script src="js/dashboard.js?v=3.16.0"></script>
-<script src="js/report.js?v=3.16.0"></script>
+<script src="js/config.js?v=3.17.0"></script>
+<script src="js/api.js?v=3.17.0"></script>
+<script src="js/geo.js?v=3.17.0"></script>
+<script src="js/map.js?v=3.17.0"></script>
+<script src="js/dashboard.js?v=3.17.0"></script>
+<script src="js/report.js?v=3.17.0"></script>
 <script src="js/kpp-id.js?v=3.12.4"></script>
-<script src="js/admin.js?v=3.12.4"></script>
-<script src="js/app.js?v=3.16.0"></script>
+<script src="js/admin.js?v=3.17.0"></script>
+<script src="js/app.js?v=3.17.0"></script>
 </body>
 </html>

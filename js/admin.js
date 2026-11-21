@@ -187,7 +187,7 @@ const Admin = (() => {
       setMsg(el('login-status'), 'ส่งคำขอแล้ว ระบบจะเปิดสิทธิ์เมื่อผู้ดูแลอนุมัติ จากนั้นเข้าสู่ระบบด้วยเบอร์โทรศัพท์นี้', 'success');
     } catch (err) { setMsg(el('login-status'), err.message, 'error'); }
   }
-  function logout() { Api.clearSession(); if (window.KPP_ID) KPP_ID.logout(); el('sso-prev').classList.add('hidden'); el('console').classList.add('hidden'); updateUI(); toast('ออกจากระบบแล้ว (ทุกระบบในเครื่องนี้)'); }
+  function logout() { Api.clearSession(); if (window.KPP_ID) KPP_ID.logout(); el('sso-prev').classList.add('hidden'); el('console').classList.add('hidden'); updateUI(); document.dispatchEvent(new CustomEvent('agri-risk:auth-changed')); toast('ออกจากระบบแล้ว (ทุกระบบในเครื่องนี้)'); }
 
   function updateUI() {
     const u = user();
