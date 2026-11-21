@@ -229,79 +229,40 @@ const MapModule = (() => {
     [shown.subdistrict, shown.district, shown.province].forEach(l => l?.bringToFront());
   }
 
+  /* v3.14 คลิกพื้นที่บนแผนที่ = เลือกพื้นที่นั้นทันที (อำเภอ → เจาะรายตำบล · ตำบล → เลือก/ยกเลิก) แล้วทุกส่วนเปลี่ยนตาม (ไม่มีกล่องข้อมูลแล้ว
+   * ตามที่ผู้ใช้กำหนด: นำกล่องข้อมูลเมื่อคลิกออก ไม่แสดงที่อื่นแทน) · คลิกได้แม้ปิดชั้นระดับความเสี่ยงหรือยังไม่มีผลประเมิน (ชั้นโปร่งใส) */
   function renderRisk() {
     remove(shown.risk); shown.risk = null;
-    if (!raw.bundle || !raw.risk || raw.risk.empty || raw.risk.noHistory || !document.getElementById('lyr-risk')?.checked) return;   // ไม่มีผลประเมิน = ไม่ระบายสี (ไม่แสดงเป็น "ต่ำ")
+    if (!raw.bundle) return;
+    const colored = !!(raw.risk && !raw.risk.empty && !raw.risk.noHistory && document.getElementById('lyr-risk')?.checked);   // ไม่มีผลประเมิน = ไม่ระบายสี (ไม่แสดงเป็น "ต่ำ")
     const level = state.district ? 'subdistrict' : 'district';
     const fc = level === 'district' ? raw.riskDistrict : raw.riskSubdistrict;
+    if (!fc) return;
     shown.risk = L.geoJSON(fc, {
-      style: f => { const l = levelOf(f.properties); return { color: '#ffffff', weight: 0.8, fillColor: l.color, fillOpacity: f.properties.risk_level < 0 ? 0.35 : 0.5, dashArray: f.properties.risk_level < 0 ? '3 3' : null }; },
+      style: f => {
+        const picked = level === 'subdistrict' && state.subdistrict === f.properties.code;
+        if (!colored) return { color: picked ? '#14532d' : '#ffffff', weight: picked ? 2.5 : 0, fillColor: '#ffffff', fillOpacity: 0.01 };
+        const l = levelOf(f.properties);
+        return { color: picked ? '#14532d' : '#ffffff', weight: picked ? 2.5 : 0.8, fillColor: l.color, fillOpacity: f.properties.risk_level < 0 ? 0.35 : 0.5, dashArray: f.properties.risk_level < 0 ? '3 3' : null };
+      },
       onEachFeature: (f, l) => {
         const p = f.properties;
-        l.bindTooltip(riskTooltip(p, level), { sticky: true, className: 'prov-tip' });
-        l.bindPopup(() => areaPopup(p, level), { className: 'area-pop', maxWidth: 320, autoPanPadding: [24, 24] });
-        l.on('popupopen', e => {
-          e.popup.getElement()?.querySelector('[data-drill]')?.addEventListener('click', () => {
-            map.closePopup();
-            document.dispatchEvent(new CustomEvent('agri-risk:area-click', { detail: { level, code: p.code, district: p.district_code } }));
-          });
-        });
+        l.bindTooltip(riskTooltip(p, level, colored), { sticky: true, className: 'prov-tip' });
+        l.on('click', () => document.dispatchEvent(new CustomEvent('agri-risk:area-click', { detail: { level, code: p.code, district: p.district_code, source: 'map' } })));
       }
     }).addTo(map);
     [shown.subdistrict, shown.district, shown.province].forEach(x => x?.bringToFront());
   }
 
-  const TREND_TEXT = { up: '↑ เพิ่มขึ้นจากช่วงเดียวกันปีก่อน', down: '↓ ลดลงจากช่วงเดียวกันปีก่อน', flat: '→ ใกล้เคียงช่วงเดียวกันปีก่อน' };
-  /** ชี้: ชื่อพื้นที่ + ระดับความเสี่ยง (สั้น) — คลิกเพื่อดูรายละเอียดรายฤดู */
-  function riskTooltip(p, level) {
-    const lv = levelOf(p);
-    return `<strong>${level === 'district' ? 'อ.' : 'ต.'}${p.name}</strong><br><span class="risk-pill"><span class="risk-dot" style="background:${lv.color}"></span>ความเสี่ยง${lv.label}</span><br><span style="color:#4a5a51">คลิกเพื่อดูข้อมูลรายฤดู</span>`;
+
+  /** ชี้: ชื่อพื้นที่ + ระดับความเสี่ยง (สั้น) + สิ่งที่จะเกิดเมื่อคลิก */
+  function riskTooltip(p, level, colored = true) {
+    const lv = levelOf(p), picked = level === 'subdistrict' && state.subdistrict === p.code;
+    const act = level === 'district' ? 'คลิกเพื่อเลือกอำเภอนี้ (ดูรายตำบล)' : picked ? 'คลิกอีกครั้งเพื่อยกเลิกการเลือกตำบล' : 'คลิกเพื่อเลือกตำบลนี้';
+    return `<strong>${level === 'district' ? 'อ.' : 'ต.'}${p.name}</strong>${colored ? `<br><span class="risk-pill"><span class="risk-dot" style="background:${lv.color}"></span>ความเสี่ยง${lv.label}</span>` : ''}<br><span style="color:#4a5a51">${act}</span>`;
   }
 
-  /* ---------- ข้อมูลพื้นที่เมื่อคลิก: บรรทัด 1 ช่วงที่เลือก · บรรทัด 2 ช่วงเดียวกันปีก่อน · ถัดไปรายละเอียด ---------- */
   const isoDate = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-  const shortDate = iso => { if (!iso) return ''; const [y, m, d] = iso.split('-').map(Number); return `${d} ${CONFIG.MONTH_SHORT[m]} ${String(y + 543).slice(2)}`; };
-  const minusYear = iso => { const [y, m, d] = iso.split('-').map(Number), last = new Date(Date.UTC(y - 1, m, 0)).getUTCDate(); return isoDate(y - 1, m, Math.min(d, last)); };
-  function areaPopup(p, level) {
-    const fmt = n => Number(n || 0).toLocaleString('th-TH'), key = level === 'district' ? '__dCode' : '__sCode';
-    const lv = levelOf(p), S = displaySeason();
-    const base = (raw.hotspot?.features || []).filter(f => f.properties[key] === p.code && (!state.crop || f.properties.__crop === state.crop)).map(f => f.properties);
-    const W = compareInfo(), latest = W?.latest || '';
-    const sel = base.filter(x => inRange(x)), monthly = W?.mode === 'month';
-    const curC = W ? base.filter(x => W.inCur(x.__date)) : [], prev = W ? base.filter(x => W.inPrev(x.__date)) : [], prevAll = base.filter(x => x.__season === S - 1);
-    const chg = !W || W.none ? null : prev.length ? Math.round((curC.length - prev.length) * 100 / prev.length) : null;
-    const crops = Object.entries(sel.reduce((o, x) => { o[x.__crop] = (o[x.__crop] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]);
-    const s0 = Geo.ymFromIndex(state.startYM || state.endYM), e0 = Geo.ymFromIndex(state.endYM);
-    let selEnd = isoDate(e0.year - 543, e0.month, new Date(Date.UTC(e0.year - 543, e0.month, 0)).getUTCDate()); if (latest && selEnd > latest) selEnd = latest;
-    const lines = [
-      `<div class="ap-line ap-now"><b>ช่วงที่เลือก</b> ${shortDate(isoDate(s0.year - 543, s0.month, 1))}–${shortDate(selEnd)}: <b>${fmt(sel.length)} จุด</b></div>`,
-      `<div class="ap-line ap-prev"><b>ช่วงเดียวกันปีก่อน</b> ${!W || W.none ? 'ไม่มีข้อมูล' : monthly ? `${W.prevLabel} ${fmt(prev.length)} จุด` : `${fmt(prev.length)} จุด`} · ทั้งปีงบ ${S - 1} ${fmt(prevAll.length)} จุด${monthly || W?.none ? `<br><span class="ap-note">${W.note}</span>` : ''}</div>`
-    ];
-    const extra = [];
-    const what = monthly ? 'เดือนที่มีข้อมูลทั้งสองปี' : 'ช่วงเดียวกันปีก่อน';
-    if (chg !== null) extra.push(`เทียบ${what} ${chg > 0 ? '+' : ''}${chg}%`); else if (W && !W.none && curC.length) extra.push(`${what}: ปีก่อนไม่พบจุด`);
-    if (crops.length) extra.push(`ชนิดพืช: ${crops.map(([k, v]) => `${k} ${fmt(v)}`).join(' · ')}`);
-    if (state.crop) extra.push(`กรองชนิดพืช: ${state.crop}`);
-    if (p.n_high !== null && p.n_high !== undefined) extra.push(`ตำบลระดับสูง–สูงมาก ${p.n_high}/${p.n_tambon} ตำบล`);
-    if (raw.risk && !raw.risk.empty) extra.push(riskBasisText(true));
-    let admin = '';
-    const d = p.detail, H = raw.risk?.history || [], f1 = x => x === null || x === undefined ? '-' : Number(x).toLocaleString('th-TH', { maximumFractionDigits: 3 });
-    if (d?.model === 'ABRI') {
-      admin = `<div class="tip-admin">ผู้ดูแล · ABRI-2Y${d.score ? ` · ลำดับ ${Number(d.score).toFixed(1)}/100 ในจังหวัด` : ''}<br>จุดความร้อนปีฐาน ${H[0] || ''}: ${fmt(d.n1)}${H[1] ? ` · ${H[1]}: ${fmt(d.n2)}` : ''} · รวม ${fmt(d.n2y)} จุด${d.density !== null && d.density !== undefined ? `<br>ความหนาแน่น ${f1(d.density)} จุด/1,000 ไร่เกษตร/ปี (ข้อมูลประกอบ)` : ''}${d.crop ? `<br>ชนิดพืชหลัก: ${d.crop}` : ''}<br>เฝ้าระวังปีงบ ${raw.risk?.assessmentYear || ''}: ${fmt(d.hs0)} จุด (ไม่คิดคะแนน)<br>${d.reason || ''}</div>`;
-    } else if (d?.model === 'M5') {
-      const ns = H.map((s, i) => `${s}: ${fmt(d['n' + i])}`).join(' · ');
-      const tr = { up: '↑ ปีล่าสุดสูงกว่าค่าเฉลี่ยปีก่อน', down: '↓ ปีล่าสุดต่ำกว่าค่าเฉลี่ยปีก่อน', flat: '→ ใกล้เคียงค่าเฉลี่ยปีก่อน' }[d.trend] || '';
-      admin = `<div class="tip-admin">ผู้ดูแล · Model 5${d.score !== null && d.score !== undefined ? ` · ลำดับ ${Number(d.score).toFixed(1)}/100 ในจังหวัด` : ''}<br>ความหนาแน่น ${f1(d.D)} จุด/1,000 ไร่/ปี${d.R !== null && d.R !== undefined ? ` · เผาซ้ำ ${d.R}%` : ''} · พื้นที่ ${f1(d.cropRai)} ไร่<br>จุดความร้อนปีฐาน (${raw.risk?.monthsText || ''}) ${ns || '-'}${tr ? `<br>แนวโน้ม: ${tr}` : ''}${d.crop ? `<br>ชนิดพืช: ${d.crop}` : ''}<br>${d.reason || ''}</div>`;
-    } else if (d?.model === 'M4') {
-      const us = H.map((s, i) => `${s}: ${f1(d['u' + i])}`).join(' · ');
-      const sig = `สัญญาณปีงบ ${raw.risk?.season || ''}: ${fmt(d.hs0)} จุด${d.base !== null && d.base !== undefined ? ` เทียบช่วงเดียวกันปีก่อน ${fmt(d.base)} จุด${d.trend ? ` · ${TREND_TEXT[d.trend]}` : ''}` : ''}`;
-      admin = `<div class="tip-admin">ผู้ดูแล · Model 4${d.score !== null && d.score !== undefined ? ` · คะแนน ${Number(d.score).toFixed(1)}/100` : ''}${d.H !== null && d.H !== undefined ? ` · H ${f1(d.H)} หน่วย/1,000 ไร่เกษตร` : ''}<br>พื้นที่เกษตร ${f1(d.cropRai)} ไร่ · หน่วยตรวจพบ (กริด 500 ม.–วัน) ${us || '-'}<br>${d.reason || ''}<br>${sig}</div>`;
-    }
-    const drill = level === 'district' && !state.district ? `<button type="button" class="ap-drill" data-drill>ดูรายตำบลในอำเภอนี้</button>` : '';
-    return `<div class="area-pop-in"><div class="ap-head"><strong>${level === 'district' ? 'อ.' : 'ต.'}${p.name}</strong><span class="risk-pill"><span class="risk-dot" style="background:${lv.color}"></span>ความเสี่ยง${lv.label}</span></div>
-      ${lines.join('')}${extra.length ? `<div class="ap-more">${extra.map(x => `<div>${x}</div>`).join('')}</div>` : ''}${admin}${drill}</div>`;
-  }
-
   function hsPopup(p, prev) {
     return `<div class="hs-pop"><strong>จุดความร้อน${prev ? ' · ช่วงเดียวกันปีก่อน' : ''}</strong>
           <div>${Geo.thaiDateTime(p.__date, p.__time)}${p.__time && p.__timeSrc === 'hsid' ? ' <span class="hs-pop-note" title="ไฟล์ต้นทางไม่มีเวลา ระบบคำนวณจากเวลา UTC ใน hsID ของ NASA FIRMS">(จาก hsID)</span>' : ''}</div>
@@ -369,7 +330,7 @@ const MapModule = (() => {
   async function applyFilter(next) {
     state = { district: next.district || '', subdistrict: next.subdistrict || '', crop: next.crop || '', land: next.land || CONFIG.DEFAULT_LAND, startYM: Number(next.startYM) || null, endYM: Number(next.endYM) || null, startYear: next.startYear, startMonth: next.startMonth, endYear: next.endYear, endMonth: next.endMonth };
     const code = raw.code;
-    computeRiskLayers(); renderBoundaries(); renderHotspots(); renderLegend(); focusSelection();
+    computeRiskLayers(); renderBoundaries(); renderRisk(); renderHotspots(); renderLegend(); focusSelection();
     let error = '';
     try { const r = await loadRisk(); if (code !== raw.code) return { stale: true }; raw.risk = r; if (r?.first && !raw.dataFirst) raw.dataFirst = r.first; }
     catch (err) { error = err.message; raw.risk = null; }
