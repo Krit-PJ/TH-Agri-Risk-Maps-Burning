@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="css/app.css?v=3.12.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.18.0"/>
 </head>
 <body class="team-page bg-paper font-sans text-ink antialiased">
 
@@ -63,7 +63,7 @@
 
   <section class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
     <div id="team-status" class="text-sm text-ink-soft" role="status" aria-live="polite"></div>
-    <div id="team-grid" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+    <div id="team-grid" class="space-y-8"></div>
   </section>
 </main>
 
@@ -101,7 +101,7 @@
         <input type="hidden" id="m-id"/>
         <div class="sm:col-span-2"><label class="field-label" for="m-name">ชื่อ - สกุล *</label><input id="m-name" class="field w-full" maxlength="150" required/></div>
         <div><label class="field-label" for="m-role">บทบาท *</label>
-          <select id="m-role" class="field w-full"><option value="ผู้พัฒนาระบบ">ผู้พัฒนาระบบ</option><option value="ที่ปรึกษา">ที่ปรึกษา</option><option value="อื่น ๆ">อื่น ๆ (ระบุ)</option></select></div>
+          <select id="m-role" class="field w-full"><option value="ผู้พัฒนาระบบ">ผู้พัฒนาระบบ</option><option value="ผู้ร่วมพัฒนาและทดสอบระบบ">ผู้ร่วมพัฒนาและทดสอบระบบ</option><option value="ที่ปรึกษา">ที่ปรึกษา</option><option value="อื่น ๆ">อื่น ๆ (ระบุ)</option></select></div>
         <div id="m-role-other-wrap" class="hidden"><label class="field-label" for="m-role-other">ระบุบทบาท</label><input id="m-role-other" class="field w-full" maxlength="100" placeholder="เช่น ผู้ประสานงาน"/></div>
         <div class="sm:col-span-2"><label class="field-label" for="m-position">ตำแหน่งปัจจุบัน</label><input id="m-position" class="field w-full" maxlength="150"/></div>
         <div><label class="field-label" for="m-affiliation">สังกัด</label><input id="m-affiliation" class="field w-full" maxlength="150"/></div>
@@ -165,6 +165,6 @@
 <script src="js/config.js?v=3.12.0"></script>
 <script src="js/api.js?v=3.12.0"></script>
 <script src="js/geo.js?v=3.12.0"></script>
-<script src="js/team.js?v=3.12.0"></script>
+<script src="js/team.js?v=3.18.0"></script>
 </body>
 </html>

@@ -58,7 +58,13 @@ const TEXT_COLUMNS = {
   People: ['personId', 'phone', 'provinceCode']
 };
 const SETUP_VERSION = '3.12.0';
-const TEAM_ROLES = ['ผู้พัฒนาระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];
+const TEAM_ROLES = ['ผู้พัฒนาระบบ', 'ผู้ร่วมพัฒนาและทดสอบระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];   // v3.18 เพิ่ม ผู้ร่วมพัฒนาและทดสอบระบบ
+/** v3.18 บทบาท "อื่น ๆ" ที่ระบุข้อความตรงกับบทบาทมาตรฐาน → ใช้บทบาทมาตรฐาน (ข้อมูลเดิมก่อนมีบทบาทนั้น) */
+function teamRole_(role, other) {
+  const o = String(other || '').replace(/\s+/g, ' ').trim();
+  if (role === 'อื่น ๆ' && o && TEAM_ROLES.indexOf(o) >= 0 && o !== 'อื่น ๆ') return { role: o, roleOther: '' };
+  return { role: TEAM_ROLES.indexOf(role) >= 0 ? role : 'อื่น ๆ', roleOther: role === 'อื่น ๆ' || TEAM_ROLES.indexOf(role) < 0 ? String(other || '') : '' };
+}
 const ACCOUNT_ROLES = { admin: 'Admin', minisuper: 'Mini Super Admin' };
 const LOGIN_RESULTS = { success: 'สำเร็จ', not_found: 'ไม่มีหมายเลขในระบบ', pending: 'รออนุมัติ', disabled: 'บัญชีถูกระงับ', invalid: 'รูปแบบไม่ถูกต้อง', wrong_credentials: 'ชื่อผู้ใช้/รหัสผ่านไม่ถูกต้อง' };
 // source = แหล่งข้อมูล (AGENCY = หน่วยงานต้นสังกัด, FIRMS = NASA FIRMS ที่ระบบจำแนกพื้นที่เกษตร) · satellite = ดาวเทียมที่ตรวจพบ
@@ -836,7 +842,8 @@ function loginReport_(user, b) {
 function teamList_() {
   return readAll_('Team').map(stripRow_).map(r => {
     let links = []; try { links = JSON.parse(r.links || '[]'); } catch (_) { }
-    return { id: String(r.memberId), sortOrder: Number(r.sortOrder) || 0, photo: String(r.photo || ''), fullName: r.fullName, role: r.role, roleOther: r.roleOther,
+    const rr = teamRole_(r.role, r.roleOther);
+    return { id: String(r.memberId), sortOrder: Number(r.sortOrder) || 0, photo: String(r.photo || ''), fullName: r.fullName, role: rr.role, roleOther: rr.roleOther,
       position: r.position, affiliation: r.affiliation, provinceCode: String(r.provinceCode || ''), provinceName: r.provinceName,
       education: r.education, expertise: r.expertise, links: links, updatedAt: r.updatedAt };
   }).sort((a, b) => (a.sortOrder || 9999) - (b.sortOrder || 9999) || String(a.fullName).localeCompare(String(b.fullName), 'th'));
@@ -847,7 +854,7 @@ function teamSave_(user, b) {
   requireNational_(user);
   const fullName = clean_(b.fullName);
   if (!fullName) throw new Error('กรุณากรอกชื่อ-สกุล');
-  const role = TEAM_ROLES.indexOf(b.role) >= 0 ? b.role : 'อื่น ๆ';
+  const rr = teamRole_(TEAM_ROLES.indexOf(b.role) >= 0 ? b.role : 'อื่น ๆ', clean_(b.roleOther)), role = rr.role;
   const prov = b.provinceCode ? String(b.provinceCode).padStart(2, '0') : '';
   if (prov && !PROVINCES[prov]) throw new Error('รหัสจังหวัดไม่ถูกต้อง');
   const photo = String(b.photo || '');
@@ -856,7 +863,7 @@ function teamSave_(user, b) {
   const links = (Array.isArray(b.links) ? b.links : []).slice(0, 10).map(l => ({ label: clean_(l && l.label) || 'ลิงก์', url: String((l && l.url) || '').trim() }))
     .filter(l => l.url);
   links.forEach(l => { if (!/^https?:\/\/[^\s<>"]+$/.test(l.url)) throw new Error('ลิงก์ไม่ถูกต้อง: ' + l.url); });
-  const data = { sortOrder: Number(b.sortOrder) || '', photo: photo, fullName: fullName, role: role, roleOther: role === 'อื่น ๆ' ? clean_(b.roleOther) : '',
+  const data = { sortOrder: Number(b.sortOrder) || '', photo: photo, fullName: fullName, role: role, roleOther: role === 'อื่น ๆ' ? rr.roleOther : '',
     position: clean_(b.position), affiliation: clean_(b.affiliation), provinceCode: prov, provinceName: PROVINCES[prov] || '',
     education: cleanLong_(b.education), expertise: cleanLong_(b.expertise), links: JSON.stringify(links), updatedAt: now_(), updatedBy: user.name };
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
@@ -872,6 +879,21 @@ function teamSave_(user, b) {
     appendObj_('Team', Object.assign(data, { memberId: id, createdAt: now_() }));
     audit_(user, 'team_create', id + ' ' + fullName);
     return { ok: true, id: id };
+  } finally { lock.releaseLock(); }
+}
+
+/** v3.18 รันครั้งเดียวจาก Editor: ย้ายสมาชิกที่บันทึกเป็น "อื่น ๆ" + ระบุ "ผู้ร่วมพัฒนาและทดสอบระบบ" ไปเป็นบทบาทใหม่ (แก้เฉพาะคอลัมน์ role/roleOther) */
+function migrateTeamRoles() {
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const moved = [];
+    readAll_('Team').forEach(r => {
+      const rr = teamRole_(r.role, r.roleOther);
+      if (rr.role !== r.role) { updateRow_('Team', r._row, { role: rr.role, roleOther: rr.roleOther, updatedAt: now_(), updatedBy: 'migrateTeamRoles' }); moved.push(r.memberId + ' ' + r.fullName); }
+    });
+    if (moved.length) audit_({ name: 'ระบบ (migrateTeamRoles)', role: 'system', prov: '' }, 'team_update', 'ย้ายบทบาท ' + moved.length + ' รายการ → ผู้ร่วมพัฒนาและทดสอบระบบ');
+    Logger.log('ย้ายบทบาท %s รายการ: %s', moved.length, moved.join(', '));
+    return moved.length;
   } finally { lock.releaseLock(); }
 }
 

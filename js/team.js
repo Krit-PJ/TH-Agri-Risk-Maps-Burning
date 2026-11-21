@@ -2,8 +2,15 @@
 const Team = (() => {
   const el = id => document.getElementById(id);
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const ROLES = ['ผู้พัฒนาระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];
-  const ROLE_STYLE = { 'ผู้พัฒนาระบบ': 'bg-brand-50 text-brand-700', 'ที่ปรึกษา': 'bg-amber-50 text-amber-800', 'อื่น ๆ': 'bg-slate-100 text-slate-700' };
+  // v3.18 บทบาท 4 แบบ (ลำดับปุ่มกรอง) · 2 กลุ่มการแสดงผล: ทีมผู้พัฒนาระบบ (ผู้พัฒนา → ผู้ร่วมพัฒนาและทดสอบ → อื่น ๆ) และ ที่ปรึกษา
+  const ROLES = ['ผู้พัฒนาระบบ', 'ผู้ร่วมพัฒนาและทดสอบระบบ', 'ที่ปรึกษา', 'อื่น ๆ'];
+  const ROLE_STYLE = { 'ผู้พัฒนาระบบ': 'bg-brand-50 text-brand-700', 'ผู้ร่วมพัฒนาและทดสอบระบบ': 'bg-sky-50 text-sky-800', 'ที่ปรึกษา': 'bg-amber-50 text-amber-800', 'อื่น ๆ': 'bg-slate-100 text-slate-700' };
+  const GROUPS = [
+    { key: 'dev', title: 'ทีมผู้พัฒนาระบบ', note: 'ผู้พัฒนาระบบ · ผู้ร่วมพัฒนาและทดสอบระบบ · อื่น ๆ', roles: ['ผู้พัฒนาระบบ', 'ผู้ร่วมพัฒนาและทดสอบระบบ', 'อื่น ๆ'] },
+    { key: 'adv', title: 'ที่ปรึกษา', note: '', roles: ['ที่ปรึกษา'] }
+  ];
+  /** ข้อมูลเดิม: "อื่น ๆ" ที่ระบุตรงกับบทบาทมาตรฐาน → บทบาทนั้น (ตรงกับ teamRole_ ใน Code.gs) */
+  const normRole = m => { const o = String(m.roleOther || '').replace(/\s+/g, ' ').trim(); return m.role === 'อื่น ๆ' && ROLES.includes(o) && o !== 'อื่น ๆ' ? { ...m, role: o, roleOther: '' } : m; };
   let members = [], filterRole = '', photoData = '', provinces = [];
 
   const user = () => Api.session()?.user || null;
@@ -62,7 +69,7 @@ const Team = (() => {
     const st = el('team-status');
     if (!Api.configured()) { st.textContent = 'ยังไม่ได้เชื่อมต่อฐานข้อมูล'; return; }
     st.innerHTML = '<span class="inline-flex items-center gap-2"><span class="spinner"></span>กำลังโหลดข้อมูลทีม…</span>';
-    try { members = (await Api.get('team')).members || []; st.textContent = ''; }
+    try { members = ((await Api.get('team')).members || []).map(normRole); st.textContent = ''; }
     catch (err) { st.textContent = 'โหลดข้อมูลไม่สำเร็จ: ' + err.message; members = []; }
     updateCounts(); render();
   }
@@ -72,12 +79,25 @@ const Team = (() => {
     const list = members.filter(m => (!filterRole || m.role === filterRole) && (!q || [m.fullName, m.position, m.affiliation, m.provinceName, m.expertise, m.education, roleText(m)].join(' ').toLowerCase().includes(q)));
     const grid = el('team-grid');
     if (!list.length) {
-      grid.innerHTML = `<div class="rounded-2xl border border-dashed border-line bg-white px-6 py-12 text-center sm:col-span-2 lg:col-span-3">
+      grid.innerHTML = `<div class="rounded-2xl border border-dashed border-line bg-white px-6 py-12 text-center">
         <p class="font-semibold text-ink">${members.length ? 'ไม่พบรายชื่อที่ค้นหา' : 'ยังไม่มีข้อมูลทีมผู้พัฒนาและที่ปรึกษา'}</p>
         <p class="mt-1 text-sm text-ink-soft">${members.length ? 'ลองเปลี่ยนคำค้นหรือบทบาท' : canManage() ? 'กด "เพิ่มข้อมูล" เพื่อเพิ่มรายชื่อแรก' : 'Super Admin หรือ Mini Super Admin เข้าสู่ระบบเพื่อเพิ่มข้อมูล'}</p></div>`;
       return;
     }
-    grid.innerHTML = list.map(card).join('');
+    // v3.18 แสดงเป็น 2 กลุ่ม (ซ่อนกลุ่มที่ไม่มีรายชื่อตามตัวกรอง/คำค้น) · ในกลุ่มเรียงตามบทบาท แล้วลำดับที่ตั้งไว้ แล้วชื่อ
+    const ord = m => (m.sortOrder || 9999);
+    grid.innerHTML = GROUPS.map(g => {
+      const ms = list.filter(m => g.roles.includes(m.role))
+        .sort((a, b) => g.roles.indexOf(a.role) - g.roles.indexOf(b.role) || ord(a) - ord(b) || String(a.fullName).localeCompare(String(b.fullName), 'th'));
+      if (!ms.length) return '';
+      return `<section class="team-group" aria-labelledby="tg-${g.key}">
+        <div class="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line pb-2">
+          <h3 id="tg-${g.key}" class="text-lg font-bold text-brand-900">${g.title} <span class="text-sm font-semibold tabular-nums text-ink-mute">(${ms.length})</span></h3>
+          ${g.note && !filterRole ? `<p class="text-xs text-ink-mute">${g.note}</p>` : ''}
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">${ms.map(card).join('')}</div>
+      </section>`;
+    }).join('');
     grid.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => openForm(members.find(m => m.id === b.dataset.edit))));
     grid.querySelectorAll('[data-delete]').forEach(b => b.addEventListener('click', () => removeMember(members.find(m => m.id === b.dataset.delete))));
   }
