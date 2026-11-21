@@ -12,6 +12,7 @@
  * Script Property SSO_MODE = off | optional (ค่าเริ่มต้น) | required — off = ปิด endpoint ตัวตนกลางทั้งหมด
  */
 // 3.12.3: ABM = ระบบบริหารจัดการวัสดุเหลือใช้ทางการเกษตร (เจ้าหน้าที่/ผู้บริหาร แยกจาก Green Gain Hub 19 พ.ย. 2569)
+// 3.12.4: person.scope = 'market' (เกษตรกร/ผู้รับซื้อ ใช้ได้เฉพาะ Green Gain Hub) | 'all' — ดู idScope_
 const ID_SYSTEMS = { ARM: 'Agri-Risk Map', GGH: 'Green Gain Hub', SAM: 'KPP Smart Agri-Materials', ABM: 'ระบบบริหารจัดการวัสดุเหลือใช้ทางการเกษตร (ABM)' };
 const ID_TTL_HOURS = 8;              // ค่าเริ่มต้น
 const ID_REMEMBER_DAYS = 30;         // "จดจำเครื่องนี้" (เฉพาะผู้ที่ไม่มีบัญชีผู้ดูแล Agri-Risk)
@@ -48,10 +49,19 @@ function idVerify_(token) {
 }
 
 /* ---------------------------- ข้อมูลบุคคล ---------------------------- */
+/**
+ * 3.12.4 (21 พ.ย. 2569): เกษตรกรและผู้รับซื้อ (ลงทะเบียนผ่าน Green Gain Hub หรือตำแหน่งเกษตรกร/ผู้รับซื้อ) = scope 'market'
+ * ใช้ได้เฉพาะ Green Gain Hub — ระบบเจ้าหน้าที่ (ABM, Smart Agri) ไม่รับลงทะเบียนตัวตนกลุ่มนี้เป็นเจ้าหน้าที่
+ * ผู้ที่มีบัญชีเจ้าหน้าที่ในระบบนั้นอยู่แล้วยังเข้าได้ (สิทธิ์เจ้าหน้าที่มาก่อน — แต่ละระบบตัดสินจากตารางสิทธิ์ของตน)
+ */
+const ID_MARKET_POSITIONS = ['เกษตรกร', 'ผู้รับซื้อ'];
+function idScope_(p) {
+  return String(p.createdVia || '').toUpperCase() === 'GGH' || ID_MARKET_POSITIONS.indexOf(String(p.position || '').trim()) >= 0 ? 'market' : 'all';
+}
 function idPublic_(p) {
   const systems = String(p.systems || '').split(',').filter(Boolean);
   return { personId: String(p.personId), phone: normalizePhone_(p.phone), fullName: p.fullName, position: p.position, affiliation: p.affiliation,
-    provinceCode: String(p.provinceCode || ''), provinceName: p.provinceName || '', districtName: p.districtName || '', systems: systems };
+    provinceCode: String(p.provinceCode || ''), provinceName: p.provinceName || '', districtName: p.districtName || '', systems: systems, scope: idScope_(p) };
 }
 function idPrevLogin_(p) {
   return p.prevLoginAt ? { at: p.prevLoginAt, device: p.prevDevice || '', system: p.prevSystem || '' } : null;
