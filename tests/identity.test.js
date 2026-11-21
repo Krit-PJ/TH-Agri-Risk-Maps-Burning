@@ -154,4 +154,13 @@ ok(post({ action: 'id_redeem', ticket: r.ticket, aud: 'ABM' }).ok, 'redeems for 
 ok(post({ action: 'id_ticket', idToken: r.token, aud: 'ABM' }).ticket, 'id_ticket accepts ABM');
 ok(env.readAll_('People').find(p => p.phone === '0877777777').lastSystem === 'ABM', 'last system ABM');
 
-console.log('PASS: ' + n + ' checks — central identity (SSO), tickets, not-me, Mini username/password, ABM');
+/* 14. 3.12.4: farmers and buyers (registered through Green Gain Hub) carry scope 'market' — officer systems refuse them */
+r = post({ action: 'id_register', phone: '0855555555', fullName: 'ชาวนา ทดสอบ', provinceCode: '62', consent: true, system: 'GGH', aud: 'GGH' });
+ok(r.ok && r.person.scope === 'market', 'registered through GGH → scope market');
+ok(post({ action: 'id_redeem', ticket: r.ticket, aud: 'GGH' }).person.scope === 'market', 'redeem tells the target system');
+r = post({ action: 'id_register', phone: '0855555556', fullName: 'ผู้ซื้อ ฟาง', position: 'ผู้รับซื้อ', provinceCode: '62', consent: true, system: 'ARM' });
+ok(r.ok && r.person.scope === 'market', 'position ผู้รับซื้อ → scope market');
+ok(post({ action: 'id_login', phone: '0877777777', system: 'ABM' }).person.scope === 'all', 'officer identity → scope all');
+ok(/เกษตรกรและผู้รับซื้อใช้ได้เฉพาะ Green Gain Hub/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'js', 'kpp-id.js'), 'utf8')), 'consent text says so');
+
+console.log('PASS: ' + n + ' checks — central identity (SSO), tickets, not-me, Mini username/password, ABM, market scope');
