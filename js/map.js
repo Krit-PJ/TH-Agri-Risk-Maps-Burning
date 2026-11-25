@@ -103,12 +103,12 @@ const MapModule = (() => {
   /** v3.9.1: จุดบนแผนที่ = ทุกจุดในช่วงที่เลือก (จำนวนเท่ากับการ์ดสรุปและตารางเปรียบเทียบ) — เดิมแสดงเฉพาะปีงบล่าสุด ทำให้จำนวนบนแผนที่น้อยกว่าข้อมูลจริงเมื่อช่วงคาบเกี่ยวหลายปีงบ */
   function mapHotspots() { return filteredHotspots(); }
   /** ช่วงที่เลือกเทียบช่วงเดียวกันปีก่อน (Geo.compareWindow) — แหล่งเดียวสำหรับการ์ด ตาราง ป๊อปอัป ชั้นข้อมูลปีก่อน และรายงาน */
-  function compareInfo() {
+  function compareInfo(k = 1) {
     if (!state.endYM) return null;
     const s = Geo.ymFromIndex(state.startYM || state.endYM), e = Geo.ymFromIndex(state.endYM);
     const latest = (raw.hotspot?.features || []).reduce((a, f) => f.properties.__date > a ? f.properties.__date : a, '');
     const end = isoDate(e.year - 543, e.month, new Date(Date.UTC(e.year - 543, e.month, 0)).getUTCDate());
-    return Object.assign(Geo.compareWindow(isoDate(s.year - 543, s.month, 1), end, latest, raw.dataFirst, raw.dataMonths), { latest });
+    return Object.assign(Geo.compareWindow(isoDate(s.year - 543, s.month, 1), end, latest, raw.dataFirst, raw.dataMonths, k), { latest });
   }
   function scopeUnits(level) {
     if (!raw.bundle) return [];

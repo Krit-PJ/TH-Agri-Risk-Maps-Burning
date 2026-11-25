@@ -11,6 +11,24 @@ const Dashboard = (() => {
     return { text: `${pct > 0 ? '+' : ''}${pct}%`, cls: pct > 0 ? 'chg-up' : pct < 0 ? 'chg-down' : 'chg-flat' };
   }
 
+  /* v3.19 เทียบช่วงเดียวกันได้หลายปี (Admin / Mini Super Admin / Super Admin) — ผู้ใช้ทั่วไปเทียบปีก่อน 1 ปีเหมือนเดิม
+   * k = จำนวนปีย้อนหลัง · % เพิ่ม/ลด เทียบกับปีที่ใกล้ที่สุดที่เลือก · จำค่าที่เลือกในเบราว์เซอร์ */
+  const CMP_KEY = 'agri-risk-cmp-years', CMP_MAX = 5;
+  let cmpYears = (() => { try { const v = JSON.parse(localStorage.getItem(CMP_KEY) || '[1]'); return Array.isArray(v) && v.length ? v.map(Number).filter(k => k >= 1 && k <= CMP_MAX) : [1]; } catch { return [1]; } })();
+  const canMultiYear = () => ['admin', 'minisuper', 'superadmin'].includes(Api.session()?.user?.role);
+  const activeYears = () => (canMultiYear() ? cmpYears : [1]).slice().sort((a, b) => a - b);
+  function setCompareYears(list) {
+    const v = [...new Set(list.map(Number))].filter(k => k >= 1 && k <= CMP_MAX).sort((a, b) => a - b);
+    cmpYears = v.length ? v : [1];
+    try { localStorage.setItem(CMP_KEY, JSON.stringify(cmpYears)); } catch { }
+  }
+  /** ปีงบของช่วงเปรียบเทียบ (ใช้เป็นหัวคอลัมน์) — ช่วงคร่อมหลายปีงบแสดงเป็นเดือน/ปี */
+  function prevColLabel(W) {
+    const fy = d => { const y = +d.slice(0, 4) + 543, m = +d.slice(5, 7); return m >= 10 ? y + 1 : y; };
+    if (!W.prev[0]) return '';
+    return fy(W.prev[0]) === fy(W.prev[1]) ? `ปีงบ ${fy(W.prev[0])}` : Geo.monthSpan(W.prev[0], W.prev[1]);
+  }
+
   /** สรุปข้อมูลตามตัวกรองปัจจุบัน — ใช้ทั้งหน้าจอและรายงาน */
   function summary() {
     const raw = MapModule.getData(), st = MapModule.getState();
@@ -25,13 +43,20 @@ const Dashboard = (() => {
     });
     const s = Number(st.startYM), e = Number(st.endYM);
     // เทียบช่วงเดียวกันปีก่อน (MapModule.compareInfo → Geo.compareWindow): วันต่อวัน หรือเฉพาะเดือนที่มีข้อมูลทั้งสองปี
-    const W = MapModule.compareInfo() || { mode: 'day', none: true, inCur: () => false, inPrev: () => false, cur: ['', ''], prev: ['', ''], note: '' };
+    const years = activeYears(), k0 = years[0];
+    const W = MapModule.compareInfo(k0) || { mode: 'day', none: true, inCur: () => false, inPrev: () => false, cur: ['', ''], prev: ['', ''], note: '' };
     const latest = W.latest || '';
     const current = base.filter(f => f.properties.__ym >= s && f.properties.__ym <= e);           // ทุกจุดในช่วงที่เลือก
     const curCmp = base.filter(f => W.inCur(f.properties.__date));                                    // ส่วนของช่วงที่เลือกที่ใช้เทียบ
     const prior = base.filter(f => W.inPrev(f.properties.__date));
     const countBy = fs => fs.reduce((o, f) => { const k = f.properties[unitKey] || '-'; o[k] = (o[k] || 0) + 1; return o; }, {});
     const cur = countBy(current), cmpC = countBy(curCmp), prev = countBy(prior);
+    // v3.19 คอลัมน์ช่วงเดียวกันรายปี (เรียงจากปีเก่า → ปีใกล้ที่สุด) · ปีที่ใกล้ที่สุดใช้ W เดิม
+    const prevCols = years.slice().reverse().map(k => {
+      const Wk = k === k0 ? W : (MapModule.compareInfo(k) || W), fs = k === k0 ? prior : base.filter(f => Wk.inPrev(f.properties.__date));
+      return { k, label: prevColLabel(Wk), none: !!Wk.none, partial: Wk.mode === 'month' && !Wk.none, note: Wk.note || '', prevLabel: Wk.prevLabel || '',
+        range: Wk.none ? '' : Wk.mode === 'month' ? Wk.prevLabel : `${Geo.thaiDate(Wk.prev[0])} – ${Geo.thaiDate(Wk.prev[1])}`, counts: countBy(fs), total: fs.length };
+    });
     const NA = { text: '–', cls: 'chg-flat' };
     const unitLevels = risk.map(f => MapModule.riskInfo() ? MapModule.levelOf(f.properties) : NO_LEVEL);
     const rows = multi
@@ -39,19 +64,24 @@ const Dashboard = (() => {
         const ds = risk.filter(f => f.properties.province_code === code), lvs = ds.map(f => MapModule.riskInfo() ? MapModule.levelOf(f.properties) : NO_LEVEL);
         const high = lvs.filter(l => l === CONFIG.RISK_LEVELS[2] || l === CONFIG.RISK_LEVELS[3]).length;
         const rated = !!MapModule.riskInfo() && ds.some(f => f.properties.risk_level >= 0);
-        return { code, name: MapModule.provinceName(code) || code, current: cur[code] || 0, cmpCurrent: cmpC[code] || 0, previous: prev[code] || 0, score: high, nUnits: ds.length, nHigh: high,
+        return { code, name: MapModule.provinceName(code) || code, current: cur[code] || 0, cmpCurrent: cmpC[code] || 0, previous: prev[code] || 0, prevs: prevCols.map(c => c.counts[code] || 0), score: high, nUnits: ds.length, nHigh: high,
           level: rated ? { label: `สูง–สูงมาก ${high}/${ds.length} อำเภอ`, color: high ? CONFIG.RISK_LEVELS[3].color : CONFIG.RISK_LEVELS[0].color, key: 'prov' } : NO_LEVEL,
           change: W.none ? NA : pctChange(cmpC[code] || 0, prev[code] || 0) };
       })
       : risk.map((f, i) => {
         const p = f.properties, lv = unitLevels[i];
-        return { code: p.code, name: p.name, current: cur[p.code] || 0, cmpCurrent: cmpC[p.code] || 0, previous: prev[p.code] || 0, score: p.risk_score ?? 0, level: lv,
+        return { code: p.code, name: p.name, current: cur[p.code] || 0, cmpCurrent: cmpC[p.code] || 0, previous: prev[p.code] || 0, prevs: prevCols.map(c => c.counts[p.code] || 0), score: p.risk_score ?? 0, level: lv,
           change: W.none ? NA : pctChange(cmpC[p.code] || 0, prev[p.code] || 0) };
       });
     // จุดที่ไม่มีรหัส/ไม่ตรงกับขอบเขตพื้นที่ในแผนที่ — แสดงเป็นแถว “ไม่ระบุพื้นที่” เพื่อให้ผลรวมตาราง = จำนวนจุดจริงในช่วงที่เลือก
     const sumOf = k => rows.reduce((a, r) => a + r[k], 0);
     const unassigned = Math.max(0, current.length - sumOf('current')), unassignedPrev = Math.max(0, prior.length - sumOf('previous')), unassignedCmp = Math.max(0, curCmp.length - sumOf('cmpCurrent'));
     const levels = CONFIG.RISK_LEVELS.map(l => unitLevels.filter(x => x === l).length);   // จำนวนพื้นที่ (อำเภอ/ตำบล) ต่อระดับ
+    prevCols.forEach((c, i) => { c.unassigned = Math.max(0, c.total - rows.reduce((a, r) => a + r.prevs[i], 0)); });
+    // ปีที่เลือกได้: ย้อนไปถึงปีแรกที่มีข้อมูล (ไม่เกิน CMP_MAX ปี)
+    const firstY = raw.dataFirst ? +raw.dataFirst.slice(0, 4) : 0, sY = st.startYM ? Geo.ymFromIndex(st.startYM).year - 543 : 0;
+    const yearOptions = [];
+    for (let k = 1; k <= CMP_MAX; k++) { const Wk = k === k0 ? W : MapModule.compareInfo(k); if (!Wk) break; if (firstY && sY - k < firstY - 1) break; if (Wk.none && k !== 1 && !years.includes(k)) continue; yearOptions.push({ k, label: prevColLabel(Wk), none: !!Wk.none }); }
     const months = [];
     for (let i = s; i <= e && months.length < 48; i++) months.push(i);
     const byMonth = months.map(i => current.filter(f => f.properties.__ym === i).length);
@@ -60,12 +90,12 @@ const Dashboard = (() => {
     const selText = (() => { const a = Geo.ymFromIndex(s), z = Geo.ymFromIndex(e), zd = new Date(Date.UTC(z.year - 543, z.month, 0)).getUTCDate();
       let end = `${z.year - 543}-${String(z.month).padStart(2, '0')}-${zd}`; if (latest && end > latest) end = latest;
       return `${Geo.thaiDate(`${a.year - 543}-${String(a.month).padStart(2, '0')}-01`)} – ${Geo.thaiDate(end)}`; })();
-    return { level, multi, unitLabel: level === 'province' ? 'จังหวัด' : level === 'district' ? 'อำเภอ' : 'ตำบล', levelUnit: level === 'subdistrict' ? 'ตำบล' : 'อำเภอ', nLevelUnits: unitLevels.length, rows, current, curCmp, prior, unassigned, unassignedPrev, unassignedCmp, levels, months, byMonth,
+    return { prevCols, years, multiYear: years.length > 1, canMultiYear: canMultiYear(), yearOptions, level, multi, unitLabel: level === 'province' ? 'จังหวัด' : level === 'district' ? 'อำเภอ' : 'ตำบล', levelUnit: level === 'subdistrict' ? 'ตำบล' : 'อำเภอ', nLevelUnits: unitLevels.length, rows, current, curCmp, prior, unassigned, unassignedPrev, unassignedCmp, levels, months, byMonth,
       totalCur: current.length, totalCmp: curCmp.length, totalPrev: prior.length, change: W.none ? NA : pctChange(curCmp.length, prior.length),
       compareMode: W.mode, compareNote: W.note, compareNone: !!W.none, selText, curLabel: W.curLabel || '', prevLabel: W.prevLabel || '',
       currentText: W.none ? selText : partial ? `${W.curLabel} (เดือนที่มีข้อมูลทั้งสองปี${latest && endD >= latest ? ` · ข้อมูลถึง ${Geo.thaiDate(latest)}` : ''})` : `${Geo.thaiDate(startD)} – ${Geo.thaiDate(endD)}`,
       priorText: W.none ? W.note : partial ? `${W.prevLabel} (${W.note})` : `${Geo.thaiDate(pStart)} – ${Geo.thaiDate(pEnd)}`,
-      compareText: W.none ? W.note : partial ? `เทียบช่วงเดียวกันปีก่อน ${fmt(prior.length)} จุด (คิดเฉพาะเดือนที่มีข้อมูลทั้งสองปี: ${W.prevLabel})` : `เทียบช่วงเดียวกันปีก่อน (${fmt(prior.length)} จุด)` };
+      compareText: (() => { const py = k0 === 1 ? 'ปีก่อน' : prevColLabel(W); return W.none ? W.note : partial ? `เทียบช่วงเดียวกัน${py} ${fmt(prior.length)} จุด (คิดเฉพาะเดือนที่มีข้อมูลทั้งสองปี: ${W.prevLabel})` : `เทียบช่วงเดียวกัน${py} (${fmt(prior.length)} จุด)`; })() };
   }
 
   function chartBase() {
@@ -101,24 +131,32 @@ const Dashboard = (() => {
     el('comparison-area-header').textContent = u;
     // v3.9.1: คอลัมน์ “ช่วงที่เลือก” = จำนวนจุดจริงทั้งหมดในช่วงที่เลือก (ผลรวม = KPI) · “ช่วงเดียวกันปีก่อน” = ไม่มีข้อมูล เมื่อฐานข้อมูลไม่มีปีก่อน
     const st = MapModule.getState(), partial = S.compareMode === 'month' && !S.compareNone;
-    if (el('th-cmp-prev')) { el('th-cmp-prev').textContent = partial ? 'ช่วงเดียวกันปีก่อน*' : 'ช่วงเดียวกันปีก่อน'; el('th-cmp-cur').textContent = 'ช่วงที่เลือก'; }
+    // v3.19 หัวตารางตามปีที่เลือก (1 ปี = แบบเดิม)
+    const prevHead = c => S.multiYear || c.k !== 1 ? `<span class="block">ช่วงเดียวกัน</span><span class="block">${c.label}${c.partial ? '*' : ''}</span>` : `ช่วงเดียวกันปีก่อน${c.partial ? '*' : ''}`;
+    el('tbl-hotspot-comparison').querySelector('thead').innerHTML = `<tr><th id="comparison-area-header">${u}</th>${S.prevCols.map(c => `<th class="num" title="${c.none ? c.note : c.range}">${prevHead(c)}</th>`).join('')}<th class="num" id="th-cmp-cur">${S.multiYear ? '<span class="block">ช่วงที่</span><span class="block">เลือก</span>' : 'ช่วงที่เลือก'}</th><th class="num">เพิ่ม/ลด</th></tr>`;
+    el('tbl-hotspot-comparison').classList.toggle('is-multi', S.multiYear);
+    renderYearPicker(S);
     el('title-comparison').textContent = `เปรียบเทียบ HS ราย${u}`;
     el('comparison-period').textContent = `${S.compareNone ? `${S.selText} · ${S.priorText}` : partial ? `${S.selText} · เทียบเดือนที่มีข้อมูลทั้งสองปี` : `${S.currentText} เทียบ ${S.priorText}`}${st.crop ? ` · ${st.crop}` : ''}`;
     const prevCell = v => S.compareNone ? '<span class="text-ink-mute text-xs">ไม่มีข้อมูล</span>' : fmt(v);
+    const pc = (c, v) => c.none ? '<span class="text-ink-mute text-xs">ไม่มีข้อมูล</span>' : fmt(v);
     const picked = S.level === 'district' ? st.district : st.subdistrict;
-    const body = cmp.map(r => `<tr class="cmp-row${picked === r.code ? ' cmp-picked' : ''}" data-cmp-code="${r.code}" tabindex="0" title="คลิกเพื่อ${S.level === 'province' ? `เปิดจังหวัด${r.name} (รายอำเภอ)` : S.level === 'district' ? 'ดูรายตำบลในอำเภอนี้' : picked === r.code ? 'ยกเลิกการเลือกตำบล' : 'เลือกตำบลนี้'}"><td>${r.name}</td><td class="num">${prevCell(r.previous)}</td><td class="num">${fmt(r.current)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`);
-    if (S.unassigned || S.unassignedPrev) body.push(`<tr class="text-ink-soft"><td>ไม่ระบุพื้นที่</td><td class="num">${prevCell(S.unassignedPrev)}</td><td class="num">${fmt(S.unassigned)}</td><td class="num">–</td></tr>`);
+    const body = cmp.map(r => `<tr class="cmp-row${picked === r.code ? ' cmp-picked' : ''}" data-cmp-code="${r.code}" tabindex="0" title="คลิกเพื่อ${S.level === 'province' ? `เปิดจังหวัด${r.name} (รายอำเภอ)` : S.level === 'district' ? 'ดูรายตำบลในอำเภอนี้' : picked === r.code ? 'ยกเลิกการเลือกตำบล' : 'เลือกตำบลนี้'}"><td>${r.name}</td>${S.prevCols.map((c, i) => `<td class="num">${pc(c, r.prevs[i])}</td>`).join('')}<td class="num">${fmt(r.current)}</td><td class="num"><span class="chg ${r.change.cls}">${r.change.text}</span></td></tr>`);
+    if (S.unassigned || S.prevCols.some(c => c.unassigned)) body.push(`<tr class="text-ink-soft"><td>ไม่ระบุพื้นที่</td>${S.prevCols.map(c => `<td class="num">${pc(c, c.unassigned)}</td>`).join('')}<td class="num">${fmt(S.unassigned)}</td><td class="num">–</td></tr>`);
     const tb = document.querySelector('#tbl-hotspot-comparison tbody');
     tb.innerHTML = body.join('');
     tb.querySelectorAll('[data-cmp-code]').forEach(tr => {
       const go = () => document.dispatchEvent(new CustomEvent('agri-risk:area-click', { detail: { level: S.level, code: tr.dataset.cmpCode, source: 'table' } }));
       tr.addEventListener('click', go); tr.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
     });
-    el('comparison-previous-total').innerHTML = prevCell(S.totalPrev);
-    el('comparison-current-total').textContent = fmt(S.totalCur);
+    el('tbl-hotspot-comparison').querySelector('tfoot').innerHTML = `<tr><th>รวม</th>${S.prevCols.map(c => `<th class="num">${pc(c, c.total)}</th>`).join('')}<th class="num" id="comparison-current-total">${fmt(S.totalCur)}</th><th class="num" id="comparison-change-total"></th></tr>`;
     if (el('comparison-note')) el('comparison-note').textContent = partial
-      ? `* ปีก่อนมีข้อมูลไม่ครบทุกเดือน จึงนับปีก่อนและคำนวณ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel}) · คอลัมน์ช่วงที่เลือกแสดงจำนวนจริงทั้งหมด`
+      ? `* ${S.years[0] === 1 ? 'ปีก่อน' : S.prevCols[S.prevCols.length - 1].label + ' '}มีข้อมูลไม่ครบทุกเดือน จึงนับและคำนวณ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel}) · คอลัมน์ช่วงที่เลือกแสดงจำนวนจริงทั้งหมด`
       : S.compareNone ? `ช่วงที่เลือกแสดงจำนวนจุดความร้อนจริง ${fmt(S.totalCur)} จุด · ${S.compareNote}` : '';
+    if (S.multiYear && el('comparison-note')) {
+      const extra = S.prevCols.filter(c => c.k !== S.years[0]).map(c => c.none ? `${c.label}: ${c.note}` : c.partial ? `${c.label}* นับเฉพาะ ${c.prevLabel}` : '').filter(Boolean);
+      el('comparison-note').textContent = [`% เพิ่ม/ลด เทียบกับ${S.prevCols[S.prevCols.length - 1].label}`, el('comparison-note').textContent, ...extra].filter(Boolean).join(' · ');
+    }
     el('comparison-change-total').innerHTML = `<span class="chg ${S.change.cls}">${S.change.text}</span>`;
 
     // monthly trend
@@ -149,5 +187,18 @@ const Dashboard = (() => {
     return S;
   }
 
-  return { init, refresh, summary, pctChange };
+  /** ตัวเลือกปีที่เทียบ (เฉพาะ Admin / Mini Super Admin / Super Admin) */
+  function renderYearPicker(S) {
+    const box = el('cmp-years'); if (!box) return;
+    if (!S.canMultiYear || S.yearOptions.length < 2) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    box.classList.remove('hidden');
+    box.innerHTML = `<span class="text-[11px] font-semibold text-ink-soft">เทียบช่วงเดียวกันของ:</span>` + S.yearOptions.slice().reverse().map(o => `<label class="cmp-year${S.years.includes(o.k) ? ' is-on' : ''}${o.none ? ' is-none' : ''}" title="${o.none ? 'ไม่มีข้อมูลช่วงนี้' : `ย้อนหลัง ${o.k} ปี`}"><input type="checkbox" value="${o.k}"${S.years.includes(o.k) ? ' checked' : ''}/>${o.label}</label>`).join('');
+    box.querySelectorAll('input').forEach(i => i.addEventListener('change', () => {
+      const on = [...box.querySelectorAll('input:checked')].map(x => +x.value);
+      if (!on.length) { i.checked = true; return; }   // ต้องเลือกอย่างน้อย 1 ปี
+      setCompareYears(on); refresh();
+    }));
+  }
+
+  return { init, refresh, summary, pctChange, setCompareYears, compareYears: () => activeYears() };
 })();

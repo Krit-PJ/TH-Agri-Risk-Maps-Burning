@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-<link rel="stylesheet" href="css/app.css?v=3.18.0"/>
+<link rel="stylesheet" href="css/app.css?v=3.19.0"/>
 </head>
 <body class="bg-paper font-sans text-ink antialiased">
 
@@ -195,6 +195,7 @@
           <h4 id="title-comparison" class="dash-h">เปรียบเทียบ HS รายอำเภอ</h4>
           <span id="comparison-period" class="text-xs text-ink-soft">-</span>
         </div>
+        <div id="cmp-years" class="mb-2 hidden flex-wrap items-center gap-1" role="group" aria-label="เลือกปีที่เทียบช่วงเดียวกัน"></div>
         <div class="max-h-72 overflow-auto">
           <table id="tbl-hotspot-comparison" class="data-table">
             <thead><tr><th id="comparison-area-header">อำเภอ</th><th class="num" id="th-cmp-prev">ช่วงเดียวกันปีก่อน</th><th class="num" id="th-cmp-cur">ช่วงที่เลือก</th><th class="num">เพิ่ม/ลด</th></tr></thead>
@@ -355,8 +356,36 @@
 
       <!-- Import -->
       <section data-pane="import" class="space-y-4">
+        <!-- v3.19 ดึงข้อมูลจาก Google Sheet อัตโนมัติ (Super Admin / Mini Super Admin) -->
+        <section id="gs-sync" class="national-only hidden space-y-3 rounded-xl border border-brand-200 bg-brand-50/40 p-4" aria-labelledby="gs-sync-title">
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <h3 id="gs-sync-title" class="text-base font-bold">ดึงข้อมูลจาก Google Sheet อัตโนมัติ</h3>
+              <p class="mt-1 text-sm leading-relaxed text-ink-soft">ตรวจชีตรายปี (ชื่อชีตมีปี เช่น NOAA20_2026 / NOAA20_2027) ทุกวันเวลา <b>00:00 · 08:00 · 09:00 · 10:00 · 11:00 น.</b> — พบข้อมูลใหม่หรือชีตปีใหม่จะนำเข้าเฉพาะจุดใหม่ให้อัตโนมัติ (กติกาเดียวกับ “นำเข้าเฉพาะข้อมูลใหม่”) · จุดที่ค่าในต้นทางถูกแก้ไข ระบบแจ้งให้กด “ปรับตามต้นทาง” เอง · รอบ 00:00 ตรวจทั้งชีต</p>
+            </div>
+            <label class="chip shrink-0"><input id="gs-enabled" type="checkbox"/> เปิดการดึงอัตโนมัติ</label>
+          </div>
+          <div id="gs-status" class="space-y-2 rounded-lg bg-white p-3 text-sm ring-1 ring-line" role="status" aria-live="polite">กำลังโหลดสถานะ…</div>
+          <div>
+            <label class="field-label" for="gs-url">ลิงก์ Google Sheet ต้นทาง</label>
+            <div class="flex flex-wrap gap-2">
+              <input id="gs-url" type="url" class="field min-w-0 flex-1" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off"/>
+              <button id="btn-gs-test" type="button" class="btn-ghost">ทดสอบการเชื่อมต่อ</button>
+              <button id="btn-gs-save" type="button" class="btn-ghost">บันทึกลิงก์</button>
+            </div>
+            <p class="mt-1 text-xs text-ink-mute">ต้นทางต้องแชร์ให้ “ทุกคนที่มีลิงก์ดูได้” (หรือแชร์ให้บัญชีเจ้าของระบบ) · เปลี่ยนลิงก์แล้วระบบตรวจทุกชีตใหม่ในรอบถัดไป (ไม่นำเข้าจุดซ้ำ)</p>
+            <div id="gs-test" class="mt-2 text-sm"></div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="btn-gs-run" type="button" class="btn-primary">ตรวจสอบและดึงเดี๋ยวนี้</button>
+            <button id="btn-gs-full" type="button" class="btn-ghost" title="อ่านทุกชีตทั้งหมด (ใช้เวลานานกว่า) — ตรวจการแก้ไขกลางชีต">ตรวจทั้งชีต</button>
+            <button id="btn-gs-apply" type="button" class="btn-ghost hidden">ปรับตามต้นทาง</button>
+          </div>
+          <div id="gs-run-status" class="text-sm" role="status" aria-live="polite"></div>
+          <details class="text-sm"><summary class="cursor-pointer font-semibold text-brand-800">ประวัติการตรวจ/ดึง 15 รอบล่าสุด</summary><div id="gs-history" class="mt-2 overflow-x-auto"></div></details>
+        </section>
         <div>
-          <h3 class="text-base font-bold">นำเข้าข้อมูลจุดความร้อน (HS) จาก Excel</h3>
+          <h3 class="text-base font-bold">นำเข้าข้อมูลจุดความร้อน (HS) จากไฟล์ Excel</h3>
           <p class="mt-1 text-sm leading-relaxed text-ink-soft">รองรับ .xlsx / .xls / .csv ที่มีคอลัมน์ hsID, Date หรือ YYYY-MM-DD, Province, Amphoe, Tambon, LandType, PlantType และ Maps หรือ X/Y (UTM) ขั้นตอน: เลือกไฟล์ → กด <b>ตรวจสอบไฟล์</b> → ดูผลตรวจ → กด <b>บันทึกเข้าฐานข้อมูล</b> และยืนยัน ระบบแยกข้อมูลรายจังหวัดจากคอลัมน์ Province นำเข้าทุกประเภทพื้นที่ (LandType) ตัดรายการซ้ำ ตรวจยอดกับชีตสรุป Land/hsPlant ในไฟล์ (ถ้ามี) และเทียบกับฐานข้อมูลเพื่อนำเข้าเฉพาะข้อมูลใหม่ — ไฟล์จากหน่วยงานต้นสังกัดบันทึกเป็นแหล่ง “ต้นสังกัด” ไฟล์ที่มีคอลัมน์ Source = FIRMS บันทึกเป็นแหล่ง “NASA FIRMS” (เฉพาะผู้ดูแลระดับประเทศ)</p>
         </div>
         <div id="import-scope" class="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800"></div>
@@ -607,14 +636,14 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js" defer></script>
 <!-- App -->
-<script src="js/config.js?v=3.17.0"></script>
-<script src="js/api.js?v=3.17.0"></script>
-<script src="js/geo.js?v=3.17.0"></script>
-<script src="js/map.js?v=3.17.0"></script>
-<script src="js/dashboard.js?v=3.17.0"></script>
-<script src="js/report.js?v=3.17.0"></script>
-<script src="js/kpp-id.js?v=3.12.4"></script>
-<script src="js/admin.js?v=3.17.0"></script>
-<script src="js/app.js?v=3.17.0"></script>
+<script src="js/config.js?v=3.19.0"></script>
+<script src="js/api.js?v=3.19.0"></script>
+<script src="js/geo.js?v=3.19.0"></script>
+<script src="js/map.js?v=3.19.0"></script>
+<script src="js/dashboard.js?v=3.19.0"></script>
+<script src="js/report.js?v=3.19.0"></script>
+<script src="js/kpp-id.js?v=3.19.0"></script>
+<script src="js/admin.js?v=3.19.0"></script>
+<script src="js/app.js?v=3.19.0"></script>
 </body>
 </html>

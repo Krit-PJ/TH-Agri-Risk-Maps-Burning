@@ -195,6 +195,11 @@ function doPost(e) {
       case 'id_people_list': return json_(idPeopleList_(user, body));
       case 'id_person_status': return json_(idPersonStatus_(user, body));
       case 'sso_mode_save': return json_(ssoModeSave_(user, body));
+      // v3.19 ดึงข้อมูล HS จาก Google Sheet (GsSync.gs) — Super Admin / Mini Super Admin
+      case 'gs_sync_status': return json_(gsSyncStatusApi_(user));
+      case 'gs_sync_test': return json_(gsSyncTestApi_(user, body));
+      case 'gs_sync_save': return json_(gsSyncSaveApi_(user, body));
+      case 'gs_sync_run': return json_(gsSyncRunApi_(user, body));
       default: return json_({ ok: false, error: 'unknown action' });
     }
   } catch (err) { return json_({ ok: false, error: String(err.message || err) }); }
