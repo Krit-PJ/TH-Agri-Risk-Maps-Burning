@@ -51,25 +51,31 @@ const Report = (() => {
     const partial = S.compareMode === 'month' && !S.compareNone;
     const yrs = ctx.risk?.model === 'ABRI' ? span(ctx.risk.history) : '';
     const two = (a, b) => `<span class="l">${a}</span><span class="l">${b}</span>`;
-    // v3.19 หลายปี: ใช้ไม่เกิน 3 ปีที่ใกล้ที่สุด (ให้พอดี A4 1 หน้า) เรียงปีเก่า → ใกล้ · 1 ปี = หัวคอลัมน์แบบเดิม
-    const cols = S.prevCols.slice(-3), ci = cols.map(c => S.prevCols.indexOf(c));
+    // v3.20 ผู้ดูแล: ไม่เกิน 3 ปีล่าสุด (ให้พอดี A4 1 หน้า) เรียงปีเก่า → ใหม่ · หัวคอลัมน์ปีงบ · ช่วงที่เลือกเน้น · แนวโน้ม (ทุกปีที่เลือก) · % เทียบปีก่อนหน้า
+    //       ผู้ใช้ทั่วไป = หัวคอลัมน์แบบเดิม (v3.15)
+    const adm = !!S.adminView, all = S.prevCols, cols = adm ? all.slice(-3) : all.slice(-1), ci = cols.map(c => all.indexOf(c));
+    const near = all[all.length - 1], trend = adm && all.length >= 2;
     const pc = (c, v) => c.none ? 'ไม่มีข้อมูล' : fmt(v);
-    const prevHead = c => S.multiYear ? two('จุดความร้อนช่วงเดียวกัน', `${c.label}${c.partial ? '*' : ''}`) : two('จุดความร้อน', `ช่วงเดียวกันปีที่ผ่านมา${c.partial ? '*' : ''}`);
-    const N = 5 + cols.length;
-    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th>${S.multi ? two('อำเภอเสี่ยงสูง–สูงมาก', yrs ? `(ปีงบ ${yrs})` : '') : yrs ? two('ระดับความเสี่ยง', `(ปีงบ ${yrs})`) : 'ระดับความเสี่ยง'}</th>${cols.map(c => `<th class="num">${prevHead(c)}</th>`).join('')}<th class="num">${two('จุดความร้อน', 'ช่วงที่เลือก')}</th><th class="num">เพิ่ม/ลด${partial ? '*' : ''}</th></tr>`;
+    const prevHead = c => adm ? two('ช่วงเดียวกัน', `${c.label}${c.partial ? '*' : ''}`) : two('จุดความร้อน', `ช่วงเดียวกันปีที่ผ่านมา${c.partial ? '*' : ''}`);
+    const curHead = adm && S.curShort ? two(`ปีงบ ${S.curShort}`, 'ช่วงที่เลือก') : two('จุดความร้อน', 'ช่วงที่เลือก');
+    const chgHead = adm && !near.none ? two('เพิ่ม/ลด', `เทียบ ${near.short}${partial ? '*' : ''}`) : `เพิ่ม/ลด${partial ? '*' : ''}`;
+    const N = 5 + cols.length + (trend ? 1 : 0);
+    const sp = vals => trend ? `<td class="pr-trend">${Dashboard.spark(vals, 40, 12)}</td>` : '';
+    el('pr-table').classList.toggle('pr-adm', adm);
+    el('pr-table').querySelector('thead').innerHTML = `<tr><th class="num">ลำดับ</th><th>${S.unitLabel}</th><th>${S.multi ? two('อำเภอเสี่ยงสูง–สูงมาก', yrs ? `(ปีงบ ${yrs})` : '') : yrs ? two('ระดับความเสี่ยง', `(ปีงบ ${yrs})`) : 'ระดับความเสี่ยง'}</th>${cols.map(c => `<th class="num">${prevHead(c)}</th>`).join('')}<th class="num pr-cur">${curHead}</th>${trend ? `<th class="pr-trend">${two('แนวโน้ม', `${all.length + 1} ช่วง`)}</th>` : ''}<th class="num">${chgHead}</th></tr>`;
     const lvCell = l => `<span class="lv"><i style="background:${l.color}"></i>${l.label}</span>`;
     const hasExtra = S.unassigned || cols.some(c => c.unassigned);
-    const extra = hasExtra ? `<tr><td class="num">–</td><td>ไม่ระบุพื้นที่</td><td>–</td>${cols.map(c => `<td class="num">${pc(c, c.unassigned)}</td>`).join('')}<td class="num">${fmt(S.unassigned)}</td><td class="num">–</td></tr>` : '';
+    const extra = hasExtra ? `<tr><td class="num">–</td><td>ไม่ระบุพื้นที่</td><td>–</td>${cols.map(c => `<td class="num">${pc(c, c.unassigned)}</td>`).join('')}<td class="num pr-cur">${fmt(S.unassigned)}</td>${trend ? '<td></td>' : ''}<td class="num">–</td></tr>` : '';
     const lvOf = r => S.multi ? (r.level.key === 'prov' ? `<span class="lv"><i style="background:${r.nHigh ? CONFIG.RISK_LEVELS[3].color : CONFIG.RISK_LEVELS[0].color}"></i>${fmt(r.nHigh)} / ${fmt(r.nUnits)} อำเภอ</span>` : lvCell(r.level)) : lvCell(r.level);
-    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td>${lvOf(r)}</td>${cols.map((c, j) => `<td class="num">${pc(c, r.prevs[ci[j]])}</td>`).join('')}<td class="num"><b>${fmt(r.current)}</b></td><td class="num">${r.change.text}</td></tr>`).join('') + extra;
+    el('pr-table').querySelector('tbody').innerHTML = rows.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r.name}</td><td>${lvOf(r)}</td>${cols.map((c, j) => `<td class="num">${pc(c, r.prevs[ci[j]])}</td>`).join('')}<td class="num pr-cur"><b>${fmt(r.current)}</b></td>${sp([...all.map((c, k) => c.none ? 0 : r.prevs[k]), r.cmpCurrent])}<td class="num">${r.change.text}</td></tr>`).join('') + extra;
     const fnotes = [];
-    if (partial) fnotes.push(`* ${S.multiYear ? cols[cols.length - 1].label + ' ' : 'ปีที่ผ่านมา'}มีข้อมูลไม่ครบทุกเดือน: นับและคำนวณ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel}) · คอลัมน์ช่วงที่เลือกแสดงจำนวนจริงทั้งหมด`);
-    if (S.multiYear) {
-      fnotes.push(`% เพิ่ม/ลด เทียบกับ${cols[cols.length - 1].label}`);
-      cols.slice(0, -1).forEach(c => { if (c.partial) fnotes.push(`${c.label}* นับเฉพาะ ${c.prevLabel}`); });
-      if (S.prevCols.length > cols.length) fnotes.push(`แสดง ${cols.length} ปีที่ใกล้ที่สุดจาก ${S.prevCols.length} ปีที่เลือก`);
+    if (partial) fnotes.push(`* ${adm ? near.label + ' ' : 'ปีที่ผ่านมา'}มีข้อมูลไม่ครบทุกเดือน: นับและคำนวณ % เพิ่ม/ลด เฉพาะเดือนที่มีข้อมูลทั้งสองปี (${S.prevLabel}) · คอลัมน์ช่วงที่เลือกแสดงจำนวนจริงทั้งหมด`);
+    if (adm && all.length > 1) {
+      all.slice(0, -1).forEach(c => { if (c.partial) fnotes.push(`${c.label}* นับเฉพาะ ${c.prevLabel}`); });
+      if (trend) fnotes.push(`แนวโน้ม: ${all[0].label} → ช่วงที่เลือก${partial ? ' (นับเฉพาะเดือนเดียวกับปีที่เทียบ)' : ''}`);
+      if (all.length > cols.length) fnotes.push(`ตารางแสดง ${cols.length} ปีล่าสุดจาก ${all.length} ปีที่เลือก`);
     }
-    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th>${S.multi ? `${fmt(S.levels[2] + S.levels[3])} / ${fmt(S.nLevelUnits)} อำเภอ` : ''}</th>${cols.map(c => `<th class="num">${pc(c, c.total)}</th>`).join('')}<th class="num">${fmt(S.totalCur)}</th><th class="num">${S.change.text}</th></tr>`
+    el('pr-table').querySelector('tfoot').innerHTML = `<tr><th></th><th>รวม</th><th>${S.multi ? `${fmt(S.levels[2] + S.levels[3])} / ${fmt(S.nLevelUnits)} อำเภอ` : ''}</th>${cols.map(c => `<th class="num">${pc(c, c.total)}</th>`).join('')}<th class="num pr-cur">${fmt(S.totalCur)}</th>${trend ? `<th class="pr-trend">${Dashboard.spark([...all.map(c => c.none ? 0 : c.total), S.totalCmp], 40, 12)}</th>` : ''}<th class="num">${S.change.text}</th></tr>`
       + (fnotes.length ? `<tr><td colspan="${N}" class="pr-foot-note">${fnotes.join(' · ')}</td></tr>` : '');
     el('pr-src-hs').textContent = `จุดความร้อน ${hsSourceText(ctx)}`;
     // fit all rows on one page
