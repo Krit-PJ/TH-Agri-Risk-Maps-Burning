@@ -219,8 +219,83 @@ const Admin = (() => {
     document.querySelectorAll('#console [data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== tab));
     setMsg(el('console-status'), '');
     if (tab === 'compare' && isNational() && !el('compare-province').value && hooks.currentProvince?.()) el('compare-province').value = hooks.currentProvince();
-    ({ batches: loadBatches, requests: loadRequests, accounts: loadAccounts, people: () => loadPeople(false), logs: () => logView(logViewCur), settings: loadSettings }[tab])?.();
+    ({ import: () => { if (isNational()) loadGsSync(); }, batches: loadBatches, requests: loadRequests, accounts: loadAccounts, people: () => loadPeople(false), logs: () => logView(logViewCur), settings: loadSettings }[tab])?.();
   }
+  /* ======================= v3.19 ดึงข้อมูลจาก Google Sheet อัตโนมัติ (Super Admin / Mini Super Admin) ======================= */
+  let gsBound = false, gsBusy = false;
+  const gsDT = v => v ? `${Geo.thaiDate(String(v).slice(0, 10))} ${String(v).slice(11, 16)} น.` : '-';
+  const gsYearBE = y => y ? Number(y) + 543 : '';
+  function bindGsSync() {
+    if (gsBound) return; gsBound = true;
+    el('btn-gs-test').addEventListener('click', gsTest);
+    el('btn-gs-save').addEventListener('click', async () => {
+      const url = el('gs-url').value.trim(); if (!url) return setMsg(el('gs-test'), 'กรุณาใส่ลิงก์', 'warn');
+      setMsg(el('gs-test'), 'กำลังตรวจลิงก์และบันทึก…', 'working');
+      try { const r = await Api.post('gs_sync_save', { url }); renderGsSync(r.status); setMsg(el('gs-test'), 'บันทึกลิงก์แล้ว — ระบบจะตรวจทุกชีตในรอบถัดไป หรือกด “ตรวจสอบและดึงเดี๋ยวนี้”', 'success'); }
+      catch (err) { setMsg(el('gs-test'), err.message, 'error'); }
+    });
+    el('gs-enabled').addEventListener('change', async e => {
+      try { const r = await Api.post('gs_sync_save', { enabled: e.target.checked }); renderGsSync(r.status); toast(e.target.checked ? 'เปิดการดึงอัตโนมัติแล้ว' : 'ปิดการดึงอัตโนมัติแล้ว'); }
+      catch (err) { e.target.checked = !e.target.checked; toast(err.message, 'error'); }
+    });
+    el('btn-gs-run').addEventListener('click', () => gsRun({}));
+    el('btn-gs-full').addEventListener('click', () => gsRun({ force: true }));
+    el('btn-gs-apply').addEventListener('click', async () => {
+      const n = Number(el('btn-gs-apply').dataset.n || 0);
+      if (!await confirmBox(`ปรับข้อมูล ${fmt(n)} จุดให้ตรงกับค่าใน Google Sheet ต้นทาง (เวลา ชนิดพืช ประเภทพื้นที่ หรือพิกัด)? ระบบคง hsID เดิมและบันทึกในประวัติการใช้งาน`, { yes: 'ปรับตามต้นทาง' })) return;
+      gsRun({ apply: true });
+    });
+  }
+  async function loadGsSync() {
+    bindGsSync();
+    try { const r = await Api.post('gs_sync_status', {}); renderGsSync(r.status); }
+    catch (err) { el('gs-status').innerHTML = `<p class="text-red-700">โหลดสถานะไม่สำเร็จ: ${esc(err.message)}</p>`; }
+  }
+  async function gsTest() {
+    const url = el('gs-url').value.trim(); if (!url) return setMsg(el('gs-test'), 'กรุณาใส่ลิงก์', 'warn');
+    setMsg(el('gs-test'), 'กำลังทดสอบการเชื่อมต่อ…', 'working');
+    try {
+      const r = await Api.post('gs_sync_test', { url });
+      el('gs-test').className = 'mt-2 text-sm';
+      el('gs-test').innerHTML = `<p class="${r.valid ? 'text-brand-700' : 'text-amber-700'} font-semibold">${r.valid ? '✓ เชื่อมต่อได้' : '⚠ เชื่อมต่อได้ แต่ยังไม่มีชีตรายปีที่ใช้ได้'} — ${esc(r.title)}</p>
+        <ul class="mt-1 list-disc pl-5 text-ink-soft">${r.sheets.map(x => `<li>${esc(x.name)} · ปี ${gsYearBE(x.year)} · ${fmt(x.rows)} แถว${x.problem ? ` <span class="text-red-700">(${esc(x.problem)})</span>` : x.rows ? '' : ' (ยังไม่มีข้อมูล)'}</li>`).join('')}</ul>`;
+    } catch (err) { setMsg(el('gs-test'), err.message, 'error'); }
+  }
+  async function gsRun(opts) {
+    if (gsBusy) return; gsBusy = true;
+    ['btn-gs-run', 'btn-gs-full', 'btn-gs-apply'].forEach(id => { el(id).disabled = true; });
+    setMsg(el('gs-run-status'), opts.apply ? 'กำลังปรับตามต้นทาง…' : opts.force ? 'กำลังอ่านทุกชีตและตรวจกับฐานข้อมูล (อาจใช้เวลา 1–3 นาที)…' : 'กำลังตรวจ Google Sheet…', 'working');
+    try {
+      const r = await Api.post('gs_sync_run', opts);
+      renderGsSync(r.status);
+      setMsg(el('gs-run-status'), r.run.message, r.run.status === 'error' ? 'error' : r.run.status === 'partial' || r.run.status === 'busy' ? 'warn' : 'success');
+      if (r.run.added || r.run.applied) hooks.onDataChanged?.();
+    } catch (err) { setMsg(el('gs-run-status'), err.message, 'error'); }
+    finally { gsBusy = false; ['btn-gs-run', 'btn-gs-full', 'btn-gs-apply'].forEach(id => { el(id).disabled = false; }); }
+  }
+  function renderGsSync(s) {
+    if (!s) return;
+    if (document.activeElement !== el('gs-url')) el('gs-url').value = s.url || '';
+    el('gs-enabled').checked = !!s.enabled;
+    const last = s.last || {}, lt = s.latest;
+    const tone = { ok: 'text-brand-700', nochange: 'text-brand-700', error: 'text-red-700', partial: 'text-amber-700', busy: 'text-amber-700' }[last.status] || 'text-ink-soft';
+    const trig = s.triggers === null ? '<span class="text-amber-700">⚠ ยังไม่ได้อนุญาตตัวตั้งเวลา — Super Admin เปิด Apps Script แล้วรันฟังก์ชัน <code>installGsSyncTriggers</code> หนึ่งครั้ง (กด “อนุญาต”)</span>'
+      : s.triggers >= s.hours.length ? `<span class="text-brand-700">✓ ตั้งเวลาอัตโนมัติ ${s.triggers} รอบ/วัน</span>`
+      : `<span class="text-amber-700">⚠ ตัวตั้งเวลาไม่ครบ (${s.triggers}/${s.hours.length}) — รัน <code>installGsSyncTriggers</code> ใน Apps Script</span>`;
+    const pend = s.pending && s.pending.total ? s.pending : null;
+    el('gs-status').innerHTML = `
+      <p class="text-base font-bold ${lt ? 'text-brand-900' : 'text-ink-soft'}">${lt && lt.maxDate ? `ข้อมูลล่าสุดถึงวันที่ ${Geo.thaiDate(lt.maxDate)} <span class="font-semibold text-ink-soft">· ชีต ${esc(lt.sheet)} (ปี ${gsYearBE(lt.year)})</span>` : 'ยังไม่เคยดึงข้อมูลจาก Google Sheet'}</p>
+      <p>ตรวจล่าสุด: <b>${gsDT(s.checkedAt)}</b>${last.message ? ` — <span class="${tone}">${esc(last.message)}</span>` : ''}${s.lastImportAt ? ` · นำเข้าล่าสุด ${gsDT(s.lastImportAt)}` : ''}</p>
+      <p class="text-xs">${s.enabled ? trig : '<span class="text-amber-700">ปิดการดึงอัตโนมัติอยู่ (ตรวจด้วยปุ่มได้)</span>'}${s.running ? ' · <span class="text-amber-700">กำลังนำเข้าต่อในรอบต่อเนื่อง</span>' : ''}</p>
+      ${last.unresolved ? `<p class="text-xs text-ink-soft">จุดที่ยังไม่ทราบตำบล ${fmt(last.unresolved)} จุด (ชื่อตำบลไม่มีในทะเบียนขอบเขต — แสดงบนแผนที่ตามพิกัด)</p>` : ''}
+      ${last.unknownProvinces && last.unknownProvinces.length ? `<p class="text-xs text-amber-700">ชื่อจังหวัดที่ไม่รู้จัก (ข้าม): ${last.unknownProvinces.map(esc).join(', ')}</p>` : ''}
+      ${s.sheets && s.sheets.length ? `<div class="flex flex-wrap gap-1.5 pt-1">${s.sheets.map(x => `<span class="status-pill ${x.error ? 'bg-red-50 text-red-700' : x.rows ? 'bg-brand-50 text-brand-700' : 'bg-paper text-ink-soft'}" title="${esc(x.error || '')}">${esc(x.name)} · ${fmt(x.rows)} แถว${x.maxDate ? ' · ถึง ' + Geo.thaiDate(x.maxDate) : ''}</span>`).join('')}</div>` : ''}
+      ${pend ? `<div class="mt-1 rounded-lg bg-amber-50 p-2 text-amber-900">ต้นทางแก้ไขค่าของจุดที่มีอยู่แล้ว <b>${fmt(pend.total)} จุด</b> (${Object.entries(pend.byProv).map(([p, n]) => `${esc(provName(p))} ${fmt(n)}`).join(' · ')}) — ระบบยังใช้ค่าเดิม กด “ปรับตามต้นทาง” หากต้องการใช้ค่าใหม่</div>` : ''}`;
+    const ap = el('btn-gs-apply'); ap.classList.toggle('hidden', !pend); ap.dataset.n = pend ? pend.total : 0; ap.textContent = pend ? `ปรับตามต้นทาง (${fmt(pend.total)} จุด)` : 'ปรับตามต้นทาง';
+    const H = s.history || [], ST = { ok: 'สำเร็จ', nochange: 'ไม่มีข้อมูลใหม่', error: 'ผิดพลาด', partial: 'ทำต่อ', busy: 'รอคิว' }, MD = { quick: 'ตรวจเร็ว', full: 'ทั้งชีต', apply: 'ปรับตามต้นทาง' };
+    el('gs-history').innerHTML = H.length ? `<table class="w-full text-left text-xs"><thead><tr class="text-ink-mute"><th class="py-1 pr-2">เวลา</th><th class="pr-2">แบบ</th><th class="pr-2">ผล</th><th class="pr-2 text-right">ใหม่</th><th class="pr-2 text-right">ค่าเปลี่ยน</th><th>รายละเอียด / ผู้สั่ง</th></tr></thead><tbody>${H.map(h => `<tr class="border-t border-line"><td class="py-1 pr-2 whitespace-nowrap">${gsDT(h.at)}</td><td class="pr-2">${MD[h.mode] || esc(h.mode)}</td><td class="pr-2 ${h.status === 'error' ? 'text-red-700' : ''}">${ST[h.status] || esc(h.status)}</td><td class="pr-2 text-right tabular-nums">${fmt(h.added)}</td><td class="pr-2 text-right tabular-nums">${fmt(h.changed || h.applied)}</td><td>${esc(h.message)} <span class="text-ink-mute">· ${esc(h.by || '')}</span></td></tr>`).join('')}</tbody></table>` : '<p class="text-ink-soft">ยังไม่มีประวัติ</p>';
+  }
+
   /* v3.11 บันทึกการใช้งาน: การเข้าสู่ระบบ (LoginAttempts) | การดำเนินการ (AuditLog) */
   let logViewCur = 'logins';
   function logView(v) {
@@ -400,7 +475,7 @@ const Admin = (() => {
   /* ---------- audit / settings ---------- */
   const AUDIT_LABEL = { login: 'เข้าสู่ระบบ', register: 'ยื่นคำขอ', request_approve: 'อนุมัติคำขอ', request_reject: 'ไม่อนุมัติคำขอ', account_create: 'เพิ่มผู้ดูแล', account_update: 'แก้ไขผู้ดูแล', account_disabled: 'ระงับสิทธิ์', account_approved: 'เปิดสิทธิ์', account_delete: 'ลบสิทธิ์', hs_import: 'นำเข้า HS', hs_delete_batch: 'ลบชุดข้อมูล', hs_clear: 'ล้างข้อมูล HS', hs_batch_on: 'เปิดใช้งานชุดข้อมูล', hs_batch_off: 'ปิดใช้งานชุดข้อมูล', settings_save: 'ตั้งค่าระบบ', setup: 'ติดตั้งระบบ',
     team_create: 'เพิ่มรายชื่อทีม', team_update: 'แก้ไขรายชื่อทีม', team_delete: 'ลบรายชื่อทีม', api_key_create: 'ออก API key', api_key_revoke: 'ยกเลิก API key',
-    id_register: 'ลงทะเบียนตัวตนกลาง', id_not_me: 'เจ้าของแจ้ง "ไม่ใช่ฉัน"', id_suspend: 'ระงับตัวตนกลาง', id_activate: 'เปิดใช้ตัวตนกลาง', id_people_view_full: 'ดูเบอร์เต็ม (ตัวตนกลาง)', account_password: 'เปลี่ยนรหัสผ่าน Mini' };
+    id_register: 'ลงทะเบียนตัวตนกลาง', id_not_me: 'เจ้าของแจ้ง "ไม่ใช่ฉัน"', id_suspend: 'ระงับตัวตนกลาง', id_activate: 'เปิดใช้ตัวตนกลาง', id_people_view_full: 'ดูเบอร์เต็ม (ตัวตนกลาง)', account_password: 'เปลี่ยนรหัสผ่าน Mini', hs_sync: 'ดึงจาก Google Sheet', hs_sync_error: 'ดึงจาก Google Sheet ไม่สำเร็จ', hs_sync_setup: 'ตั้งค่าดึง Google Sheet' };
   const auditGroup = a => /^hs_/.test(a) ? 'hs' : /^(account_|request_|register|id_)/.test(a) ? 'account' : /^(settings|api_key|setup)/.test(a) ? 'settings' : /^team_/.test(a) ? 'team' : 'other';
   let audit = null;
   async function loadAudit() {
