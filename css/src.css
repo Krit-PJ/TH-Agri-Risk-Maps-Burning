@@ -190,6 +190,10 @@
 .pr-table .lv i { width: 2.4mm; height: 2.4mm; border-radius: 50%; display: inline-block; }
 .pr-table td, .pr-table th { white-space: nowrap; } /* v3.16 ชื่อพื้นที่และตัวเลขไม่ตัดบรรทัด (หัวคอลัมน์ 2 บรรทัดด้วย .l) */
 .pr-table .pr-foot-note { font-size: .85em; color: #4a5a51; border-bottom: 0; white-space: normal; }
+/* v3.20 ผู้ดูแล: ช่วงที่เลือกเน้น · แนวโน้ม */
+.pr-adm td.pr-cur { background: #f1f5ff; }
+.pr-adm .pr-trend { text-align: center; }
+.pr-adm .pr-trend .spark { width: 9mm; height: 2.8mm; }
 .pr-foot { display: flex; justify-content: space-between; gap: 4mm; border-top: .25mm solid #c9d3cd; padding-top: 1.2mm; margin-top: 2mm; font-size: 6.5pt; color: #4a5a51; }
 
 @page { size: A4 landscape; margin: 8mm; }
@@ -217,15 +221,23 @@
 #tbl-hotspot-comparison .cmp-row:focus-visible { outline: 2px solid #16a34a; outline-offset: -2px; }
 #tbl-hotspot-comparison .cmp-picked td { background: #e3f1e7; font-weight: 600; }
 
-/* v3.19 เลือกปีที่เทียบช่วงเดียวกัน (Admin ขึ้นไป) */
-#cmp-years:not(.hidden) { display: flex; }
-.cmp-year { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; border-radius: 9999px; padding: .15rem .55rem; font-size: 11.5px; font-weight: 600;
-  color: #4a5a51; background: #fff; box-shadow: inset 0 0 0 1px #dfe6e2; user-select: none; }
-.cmp-year input { width: .8rem; height: .8rem; accent-color: #1f6f43; }
-.cmp-year.is-on { color: #124429; background: #eef7f1; box-shadow: inset 0 0 0 1px #1f6f43; }
-.cmp-year.is-none { opacity: .6; }
-#tbl-hotspot-comparison thead th { vertical-align: bottom; }
-#tbl-hotspot-comparison thead th .block { line-height: 1.2; font-size: 11px; white-space: nowrap; }
-/* v3.19 หลายปี: ตารางแบบกระชับให้คอลัมน์ เพิ่ม/ลด ยังอยู่ในกรอบ */
-#tbl-hotspot-comparison.is-multi th, #tbl-hotspot-comparison.is-multi td { padding-left: .3rem; padding-right: .3rem; font-size: 12px; }
-#tbl-hotspot-comparison.is-multi .chg { padding-left: .3rem; padding-right: .3rem; }
+/* v3.20 เทียบย้อนหลัง (Admin ขึ้นไป): Drop-down + ปุ่มดูแบบเต็ม · คอลัมน์ปีงบสั้น · ช่วงที่เลือกเน้น · แนวโน้ม */
+#cmp-years:not(.hidden) { display: flex; flex-wrap: wrap; }
+.cmp-lbl { font-size: 11.5px; font-weight: 600; color: #4a5a51; }
+.cmp-select { height: 1.75rem; border-radius: .5rem; border: 1px solid #cfdad3; background: #fff; padding: 0 1.6rem 0 .55rem; font: 600 12px/1 "IBM Plex Sans Thai", sans-serif; color: #17231c; cursor: pointer; }
+.cmp-select:focus-visible { outline: 2px solid #16a34a; outline-offset: 1px; }
+.cmp-full-btn { margin-left: auto; border-radius: .5rem; padding: .2rem .55rem; font: 600 11.5px/1.4 "IBM Plex Sans Thai", sans-serif; color: #1f6f43; background: #fff; box-shadow: inset 0 0 0 1px #cfe3d6; }
+.cmp-full-btn:hover { background: #f1f8f3; }
+#tbl-hotspot-comparison thead th, .cmp-full-table thead th { vertical-align: bottom; }
+#tbl-hotspot-comparison thead th .block, .cmp-full-table thead th .block { line-height: 1.2; font-size: 11px; white-space: nowrap; }
+.is-admin .cmp-old { color: #4a5a51; }
+.is-admin td.cmp-cur, .is-admin th.cmp-cur { background: #eef3ff; font-weight: 700; color: #17231c; }
+.is-admin thead th.cmp-cur .cmp-sub { font-weight: 500; font-size: 10px; color: #4a5a51; }
+.is-admin .cmp-trend { text-align: center; white-space: nowrap; }
+#tbl-hotspot-comparison .spark { width: 32px; height: 14px; }
+.spark { display: inline-block; vertical-align: middle; }
+#tbl-hotspot-comparison.is-multi th, #tbl-hotspot-comparison.is-multi td { padding-left: .22rem; padding-right: .22rem; font-size: 11.5px; }
+#tbl-hotspot-comparison.is-multi td:first-child { max-width: 6.6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tbl-hotspot-comparison.is-multi .chg { padding-left: .2rem; padding-right: .2rem; }
+.cmp-full-table th, .cmp-full-table td { font-size: 13px; }
+.cmp-full-table thead th { position: sticky; top: 0; z-index: 1; }
